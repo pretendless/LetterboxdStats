@@ -14,19 +14,23 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 ![Bar chart of film watches per year, each bar labelled with its count and a bold colored average rating](docs/images/watches-by-year.png)
 
-*Watches per year, with the count and the bold colored average rating above each bar.*
+*Watches per year, with the count and the bold colored average rating above each bar. Bar colors run from purple for the earliest year to burgundy for the latest.*
 
 ![Weekday and month bar charts stacked by watch year](docs/images/weekday-month-by-year.png)
 
-*When you watch: weekdays and months, stacked by watch year.*
+*When you watch: weekdays and months, stacked by watch year in the same year colors.*
 
 ![Horizontal bars of the best-rated release years with averages and rated-film counts](docs/images/release-years-higher-rating.png)
 
-*Release years with the highest average rating, among years with at least 3 rated films.*
+*Release years with the highest average rating, among years with at least 3 rated films. Bar color follows the rating scale on the left.*
 
 ![Directors with the lowest average rating; short bars show the first 15 letters of the name with an ellipsis](docs/images/directors-lower-rating.png)
 
 *Directors with the lowest average rating. A bar too short for 15 letters shows the first 15 and an ellipsis.*
+
+![Twenty directors from a 4.80 average down to 1.00, colored from burgundy through orange, green, and blue to purple](docs/images/directors-higher-rating-20.png)
+
+*A top 20 spanning the whole rating scale: burgundy near 5, logo orange near 3.9, green near 2.75, logo blue near 1.6, and purple near 1. The three shortest bars show 15 letters and an ellipsis past the bar, with the same gap before the rating as after a normal bar.*
 
 ## Commands
 
