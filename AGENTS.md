@@ -8,7 +8,7 @@ This file is for Cursor agents working in this repository. It is not user-facing
 - Commands: `/start` and `/stop`
 - Webhook: `POST https://t2t-box.prtndz.workers.dev/lebxd`
 - Workflow **Set webhook** registers that URL
-- Workflow **Setup bot** fills the English BotFather profile (short description, description, and the command menu). It does not set the webhook.
+- Workflow **Setup bot** writes the English description (empty-chat card), short description (profile), and `/start` `/stop` menu. It does not set the webhook, the display name, or the Start button. The Start button is Telegram's own control on an empty chat; a tap sends `/start`.
 
 ## Cloudflare worker
 

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { ABOUT, BOT_COMMANDS, DESCRIPTION } from "../bot_profile.mjs";
 import { handle, tg2tmEnv } from "../src/index.js";
-import { letterboxdActiveKey } from "../../vm/letterboxd_genres.js";
+import { letterboxdActiveKey, letterboxdPromptText } from "../../vm/letterboxd_genres.js";
 
 function memoryKv() {
   const store = new Map();
@@ -347,6 +348,45 @@ test("worker name is t2t-box and the webhook allows callback_query", () => {
   assert.match(agents, /GHTG2TM_DISPATCH_TOKEN/);
   assert.match(agents, /GH_DISPATCH_TOKEN/);
   assert.match(agents, /8502935020,5513343655/);
+});
+
+test("profile card is English, within Telegram limits, and distinct from /start", () => {
+  const start = letterboxdPromptText();
+  assert.ok(ABOUT.length > 0 && ABOUT.length <= 120, String(ABOUT.length));
+  assert.ok(DESCRIPTION.length > 0 && DESCRIPTION.length <= 512, String(DESCRIPTION.length));
+  assert.notEqual(ABOUT, DESCRIPTION);
+  assert.equal(DESCRIPTION.includes(start), false);
+  assert.equal(start.includes(DESCRIPTION), false);
+  assert.equal(ABOUT.includes(start), false);
+  assert.equal(DESCRIPTION.includes(ABOUT), false);
+  for (const word of ["Letterboxd", "charts", "export"]) {
+    assert.match(ABOUT, new RegExp(word, "i"));
+    assert.match(DESCRIPTION, new RegExp(word, "i"));
+  }
+  assert.doesNotMatch(`${ABOUT}\n${DESCRIPTION}`, /[А-Яа-яЁё]/);
+  assert.match(DESCRIPTION, /\/start[\s\S]*ZIP file[\s\S]*defaults/);
+  assert.deepEqual(
+    BOT_COMMANDS.map((item) => item.command),
+    ["start", "stop"],
+  );
+  for (const item of BOT_COMMANDS) {
+    assert.ok(item.description.length > 0 && item.description.length <= 256);
+    assert.doesNotMatch(item.description, /[А-Яа-яЁё]/);
+  }
+
+  const script = readFileSync(new URL("../setup-bot.mjs", import.meta.url), "utf8");
+  const workflow = readFileSync(new URL("../../.github/workflows/setup-bot.yml", import.meta.url), "utf8");
+  const webhook = readFileSync(new URL("../set-webhook.mjs", import.meta.url), "utf8");
+  assert.match(script, /setMyDescription/);
+  assert.match(script, /setMyShortDescription/);
+  assert.match(script, /setMyCommands/);
+  assert.doesNotMatch(script, /setMyName|setChatMenuButton/);
+  assert.match(script, /LEBXDBOT_TOKEN/);
+  assert.doesNotMatch(script, /TG2TMBOT_TOKEN/);
+  assert.match(workflow, /name: Setup bot/);
+  assert.match(workflow, /secrets\.LEBXDBOT_TOKEN/);
+  assert.doesNotMatch(workflow, /TG2TMBOT_TOKEN|setMyName/);
+  assert.match(webhook, /BOT_COMMANDS/);
 });
 
 function post(path, text, chatId = 7) {
