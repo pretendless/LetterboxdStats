@@ -43,49 +43,49 @@ const CALENDAR_PNGS = [
 
 export function calendarCaptions(summary) {
   const grain = summary && summary.watch_time_grain;
-  const phrase = grain === "day" ? "по дням" : grain === "month" ? "по месяцам" : "по годам";
+  const phrase = grain === "day" ? "by day" : grain === "month" ? "by month" : "by year";
   return {
     ...CALENDAR_CAPTIONS,
-    "views_by_year.png": `Просмотры ${phrase}`,
-    "average_rating_by_year.png": `Средняя оценка ${phrase}`,
-    "viewing_pace.png": grain === "day" ? "Темп просмотров по дням" : "Темп просмотров по месяцам",
+    "views_by_year.png": `Film watches ${phrase}`,
+    "average_rating_by_year.png": `Average rating ${phrase}`,
+    "viewing_pace.png": grain === "day" ? "Viewing pace by day" : "Viewing pace by month",
   };
 }
 
 const CALENDAR_CAPTIONS = {
-  "views_by_weekday_month.png": "Дни недели и месяцы — стек по годам просмотра",
-  "views_by_year.png": "Просмотры по годам",
-  "extra_stats_decade_rating.png": "Десятилетия выхода и оценки",
-  "average_rating_by_year.png": "Средняя оценка по годам просмотра",
-  "average_rating_by_release_decade.png": "Средняя оценка по десятилетию выхода",
-  "viewing_pace.png": "Темп просмотров — фильмов в месяц",
-  "top_rewatches.png": "Чаще всего в дневнике",
-  "watches_by_release_year.png": "Годы выхода — больше просмотров",
-  "average_rating_by_release_year.png": "Годы выхода — выше оценка",
-  "worst_average_rating_by_release_year.png": "Годы выхода — ниже оценка",
+  "views_by_weekday_month.png": "Watches by weekday — stacked by year",
+  "views_by_year.png": "Film watches by year",
+  "extra_stats_decade_rating.png": "Letterboxd extra stats",
+  "average_rating_by_year.png": "Average rating by year",
+  "average_rating_by_release_decade.png": "Average rating by release decade",
+  "viewing_pace.png": "Viewing pace by month",
+  "top_rewatches.png": "Most often in the diary",
+  "watches_by_release_year.png": "Release years — more watches",
+  "average_rating_by_release_year.png": "Release years — higher rating",
+  "worst_average_rating_by_release_year.png": "Release years — lower rating",
 };
 
 const GENRE_CAPTIONS = {
-  "genre_counts_by_viewing_year.png": "Жанры по годам просмотра",
-  "watches_by_genre.png": "Жанры — просмотры",
-  "average_rating_by_genre.png": "Жанры — выше оценка",
-  "worst_average_rating_by_genre.png": "Жанры — ниже оценка",
-  "genre_by_release_decade.png": "Жанры по десятилетию выхода",
-  "watches_by_country.png": "Страны производства (TMDB)",
-  "average_rating_by_country.png": "Страны — выше оценка",
-  "worst_average_rating_by_country.png": "Страны — ниже оценка",
-  "watches_by_director.png": "Режиссёры — просмотры",
-  "average_rating_by_director.png": "Режиссёры — выше оценка",
-  "worst_average_rating_by_director.png": "Режиссёры — ниже оценка",
-  "watches_by_actor.png": "Актёры — просмотры",
-  "average_rating_by_actor.png": "Актёры — выше оценка",
-  "worst_average_rating_by_actor.png": "Актёры — ниже оценка",
-  "watches_by_language.png": "Язык оригинала — просмотры",
-  "average_rating_by_language.png": "Язык оригинала — выше оценка",
-  "worst_average_rating_by_language.png": "Язык оригинала — ниже оценка",
-  "watches_by_studio.png": "Студии — просмотры",
-  "average_rating_by_studio.png": "Студии — выше оценка",
-  "worst_average_rating_by_studio.png": "Студии — ниже оценка",
+  "genre_counts_by_viewing_year.png": "Genres by watch year",
+  "watches_by_genre.png": "Genres — watches",
+  "average_rating_by_genre.png": "Genres — higher rating",
+  "worst_average_rating_by_genre.png": "Genres — lower rating",
+  "genre_by_release_decade.png": "Genres by release decade",
+  "watches_by_country.png": "Countries of origin (TMDB)",
+  "average_rating_by_country.png": "Countries — higher rating",
+  "worst_average_rating_by_country.png": "Countries — lower rating",
+  "watches_by_director.png": "Directors — watches",
+  "average_rating_by_director.png": "Directors — higher rating",
+  "worst_average_rating_by_director.png": "Directors — lower rating",
+  "watches_by_actor.png": "Actors — watches",
+  "average_rating_by_actor.png": "Actors — higher rating",
+  "worst_average_rating_by_actor.png": "Actors — lower rating",
+  "watches_by_language.png": "Original language — watches",
+  "average_rating_by_language.png": "Original language — higher rating",
+  "worst_average_rating_by_language.png": "Original language — lower rating",
+  "watches_by_studio.png": "Studios — watches",
+  "average_rating_by_studio.png": "Studios — higher rating",
+  "worst_average_rating_by_studio.png": "Studios — lower rating",
 };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -191,55 +191,55 @@ export function buildCalendarReportHtml(summary) {
   }
   const lines = [
     "<b>Letterboxd</b>",
-    `Дневник: <b>${escapeHtml(entries)}</b> записей · <b>${escapeHtml(films)}</b> фильмов · ${escapeHtml(years)}`,
+    `Diary: <b>${escapeHtml(entries)}</b> entries · <b>${escapeHtml(films)}</b> films · ${escapeHtml(years)}`,
   ];
   if (s.date_from && s.date_to) {
     lines.push(
-      `Период: <b>${escapeHtml(String(s.date_from))}</b> — <b>${escapeHtml(String(s.date_to))}</b>`,
+      `Period: <b>${escapeHtml(String(s.date_from))}</b> — <b>${escapeHtml(String(s.date_to))}</b>`,
     );
     lines.push(
       s.include_undated
-        ? "Без даты в дневнике: в каталоге, не в календаре."
-        : "Только дневник с датой внутри периода.",
+        ? "No diary date: in the catalog, not in the calendar."
+        : "Diary dates inside the period only.",
     );
   }
 
   // Peak calendar day first (diary Watched Date row count).
   if (s.peak_day_label && s.peak_day_count != null) {
     lines.push(
-      `Больше всего просмотров за день: <b>${escapeHtml(s.peak_day_label)}</b> (<b>${escapeHtml(fmtNum(s.peak_day_count))}</b>)`,
+      `Most watches in one day: <b>${escapeHtml(s.peak_day_label)}</b> (<b>${escapeHtml(fmtNum(s.peak_day_count))}</b>)`,
     );
   }
 
   if (s.peak_year != null) {
     lines.push(
-      `Пик: <b>${escapeHtml(s.peak_year)}</b> — <b>${escapeHtml(fmtNum(s.peak_year_count))}</b> просмотров`,
+      `Peak year: <b>${escapeHtml(s.peak_year)}</b> — <b>${escapeHtml(fmtNum(s.peak_year_count))}</b> watches`,
     );
   }
   if (s.favorite_weekday) {
     lines.push(
-      `День: <b>${escapeHtml(s.favorite_weekday)}</b> (${escapeHtml(fmtNum(s.favorite_weekday_count))})`,
+      `Day: <b>${escapeHtml(s.favorite_weekday)}</b> (${escapeHtml(fmtNum(s.favorite_weekday_count))})`,
     );
   }
   if (s.favorite_month) {
     lines.push(
-      `Месяц: <b>${escapeHtml(s.favorite_month)}</b> (${escapeHtml(fmtNum(s.favorite_month_count))})`,
+      `Month: <b>${escapeHtml(s.favorite_month)}</b> (${escapeHtml(fmtNum(s.favorite_month_count))})`,
     );
   }
   if (s.films_per_month != null && Number.isFinite(Number(s.films_per_month))) {
     lines.push(
-      `Темп: в среднем <b>${escapeHtml(fmtRating(s.films_per_month))}</b> фильмов в месяц`,
+      `Pace: <b>${escapeHtml(fmtRating(s.films_per_month))}</b> films per month on average`,
     );
   }
 
   const ratedShare = fmtPct(s.rated_share);
   if (s.rated_count != null) {
-    let ratingLine = `Оценки: <b>${escapeHtml(fmtNum(s.rated_count))}</b> (${escapeHtml(ratedShare)})`;
+    let ratingLine = `Ratings: <b>${escapeHtml(fmtNum(s.rated_count))}</b> (${escapeHtml(ratedShare)})`;
     if (s.rating_avg != null) {
-      ratingLine += ` · средняя <b>${escapeHtml(fmtRating(s.rating_avg))}</b>`;
+      ratingLine += ` · average <b>${escapeHtml(fmtRating(s.rating_avg))}</b>`;
     }
     if (s.rating_mode != null) {
-      ratingLine += ` · чаще <b>${escapeHtml(fmtRating(s.rating_mode))}</b>`;
+      ratingLine += ` · most often <b>${escapeHtml(fmtRating(s.rating_mode))}</b>`;
     }
     lines.push(ratingLine);
   }
@@ -264,15 +264,15 @@ export function buildGenreReportMessages(summary, unmatchedFallback = 0) {
   const lines = ["<b>Letterboxd · TMDB</b>"];
   if (unique != null && resolved != null) {
     lines.push(
-      `Обогащено: <b>${escapeHtml(resolved)}</b> / <b>${escapeHtml(unique)}</b> фильмов`,
+      `Enriched <b>${escapeHtml(resolved)}</b> / <b>${escapeHtml(unique)}</b> films`,
     );
   } else {
-    lines.push("Подробности из TMDB готовы — графики ниже.");
+    lines.push("TMDB details are ready — charts below.");
   }
   if (unmatched > 0) {
-    lines.push(`Без жанров TMDB: <b>${escapeHtml(String(unmatched))}</b>`);
+    lines.push(`No TMDB genres: <b>${escapeHtml(String(unmatched))}</b>`);
   }
-  lines.push("<i>Топы — на графиках (просмотры / выше оценка).</i>");
+  lines.push("<i>Tops are on the charts (watches / higher rating).</i>");
   return [lines.join("\n")];
 }
 
@@ -284,25 +284,25 @@ export function buildGenreReportHtml(summary, unmatchedFallback = 0) {
 export function mapScriptError(stderr, stdout, status) {
   const text = `${stderr || ""}\n${stdout || ""}`;
   if (/TMDB_BEARER_TOKEN/i.test(text)) {
-    return "Не задан TMDB_BEARER_TOKEN (Read Access Token). Нужен секрет GitHub Actions TMDB_BEARER_TOKEN.";
+    return "TMDB_BEARER_TOKEN is not set (Read Access Token). Add the GitHub Actions secret TMDB_BEARER_TOKEN.";
+  }
+  if (/Watched Date/i.test(text)) {
+    return "diary.csv has no Watched Date column. Send a full Letterboxd export.";
+  }
+  if (/missing columns|не хватает колонок/i.test(text)) {
+    return "diary.csv is missing columns (Name, Year, Watched Date). Send a full Letterboxd export.";
+  }
+  if (/no watch dates|No diary entries|выбранном диапазоне нет записей/i.test(text)) {
+    return "No diary entries with a watch date in the selected range.";
+  }
+  if (/BadZipFile|not a Letterboxd ZIP|не похож на ZIP/i.test(text)) {
+    return "This file is not a Letterboxd ZIP.";
   }
   if (/diary\.csv/i.test(text)) {
-    return "В ZIP нет diary.csv. Экспорт: Letterboxd → Settings → Import & Export → Export Your Data.";
-  }
-  if (/Watched Date/i.test(text) && /нет колонки|не содержит/i.test(text)) {
-    return "diary.csv без колонки Watched Date. Пришлите полный экспорт Letterboxd.";
-  }
-  if (/не хватает колонок/i.test(text)) {
-    return "diary.csv без нужных колонок (Name, Year, Watched Date). Пришлите полный экспорт Letterboxd.";
-  }
-  if (/BadZipFile|не похож на ZIP/i.test(text)) {
-    return "Файл не похож на ZIP Letterboxd.";
-  }
-  if (/выбранном диапазоне нет записей/i.test(text)) {
-    return "В выбранном диапазоне нет записей дневника с датой просмотра.";
+    return "The ZIP has no diary.csv. Export: Letterboxd → Settings → Import & Export → Export Your Data.";
   }
   if (/401|unauthorized|invalid api/i.test(text)) {
-    return "TMDB отклонил токен. Проверьте TMDB_BEARER_TOKEN (не печатайте его в чат).";
+    return "TMDB rejected the token. Check TMDB_BEARER_TOKEN (do not paste it in chat).";
   }
   if (status !== 0) {
     const line = text
@@ -312,8 +312,8 @@ export function mapScriptError(stderr, stdout, status) {
       .slice(-3)
       .join(" ");
     return line
-      ? `Не удалось построить графики: ${line.slice(0, 350)}`
-      : "Не удалось построить графики Letterboxd.";
+      ? `Could not build the charts: ${line.slice(0, 350)}`
+      : "Could not build the Letterboxd charts.";
   }
   return "";
 }
@@ -327,7 +327,7 @@ export function unmatchedFromWorkdir(workdir, stdout = "") {
       .filter(Boolean);
     if (lines.length > 1) return lines.length - 1;
   }
-  const match = String(stdout || "").match(/без найденных жанров:\s*(\d+)/i);
+  const match = String(stdout || "").match(/(?:без найденных жанров|Films without TMDB genres):\s*(\d+)/i);
   if (match) return Number(match[1]);
   return 0;
 }
@@ -340,7 +340,7 @@ export function existingPngs(workdir, names) {
 }
 
 export function calendarReadyText() {
-  return "Календарные графики готовы, сейчас подробности из TMDB (жанры, страны, режиссёры, актёры)…";
+  return "Calendar charts are ready. Loading TMDB details next (genres, countries, directors, actors)…";
 }
 
 async function sendTelegramText(token, chatId, text, parseMode = "", label = "sendMessage") {
@@ -427,7 +427,7 @@ async function sendCaptionedPhotos(token, chatId, workdir, names, captions) {
           await sendTelegramText(
             token,
             chatId,
-            `Не удалось отправить ${name}.`,
+            `Could not send ${name}.`,
             "",
             `notify fail ${name}`,
           );
@@ -445,7 +445,7 @@ async function sendCaptionedPhotos(token, chatId, workdir, names, captions) {
         await sendTelegramText(
           token,
           chatId,
-          `Не удалось отправить ${name}: ${detail}`,
+          `Could not send ${name}: ${detail}`,
           "",
           `notify fail ${name}`,
         );
@@ -492,7 +492,7 @@ async function notifySendFailure(token, chatId, phase, err) {
     await sendTelegramText(
       token,
       chatId,
-      `Letterboxd: сбой отправки после ${phase}: ${detail}`,
+      `Letterboxd: send failed after ${phase}: ${detail}`,
       "",
       `notify ${phase}`,
     );
@@ -537,7 +537,7 @@ export async function main() {
     await sendTelegramText(
       token,
       chatId,
-      "Не задан TMDB_BEARER_TOKEN. Нужен Read Access Token как секрет GitHub Actions (не API Key).",
+      "TMDB_BEARER_TOKEN is not set. Add a Read Access Token as a GitHub Actions secret (not an API Key).",
     );
     throw new Error("TMDB_BEARER_TOKEN missing");
   }
@@ -549,7 +549,7 @@ export async function main() {
   try {
     await downloadTelegramFile(token, fileId, zipPath);
   } catch (err) {
-    const msg = `Не удалось скачать ZIP из Telegram: ${err && err.message ? err.message : err}`;
+    const msg = `Could not download the ZIP from Telegram: ${err && err.message ? err.message : err}`;
     await sendTelegramText(token, chatId, msg);
     throw err;
   }
@@ -563,7 +563,7 @@ export async function main() {
   if (!calendarPngs.length) {
     const mapped =
       mapScriptError(calendar.stderr, calendar.stdout, calendar.status) ||
-      "Календарные графики не созданы. Проверьте diary.csv.";
+      "Calendar charts were not created. Check diary.csv.";
     await sendTelegramText(token, chatId, mapped);
     throw new Error(mapped);
   }
@@ -582,7 +582,7 @@ export async function main() {
   if (!genrePngs.length) {
     const mapped =
       mapScriptError(genres.stderr, genres.stdout, genres.status) ||
-      "Жанровые графики не созданы. Проверьте TMDB_BEARER_TOKEN и diary.csv.";
+      "Genre charts were not created. Check TMDB_BEARER_TOKEN and diary.csv.";
     await sendTelegramText(token, chatId, mapped);
     throw new Error(mapped);
   }

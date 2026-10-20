@@ -1,0 +1,34 @@
+# Fill the @lebxdbot BotFather profile in English.
+# Does not set the webhook. Run after merge, once LEBXDBOT_TOKEN is a repository secret.
+name: Setup bot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: Require LEBXDBOT_TOKEN
+        run: |
+          if [ -z "${{ secrets.LEBXDBOT_TOKEN }}" ]; then
+            echo "::error::Repository secret LEBXDBOT_TOKEN is not set."
+            exit 1
+          fi
+      - name: Install worker dependencies
+        working-directory: worker
+        run: npm ci
+      - name: Set BotFather profile
+        working-directory: worker
+        run: npm run setup-bot
+        env:
+          LEBXDBOT_TOKEN: ${{ secrets.LEBXDBOT_TOKEN }}

@@ -108,7 +108,7 @@ def format_count_avg_label(avg, rated, min_rated: int) -> str:
 
 
 def rated_gate_phrase(min_rated: int) -> str:
-    return f"не меньше {int(min_rated)} оценённых фильмов"
+    return f"at least {int(min_rated)} rated films"
 
 
 @dataclass(frozen=True)

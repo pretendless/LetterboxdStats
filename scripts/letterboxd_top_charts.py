@@ -37,26 +37,26 @@ from letterboxd_palette import (
 from letterboxd_ratings import MIN_RATED_FOR_TOP
 
 LANG_LABELS = {
-    "en": "английский",
-    "ru": "русский",
-    "fr": "французский",
-    "de": "немецкий",
-    "it": "итальянский",
-    "es": "испанский",
-    "ja": "японский",
-    "ko": "корейский",
-    "zh": "китайский",
-    "sv": "шведский",
-    "pl": "польский",
-    "pt": "португальский",
-    "hi": "хинди",
-    "tr": "турецкий",
-    "uk": "украинский",
-    "da": "датский",
-    "no": "норвежский",
-    "nl": "нидерландский",
-    "cs": "чешский",
-    "hu": "венгерский",
+    "en": "English",
+    "ru": "Russian",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "es": "Spanish",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "zh": "Chinese",
+    "sv": "Swedish",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "hi": "Hindi",
+    "tr": "Turkish",
+    "uk": "Ukrainian",
+    "da": "Danish",
+    "no": "Norwegian",
+    "nl": "Dutch",
+    "cs": "Czech",
+    "hu": "Hungarian",
 }
 
 
@@ -72,6 +72,61 @@ def _short_label(text: str, limit: int = 36) -> str:
     return s
 
 
+def _text_width_px(ax, renderer, text: str, *, fontsize: float, fontweight: str, path_effects=None) -> float:
+    artist = ax.text(
+        0,
+        0,
+        text,
+        fontsize=fontsize,
+        fontweight=fontweight,
+        alpha=0,
+        path_effects=path_effects,
+    )
+    try:
+        return float(artist.get_window_extent(renderer=renderer).width)
+    finally:
+        artist.remove()
+
+
+def _fit_text_to_px(
+    ax,
+    renderer,
+    text: str,
+    max_px: float,
+    *,
+    fontsize: float,
+    fontweight: str = "bold",
+    path_effects=None,
+) -> str:
+    """Truncate ``text`` with … so its rendered width is at most ``max_px``."""
+    if max_px < 8:
+        return "…"
+
+    def width_px(candidate: str) -> float:
+        return _text_width_px(
+            ax,
+            renderer,
+            candidate,
+            fontsize=fontsize,
+            fontweight=fontweight,
+            path_effects=path_effects,
+        )
+
+    if width_px(text) <= max_px:
+        return text
+    lo, hi = 0, len(text)
+    best = "…"
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        candidate = "…" if mid <= 0 else text[:mid].rstrip() + "…"
+        if width_px(candidate) <= max_px:
+            best = candidate
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return best
+
+
 def _fit_text_to_data_width(
     ax,
     renderer,
@@ -84,54 +139,20 @@ def _fit_text_to_data_width(
     fontweight: str = "bold",
     path_effects=None,
 ) -> str:
-    """Truncate ``text`` with … so its rendered width fits in data x ∈ [x0, x1].
-
-    When ``path_effects`` (stroke) is used on the final label, pass the same
-    effects here so the measured bbox includes the outline.
-    """
-    max_px = abs(
-        ax.transData.transform((x1, y))[0] - ax.transData.transform((x0, y))[0]
+    """Truncate ``text`` with … so its rendered width fits in data x ∈ [x0, x1]."""
+    max_px = abs(ax.transData.transform((x1, y))[0] - ax.transData.transform((x0, y))[0])
+    return _fit_text_to_px(
+        ax,
+        renderer,
+        text,
+        max_px,
+        fontsize=fontsize,
+        fontweight=fontweight,
+        path_effects=path_effects,
     )
-    if max_px < 10:
-        # Tiny bar — keep rank digits only when possible.
-        head = text.split(".", 1)[0].strip()
-        return head or "…"
-
-    def width_px(candidate: str) -> float:
-        artist = ax.text(
-            0,
-            0,
-            candidate,
-            fontsize=fontsize,
-            fontweight=fontweight,
-            alpha=0,
-            path_effects=path_effects,
-        )
-        try:
-            return float(artist.get_window_extent(renderer=renderer).width)
-        finally:
-            artist.remove()
-
-    if width_px(text) <= max_px:
-        return text
-    # Binary search longest prefix that fits with ellipsis.
-    lo, hi = 0, len(text)
-    best = "…"
-    while lo <= hi:
-        mid = (lo + hi) // 2
-        if mid <= 0:
-            candidate = "…"
-        else:
-            candidate = text[:mid].rstrip() + "…"
-        if width_px(candidate) <= max_px:
-            best = candidate
-            lo = mid + 1
-        else:
-            hi = mid - 1
-    return best
 
 
-def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Год просмотра"):
+def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Watch year"):
     handles = [plt.Rectangle((0, 0), 1, 1, color=colors[y]) for y in years]
     leg = fig.legend(
         handles,
@@ -186,7 +207,7 @@ def chart_stacked_count_hbar(
     path: Path,
     *,
     title: str,
-    xlabel: str = "Просмотры",
+    xlabel: str = "Watches",
     footer: str | None = None,
     avg_labels: list[str] | None = None,
 ) -> bool:
@@ -246,7 +267,7 @@ def chart_stacked_count_hbar(
     leg = ax.legend(
         handles,
         [str(y) for y in years],
-        title="Год просмотра",
+        title="Watch year",
         loc="center left",
         bbox_to_anchor=(1.01, 0.5),
         frameon=False,
@@ -372,6 +393,7 @@ def _rating_colorbar(fig, ax, *, location: str = "right", size: str = "compact")
     cbar.ax.set_title(RATING_COLORBAR_LABEL, color=FG, fontsize=title_size, pad=6)
     cbar.ax.tick_params(labelsize=tick_size, colors=FG, length=2.5, width=0.6)
     plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color=FG)
+    return cbar
 
 
 def chart_rating_vbar(
@@ -384,7 +406,7 @@ def chart_rating_vbar(
     rated_key: str = "rated",
     label_fn: Callable[[object], str] | None = None,
     footer: str | None = None,
-    ylabel: str = "Средняя оценка (из 5)",
+    ylabel: str = "Average rating (out of 5)",
     limit: int = TOP_N_DEFAULT,
     ascending: bool = False,
 ) -> bool:
@@ -466,16 +488,18 @@ def chart_rating_hbar(
     rated_key: str = "rated",
     label_fn: Callable[[object], str] | None = None,
     footer: str | None = None,
-    xlabel: str = "Средняя оценка (из 5)",
+    xlabel: str = "Average rating (out of 5)",
     limit: int = TOP_N_DEFAULT,
     ascending: bool = False,
 ) -> bool:
-    """Horizontal bars for TMDB avg tops: rank+name inside bar (white + black stroke).
+    """Horizontal bars for TMDB avg tops.
 
-    ascending=False → best at top; True → worst at top («ниже оценка»).
+    A name that fits is drawn inside the bar (white + black stroke). A name that
+    does not fit is drawn in full just left of the bar, light text on the dark
+    background, and ellipsized only when that margin itself is too narrow.
+    ascending=False → best at top; True → worst at top.
     The mean to the right is bold and colored on the rating scale. The rated-film
-    count sits beside it in regular light text as ``(12)``. In-bar names are
-    ellipsized so they never meet the stats.
+    count sits beside it in regular light text as ``(12)``.
     """
     import matplotlib.patheffects as path_effects
 
@@ -494,7 +518,7 @@ def chart_rating_hbar(
     # barh draws first row at bottom — reverse so rank 1 sits at top.
     display = list(reversed(list(enumerate(usable, start=1))))
     ranks = [rank for rank, _ in display]
-    labels = [_short_label(lab, limit=40) for _, (lab, _, _) in display]
+    labels = [lab for _, (lab, _, _) in display]
     avgs = [avg for _, (_, avg, _) in display]
     rateds = [rated for _, (_, _, rated) in display]
     colors = rating_colors(avgs)
@@ -513,7 +537,7 @@ def chart_rating_hbar(
     style_axes(ax)
 
     # Layout must be finalized before measuring text against data coordinates.
-    _rating_colorbar(fig, ax, location="left", size="large")
+    cbar = _rating_colorbar(fig, ax, location="left", size="large")
     if footer:
         fig.text(0.01, 0.01, footer, fontsize=7, color=FG)
         fig.tight_layout(rect=[0.02, 0.03, 1, 1])
@@ -522,7 +546,7 @@ def chart_rating_hbar(
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
 
-    # White fill + black outline so labels pop on blue→green→red fills.
+    # White fill + black outline so in-bar labels pop on blue→green→red fills.
     stroke = [
         path_effects.Stroke(linewidth=3.2, foreground="#000000"),
         path_effects.Normal(),
@@ -531,34 +555,91 @@ def chart_rating_hbar(
     pad_left = 0.08
     # Keep a generous empty tip so stroked names never crowd mean/n outside.
     tip_gap = 0.4
-    pending: list[tuple] = []
-    for yi, bar, rank, label, avg, rated in zip(y, bars, ranks, labels, avgs, rateds):
+    outside_gap_pt = 8
+    name_rows = []
+    for yi, bar, rank, label, avg in zip(y, bars, ranks, labels, avgs):
         raw = f"{rank}. {label}"
-        fitted = _fit_text_to_data_width(
-            ax,
-            renderer,
-            raw,
-            x0=pad_left,
-            x1=max(pad_left, float(avg) - tip_gap),
-            y=float(yi),
-            fontsize=name_fs,
-            fontweight="bold",
-            path_effects=stroke,
+        x1 = max(pad_left, float(avg) - tip_gap)
+        inside_px = abs(ax.transData.transform((x1, float(yi)))[0] - ax.transData.transform((pad_left, float(yi)))[0])
+        inside_w = _text_width_px(
+            ax, renderer, raw, fontsize=name_fs, fontweight="bold", path_effects=stroke
         )
-        txt = ax.text(
-            pad_left,
-            yi,
-            fitted,
-            ha="left",
-            va="center",
-            fontsize=name_fs,
-            fontweight="bold",
-            color="#FFFFFF",
-            path_effects=stroke,
-            clip_on=True,
-        )
-        # Hard clip to the bar rectangle — name cannot draw past the tip.
-        txt.set_clip_path(bar)
+        name_rows.append((float(yi), bar, raw, float(avg), inside_px, inside_w))
+
+    outside = [row for row in name_rows if row[5] > row[4] or row[4] < 10]
+    if outside:
+        outside_widths = [
+            _text_width_px(ax, renderer, raw, fontsize=name_fs, fontweight="normal")
+            for _yi, _bar, raw, _avg, _inside_px, _inside_w in outside
+        ]
+        gap_px = outside_gap_pt * fig.dpi / 72.0
+        needed = max(outside_widths) + gap_px + 8
+        gutter = float(ax.bbox.x0 - cbar.ax.bbox.x1)
+        deficit = needed - gutter
+        if deficit > 1:
+            pos = ax.get_position()
+            fig_w = float(fig.bbox.width) or 1.0
+            min_width = 0.46
+            shift = min(deficit / fig_w, max(0.0, pos.width - min_width))
+            if shift > 0:
+                ax.set_position([pos.x0 + shift, pos.y0, pos.width - shift, pos.height])
+                fig.canvas.draw()
+                renderer = fig.canvas.get_renderer()
+                # Narrower axes shrink every bar in pixels. Remeasure before choosing inside vs outside.
+                refreshed = []
+                for yi, bar, raw, avg, _inside_px, _inside_w in name_rows:
+                    x1 = max(pad_left, avg - tip_gap)
+                    inside_px = abs(
+                        ax.transData.transform((x1, yi))[0] - ax.transData.transform((pad_left, yi))[0]
+                    )
+                    inside_w = _text_width_px(
+                        ax, renderer, raw, fontsize=name_fs, fontweight="bold", path_effects=stroke
+                    )
+                    refreshed.append((yi, bar, raw, avg, inside_px, inside_w))
+                name_rows = refreshed
+
+    pending: list[tuple] = []
+    for (yi, bar, raw, avg, inside_px, inside_w), rated in zip(name_rows, rateds):
+        if inside_w <= inside_px and inside_px >= 10:
+            txt = ax.text(
+                pad_left,
+                yi,
+                raw,
+                ha="left",
+                va="center",
+                fontsize=name_fs,
+                fontweight="bold",
+                color="#FFFFFF",
+                path_effects=stroke,
+                clip_on=True,
+            )
+            # Hard clip to the bar rectangle — name cannot draw past the tip.
+            txt.set_clip_path(bar)
+        else:
+            gap_px = outside_gap_pt * fig.dpi / 72.0
+            avail = float(ax.bbox.x0 - cbar.ax.bbox.x1) - gap_px - 4
+            shown = _fit_text_to_px(
+                ax,
+                renderer,
+                raw,
+                avail,
+                fontsize=name_fs,
+                fontweight="normal",
+            )
+            ax.annotate(
+                shown,
+                xy=(0, yi),
+                xytext=(-outside_gap_pt, 0),
+                textcoords="offset points",
+                ha="right",
+                va="center",
+                fontsize=name_fs,
+                color=FG,
+                fontweight="normal",
+                clip_on=False,
+                annotation_clip=False,
+                zorder=5,
+            )
         # Mean is bold and rating-colored; ``(k)`` stays regular light text beside it.
         mean_label = f"{avg:.2f}"
         style = count_avg_text_style(mean_label)
@@ -698,7 +779,7 @@ def chart_release_years_by_count(
         diary,
         path,
         names_for_row=names_for_row,
-        title="Годы выхода — больше просмотров (цвет = год просмотра)",
+        title="Release years — more watches (color is watch year)",
         top_n=top_n,
         min_count=1,
         avg_by_name=avg_by_name,
@@ -737,9 +818,9 @@ def chart_release_years_by_rating(
     if title is None:
         gate = rated_gate_phrase(min_rated)
         title = (
-            f"Годы выхода — ниже оценка ({gate})"
+            f"Release years — lower rating ({gate})"
             if ascending
-            else f"Годы выхода — выше оценка ({gate})"
+            else f"Release years — higher rating ({gate})"
         )
     return chart_rating_hbar(
         normalized,

@@ -209,9 +209,9 @@ export function normalizeTelegramFileId(raw) {
 
 export function letterboxdPromptText() {
   return (
-    "Пришлите ZIP экспорта Letterboxd одним документом.\n\n" +
+    "Send the Letterboxd export ZIP as one document.\n\n" +
     "Letterboxd → Settings → Import & Export → Export Your Data.\n" +
-    "В архиве нужен diary.csv; watched.csv и ratings.csv учтём в каталоге и средних оценках. Отмена — /stop."
+    "The archive needs diary.csv; watched.csv and ratings.csv are used in the catalog and averages. Cancel with /stop."
   );
 }
 
@@ -219,14 +219,14 @@ export function letterboxdPromptText() {
 export const genresPromptText = letterboxdPromptText;
 
 export function letterboxdNeedZipText() {
-  return "Нужен файл .zip экспорта Letterboxd (документ в чат). Отмена — /stop.";
+  return "Send a Letterboxd export .zip (a document in this chat). Cancel with /stop.";
 }
 
 /** @deprecated use letterboxdNeedZipText */
 export const genresNeedZipText = letterboxdNeedZipText;
 
 export function letterboxdInvalidZipText() {
-  return "Это не ZIP Letterboxd. Пришлите файл .zip из Settings → Export. Отмена — /stop.";
+  return "That is not a Letterboxd ZIP. Send the .zip from Settings → Export. Cancel with /stop.";
 }
 
 /** @deprecated use letterboxdInvalidZipText */
@@ -234,16 +234,16 @@ export const genresInvalidZipText = letterboxdInvalidZipText;
 
 export function letterboxdAckText(jobId, options) {
   const opts = normalizeLetterboxdOptions(options);
-  const period = opts.dateFrom ? `${opts.dateFrom} — ${opts.dateTo}` : "весь";
+  const period = opts.dateFrom ? `${opts.dateFrom} — ${opts.dateTo}` : "full";
   const undated = opts.dateFrom
-    ? `\nБез даты в дневнике: ${opts.includeUndated ? "да" : "нет"}.`
+    ? `\nNo diary date: ${opts.includeUndated ? "yes" : "no"}.`
     : "";
   return (
-    "ZIP принят. Строю графики Letterboxd через GitHub Actions — пришлю PNG в этот чат " +
-    "(календарь, доп. статистика, жанры).\n\n" +
-    `Топы: ${opts.topN}. Минимум оценок: ${opts.minRated}. ` +
-    `USA: ${opts.includeUSA ? "да" : "нет"}. Английский: ${opts.includeEnglish ? "да" : "нет"}. ` +
-    `Период: ${period}.` +
+    "ZIP received. Building Letterboxd charts with GitHub Actions — PNGs will arrive in this chat " +
+    "(calendar, extra stats, genres).\n\n" +
+    `Tops: ${opts.topN}. Minimum ratings: ${opts.minRated}. ` +
+    `USA: ${opts.includeUSA ? "yes" : "no"}. English: ${opts.includeEnglish ? "yes" : "no"}. ` +
+    `Period: ${period}.` +
     undated +
     `\n\nid: ${jobId}`
   );
@@ -253,7 +253,7 @@ export function letterboxdAckText(jobId, options) {
 export const genresAckText = letterboxdAckText;
 
 export function letterboxdStartingText() {
-  return "⏳ Запускаю letterboxd…";
+  return "⏳ Starting Letterboxd…";
 }
 
 /** @deprecated use letterboxdStartingText */
@@ -261,46 +261,46 @@ export const genresStartingText = letterboxdStartingText;
 
 export function letterboxdDispatchedText({ jobId, runUrl }) {
   if (runUrl) {
-    return `✅ Запуск принят.\n\n${runUrl}\n\nid: ${jobId}`;
+    return `✅ Run accepted.\n\n${runUrl}\n\nid: ${jobId}`;
   }
-  return `✅ Запуск принят. Графики придут отдельными сообщениями.\n\nid: ${jobId}`;
+  return `✅ Run accepted. Charts will arrive as separate messages.\n\nid: ${jobId}`;
 }
 
 /** @deprecated use letterboxdDispatchedText */
 export const genresDispatchedText = letterboxdDispatchedText;
 
 export function letterboxdDispatchFailText(status) {
-  return `Не удалось запустить letterboxd: GitHub ответил ${status}. Проверьте GHLEBXD_DISPATCH_TOKEN и workflow letterboxd.yml в main.`;
+  return `Could not start Letterboxd: GitHub replied ${status}. Check GHLEBXD_DISPATCH_TOKEN and the letterboxd.yml workflow on main.`;
 }
 
 /** @deprecated use letterboxdDispatchFailText */
 export const genresDispatchFailText = letterboxdDispatchFailText;
 
 export function letterboxdUsageText() {
-  return "Команда: /start — затем пришлите ZIP экспорта Letterboxd. Ссылка из другого чата открывает то же: /start letterboxd.";
+  return "Command: /start — then send a Letterboxd export ZIP. A link from another chat opens the same wizard: /start letterboxd.";
 }
 
 /** @deprecated use letterboxdUsageText */
 export const genresUsageText = letterboxdUsageText;
 
 export function letterboxdStopClearedHead() {
-  return "Ввод прерван, ожидание Letterboxd сброшено.";
+  return "Input cancelled. The Letterboxd wizard was cleared.";
 }
 
 export function letterboxdStopJobHead() {
-  return "Запуск графиков остановлен.";
+  return "Chart run stopped.";
 }
 
 export function letterboxdStopIdleHead() {
-  return "Линия свободна: сейчас нечего прерывать.";
+  return "Nothing to cancel right now.";
 }
 
 export function letterboxdStopFailText(status) {
-  return `Не удалось остановить запуск: GitHub ответил ${status}.`;
+  return `Could not stop the run: GitHub replied ${status}.`;
 }
 
 export function letterboxdCommandList() {
-  return "/start — графики Letterboxd\n/stop — прервать ввод";
+  return "/start — Letterboxd charts\n/stop — cancel input";
 }
 
 export function letterboxdStopText({ wizard = false, job = false, failStatus = "" } = {}) {
@@ -349,6 +349,33 @@ const RU_MONTHS = {
   дек: 12,
 };
 
+const EN_MONTHS = {
+  january: 1,
+  jan: 1,
+  february: 2,
+  feb: 2,
+  march: 3,
+  mar: 3,
+  april: 4,
+  apr: 4,
+  may: 5,
+  june: 6,
+  jun: 6,
+  july: 7,
+  jul: 7,
+  august: 8,
+  aug: 8,
+  september: 9,
+  sep: 9,
+  sept: 9,
+  october: 10,
+  oct: 10,
+  november: 11,
+  nov: 11,
+  december: 12,
+  dec: 12,
+};
+
 function isoDate(year, month, day) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
@@ -362,11 +389,11 @@ function yearOk(year) {
 }
 
 export const LETTERBOXD_DATE_RETRY =
-  "Дата не разобрана. Год: 2012. Месяц: 06-2012. День: 15-06-2012 или 15.06.2012. Два края: 2018 2020 или 2021-06.2022. Запуск не начат.";
+  "Could not read that date. Year: 2012. Month: 06-2012. Day: 15-06-2012 or 15.06.2012. Two edges: 2018 2020 or 2021-06.2022. The report has not started.";
 
 /**
  * One typed bound → inclusive YYYY-MM-DD edge.
- * Month is always before year: MM-YYYY, MM.YYYY, «март 2012».
+ * Month is always before year: MM-YYYY, MM.YYYY, "March 2012", «март 2012».
  * Day is day-month-year: DD-MM-YYYY or DD.MM.YYYY.
  * Year-first forms (2012-06, 2012-06-15) are rejected.
  * edge "start" is the first day of that period; "end" is the last day.
@@ -390,8 +417,11 @@ export function parseWatchBound(text, edge = "start") {
   match = raw.match(/^(\d{2})[-.](\d{4})$/);
   if (match) return emit(Number(match[2]), Number(match[1]), 1, "month");
 
-  match = raw.match(/^([а-яё]+)\s+(\d{4})$/);
-  if (match && RU_MONTHS[match[1]]) return emit(Number(match[2]), RU_MONTHS[match[1]], 1, "month");
+  match = raw.match(/^([a-zа-яё]+)\s+(\d{4})$/);
+  if (match) {
+    const month = RU_MONTHS[match[1]] || EN_MONTHS[match[1]];
+    if (month) return emit(Number(match[2]), month, 1, "month");
+  }
 
   match = raw.match(/^(\d{2})[-.](\d{2})[-.](\d{4})$/);
   if (match) return emit(Number(match[3]), Number(match[2]), Number(match[1]), "day");
@@ -462,7 +492,7 @@ function withDefaultButton(rows, label, data) {
 
 export function letterboxdModeKeyboard() {
   return {
-    inline_keyboard: [[button("✅ По умолчанию", "lb:def"), button("Настроить", "lb:cus")]],
+    inline_keyboard: [[button("✅ Default", "lb:def"), button("Customize", "lb:cus")]],
   };
 }
 
@@ -474,7 +504,7 @@ export function letterboxdTopKeyboard() {
       button("30", "lb:n:30"),
       button("50", "lb:n:50"),
     ]],
-    "✅ По умолчанию (20)",
+    "✅ Default (20)",
     "lb:n:20",
   );
 }
@@ -482,24 +512,25 @@ export function letterboxdTopKeyboard() {
 export function letterboxdMinKeyboard() {
   return withDefaultButton(
     [[button("3", "lb:m:3"), button("5", "lb:m:5"), button("10", "lb:m:10")]],
-    "✅ По умолчанию (3)",
+    "✅ Default (3)",
     "lb:m:3",
   );
 }
 
-export function letterboxdYesNoKeyboard(prefix, fallback = "да") {
-  const data = fallback === "нет" ? `${prefix}:0` : `${prefix}:1`;
+export function letterboxdYesNoKeyboard(prefix, fallback = "yes") {
+  const no = fallback === "no" || fallback === "нет";
+  const data = no ? `${prefix}:0` : `${prefix}:1`;
   return withDefaultButton(
-    [[button("Да", `${prefix}:1`), button("Нет", `${prefix}:0`)]],
-    `По умолчанию: ${fallback}`,
+    [[button("Yes", `${prefix}:1`), button("No", `${prefix}:0`)]],
+    `Default: ${no ? "no" : "yes"}`,
     data,
   );
 }
 
 export function letterboxdPeriodKeyboard() {
   return withDefaultButton(
-    [[button("Весь период", "lb:span"), button("Свой диапазон", "lb:rng")]],
-    "По умолчанию: весь период",
+    [[button("Full period", "lb:span"), button("Custom range", "lb:rng")]],
+    "Default: full period",
     "lb:span",
   );
 }
@@ -517,16 +548,16 @@ export function letterboxdRangeKeyboard(now = new Date()) {
     inline_keyboard: [
       years.slice(0, 3),
       years.slice(3),
-      [button("Последние 3 года", "lb:y:3"), button("Последние 5 лет", "lb:y:5")],
-      [button("По умолчанию: весь период", "lb:full")],
+      [button("Last 3 years", "lb:y:3"), button("Last 5 years", "lb:y:5")],
+      [button("Default: full period", "lb:full")],
     ],
   };
 }
 
 export function letterboxdUndatedKeyboard() {
   return withDefaultButton(
-    [[button("Нет", "lb:und:0"), button("Да", "lb:und:1")]],
-    "По умолчанию: нет",
+    [[button("No", "lb:und:0"), button("Yes", "lb:und:1")]],
+    "Default: no",
     "lb:und:0",
   );
 }
@@ -539,7 +570,7 @@ function htmlEscape(value) {
 }
 
 function wizardPrompt(heading, body, example, fallback) {
-  return [`<b>${heading}</b>`, "", body, "", `Например: ${example}`, "", `По умолчанию: ${fallback}`].join("\n");
+  return [`<b>${heading}</b>`, "", body, "", `For example: ${example}`, "", `Default: ${fallback}`].join("\n");
 }
 
 function choicePrompt(heading, body) {
@@ -549,11 +580,11 @@ function choicePrompt(heading, body) {
 export function letterboxdModePrompt() {
   return {
     text: [
-      "<b>Как строим графики?</b>",
+      "<b>How should the charts be built?</b>",
       "",
-      "ZIP принят. «По умолчанию» сразу собирает обычный набор. «Настроить» — размер топа, страны, язык и даты.",
+      "ZIP received. Default builds the usual set right away. Customize sets the top size, countries, language, and dates.",
       "",
-      "Кнопки ниже или ответ текстом. Отмена — /stop.",
+      "Buttons below, or reply with text. Cancel with /stop.",
     ].join("\n"),
     reply_markup: letterboxdModeKeyboard(),
   };
@@ -564,8 +595,8 @@ function promptFor(step, state, now = new Date()) {
   if (step === "top_n") {
     return {
       text: wizardPrompt(
-        "Сколько позиций в топах?",
-        "Сколько строк показать в каждом топе. Кнопки или своё число от 1 до 100.",
+        "How many rows in each top?",
+        "How many rows to show in each top. Buttons, or your own number from 1 to 100.",
         "20, 7, 100",
         "20",
       ),
@@ -575,8 +606,8 @@ function promptFor(step, state, now = new Date()) {
   if (step === "min_rated") {
     return {
       text: wizardPrompt(
-        "Минимум оценённых фильмов",
-        "Это порог для топов по средней оценке: режиссёры, актёры, жанры, страны и остальные. Строка попадает в топ, только если в ней столько фильмов с оценкой или больше. При 3 режиссёр с двумя оценёнными фильмами в топ не попадёт. Графики по числу просмотров этот порог не используют. Кнопки или число от 1 до 50.",
+        "Minimum rated films",
+        "This is the threshold for average-rating tops: directors, actors, genres, countries, and the rest. A row is included only when it has that many rated films or more. At 3, a director with two rated films is left out. Watch-count charts ignore this threshold. Buttons, or a number from 1 to 50.",
         "3, 5, 10",
         "3",
       ),
@@ -586,8 +617,8 @@ function promptFor(step, state, now = new Date()) {
   if (step === "usa") {
     return {
       text: choicePrompt(
-        "Показывать USA в топе стран?",
-        "США часто занимают первую строку. «Нет» уберёт их из топа стран.",
+        "Show USA in the country top?",
+        "The United States often takes the first row. No removes it from the country top.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:usa"),
     };
@@ -595,8 +626,8 @@ function promptFor(step, state, now = new Date()) {
   if (step === "english") {
     return {
       text: choicePrompt(
-        "Показывать английский в топе языков?",
-        "Английский часто на первом месте. «Нет» уберёт его из топа языков.",
+        "Show English in the language top?",
+        "English is often first. No removes it from the language top.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:en"),
     };
@@ -604,8 +635,8 @@ function promptFor(step, state, now = new Date()) {
   if (step === "period") {
     return {
       text: choicePrompt(
-        "Весь период или свой диапазон?",
-        "Весь период — от первого просмотра до последнего. Свой диапазон — только выбранные даты, включительно.",
+        "Full period or a custom range?",
+        "Full period runs from the first watch to the last. A custom range keeps only the dates you choose, inclusive.",
       ),
       reply_markup: letterboxdPeriodKeyboard(),
     };
@@ -613,10 +644,10 @@ function promptFor(step, state, now = new Date()) {
   if (step === "range_start") {
     return {
       text: wizardPrompt(
-        "Какой период взять?",
-        "Одна строка, даты включительно. Одно значение — весь этот кусок. Два края — начало и конец. Месяц пишется перед годом. Кнопки ниже — готовые отрезки.",
+        "Which period?",
+        "One line, dates inclusive. One value is that whole slice. Two edges are the start and the end. The month is written before the year. The buttons below are ready-made ranges.",
         "2012, 06-2012, 15-06-2012, 2021-06.2022, 15.06.2021 - 20.08.2022",
-        "весь период",
+        "full period",
       ),
       reply_markup: letterboxdRangeKeyboard(now),
     };
@@ -624,21 +655,21 @@ function promptFor(step, state, now = new Date()) {
   if (step === "range_end") {
     return {
       text: wizardPrompt(
-        "Конец диапазона",
-        `Начало уже ${htmlEscape(state.dateFrom)}. Конец включительно, точность может быть другой: год, месяц или день.`,
+        "End of the range",
+        `The start is already ${htmlEscape(state.dateFrom)}. The end is inclusive, and the precision can differ: year, month, or day.`,
         "2012, 06-2012, 15-06-2012",
-        "весь период",
+        "full period",
       ),
       reply_markup: {
-        inline_keyboard: [[button("По умолчанию: весь период", "lb:endfull")]],
+        inline_keyboard: [[button("Default: full period", "lb:endfull")]],
       },
     };
   }
   if (step === "undated") {
     return {
       text: choicePrompt(
-        "Добавить фильмы без даты в дневнике?",
-        "Нет — только записи с датой внутри периода. Да — ещё фильмы из watched и ratings, у которых в дневнике даты нет. В календарные графики они не попадут.",
+        "Add films with no diary date?",
+        "No — only entries with a date inside the period. Yes — also films from watched and ratings that have no date in the diary. They are not included in the calendar charts.",
       ),
       reply_markup: letterboxdUndatedKeyboard(),
     };
@@ -677,7 +708,7 @@ export function parseLetterboxdCallback(data) {
 function parseModeText(text) {
   const t = normReply(text);
   if (["по умолчанию", "умолчанию", "default", "defaults"].includes(t)) return "defaults";
-  if (["настроить", "настройка", "customize"].includes(t)) return "custom";
+  if (["настроить", "настройка", "customize", "custom"].includes(t)) return "custom";
   return "";
 }
 
@@ -690,8 +721,8 @@ function parseYesNoText(text) {
 
 function parsePeriodText(text) {
   const t = normReply(text);
-  if (["весь период", "весь", "все", "полный", "full"].includes(t)) return "full";
-  if (["свой диапазон", "свой", "диапазон", "custom"].includes(t)) return "custom";
+  if (["весь период", "весь", "все", "полный", "full", "full period"].includes(t)) return "full";
+  if (["свой диапазон", "свой", "диапазон", "custom", "custom range"].includes(t)) return "custom";
   return "";
 }
 
@@ -745,26 +776,26 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
     const choice = kind === "callback" ? input.choice : parseModeText(input.text);
     if (choice === "defaults") return finish(state, defaultLetterboxdOptions());
     if (choice === "custom") return go(state, "top_n", now);
-    return retry(state, "Нужно «по умолчанию» или «настроить». Запуск не начат.");
+    return retry(state, "Need \"default\" or \"customize\". The report has not started.");
   }
   if (step === "top_n") {
     const value = kind === "callback" ? input.value : parseBounded(input.text, LETTERBOXD_TOP_N_MIN, LETTERBOXD_TOP_N_MAX);
-    if (value == null) return retry(state, "Нужно число от 1 до 100. Кнопки: 10, 20, 30, 50. Запуск не начат.");
+    if (value == null) return retry(state, "Need a number from 1 to 100. Buttons: 10, 20, 30, 50. The report has not started.");
     return go({ ...state, topN: value }, "min_rated", now);
   }
   if (step === "min_rated") {
     const value = kind === "callback" ? input.value : parseBounded(input.text, LETTERBOXD_MIN_RATED_MIN, LETTERBOXD_MIN_RATED_MAX);
-    if (value == null) return retry(state, "Нужно число от 1 до 50. Кнопки: 3, 5, 10. Запуск не начат.");
+    if (value == null) return retry(state, "Need a number from 1 to 50. Buttons: 3, 5, 10. The report has not started.");
     return go({ ...state, minRated: value }, "usa", now);
   }
   if (step === "usa") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
-    if (value == null) return retry(state, "Нужно «да» или «нет». Запуск не начат.");
+    if (value == null) return retry(state, "Need yes or no. The report has not started.");
     return go({ ...state, includeUSA: value }, "english", now);
   }
   if (step === "english") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
-    if (value == null) return retry(state, "Нужно «да» или «нет». Запуск не начат.");
+    if (value == null) return retry(state, "Need yes or no. The report has not started.");
     return go({ ...state, includeEnglish: value }, "period", now);
   }
   if (step === "period") {
@@ -773,7 +804,7 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
       return finish(state, { dateFrom: "", dateTo: "", includeUndated: false });
     }
     if (choice === "custom") return go(state, "range_start", now);
-    return retry(state, "Нужно «весь период» или «свой диапазон». Запуск не начат.");
+    return retry(state, "Need \"full period\" or \"custom range\". The report has not started.");
   }
   if (step === "range_start") {
     const full = kind === "callback" ? input.choice === "full" : parsePeriodText(input.text) === "full";
@@ -787,11 +818,11 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
       const range = presetWatchRange(preset, now);
       return go({ ...state, dateFrom: range.dateFrom, dateTo: range.dateTo }, "undated", now);
     }
-    if (kind === "callback") return retry(state, "Этот шаг уже не про кнопки периода. Запуск не начат.", now);
+    if (kind === "callback") return retry(state, "This step is no longer about period buttons. The report has not started.", now);
     const interval = parseWatchInterval(input.text);
     if (!interval) return retry(state, LETTERBOXD_DATE_RETRY, now);
     if (interval.dateTo < interval.dateFrom) {
-      return retry(state, `Конец ${interval.dateTo} раньше начала ${interval.dateFrom}. Напишите период ещё раз.`, now);
+      return retry(state, `End ${interval.dateTo} is before start ${interval.dateFrom}. Type the period again.`, now);
     }
     return go({ ...state, dateFrom: interval.dateFrom, dateTo: interval.dateTo }, "undated", now);
   }
@@ -803,13 +834,13 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
     const interval = parseWatchInterval(input.text);
     if (!interval) return retry(state, LETTERBOXD_DATE_RETRY);
     if (interval.dateTo < interval.dateFrom) {
-      return retry(state, `Конец ${interval.dateTo} раньше начала ${interval.dateFrom}. Напишите период ещё раз.`);
+      return retry(state, `End ${interval.dateTo} is before start ${interval.dateFrom}. Type the period again.`);
     }
     return go({ ...state, dateFrom: interval.dateFrom, dateTo: interval.dateTo }, "undated", now);
   }
   if (step === "undated") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
-    if (value == null) return retry(state, "Нужно «да» или «нет». Запуск не начат.");
+    if (value == null) return retry(state, "Need yes or no. The report has not started.");
     return finish(state, { includeUndated: value });
   }
   return { state, messages: [] };

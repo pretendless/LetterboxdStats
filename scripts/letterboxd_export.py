@@ -64,29 +64,29 @@ def load_diary(zip_path: Path | str, *, require_dates: bool = True) -> pd.DataFr
     """Parse diary.csv. When require_dates, drop rows without Watched Date."""
     path = Path(zip_path)
     if not path.is_file():
-        raise RuntimeError("ZIP-файл не найден.")
+        raise RuntimeError("ZIP file not found.")
     try:
         with zipfile.ZipFile(path) as zf:
             names = zf.namelist()
             diary_name = _find_member(names, "diary.csv")
             if not diary_name:
-                raise RuntimeError("В ZIP не найден diary.csv")
+                raise RuntimeError("diary.csv was not found in the ZIP.")
             df = _read_csv_member(zf, diary_name)
     except zipfile.BadZipFile as err:
-        raise RuntimeError("Файл не похож на ZIP Letterboxd.") from err
+        raise RuntimeError("This file is not a Letterboxd ZIP.") from err
 
     if "Watched Date" not in df.columns:
-        raise RuntimeError("В diary.csv нет колонки Watched Date")
+        raise RuntimeError("diary.csv has no Watched Date column.")
     required = {"Name", "Year", "Watched Date"}
     if not required.issubset(df.columns):
-        raise RuntimeError(f"В diary.csv не хватает колонок: {required - set(df.columns)}")
+        raise RuntimeError(f"diary.csv is missing columns: {required - set(df.columns)}")
 
     df = _normalize_common(df)
     df["Watched Date"] = pd.to_datetime(df["Watched Date"], errors="coerce")
     if require_dates:
         df = df[df["Watched Date"].notna()].copy()
         if df.empty:
-            raise RuntimeError("diary.csv не содержит дат просмотра.")
+            raise RuntimeError("diary.csv has no watch dates.")
     df["source"] = "diary"
     return df
 

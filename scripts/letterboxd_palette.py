@@ -56,7 +56,7 @@ def color_for_year(palette: dict[int, tuple], year: int, fallback=(0.3, 0.47, 0.
 # Avoid data-relative norms that squash 3.6–4.5 into a peach mid-band.
 RATING_VMIN = 0.5
 RATING_VMAX = 5.0
-RATING_COLORBAR_LABEL = "оценка"
+RATING_COLORBAR_LABEL = "rating"
 
 # Explicit blue (low) → green (mid) → red (high). No coolwarm/RdBu peach.
 _RATING_BGR_STOPS = (

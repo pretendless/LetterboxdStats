@@ -154,7 +154,7 @@ export async function handleLetterboxdCommand(env, message, deps = {}) {
   }
   const kv = env.BOT_KV;
   if (!kv) {
-    await send(env, chatId, "KV недоступен — не могу ждать ZIP.");
+    await send(env, chatId, "KV is unavailable — cannot wait for a ZIP.");
     return true;
   }
   await kv.put(awaitLetterboxdKey(chatId), encodeAwaitLetterboxd({ since: new Date().toISOString() }));
@@ -182,7 +182,7 @@ export async function handleLetterboxdDocument(env, message, deps = {}) {
     return true;
   }
   if (!env.GHLEBXD_DISPATCH_TOKEN) {
-    await send(env, chatId, "Запуск не настроен: нет секрета GHLEBXD_DISPATCH_TOKEN.");
+    await send(env, chatId, "Run is not configured: missing secret GHLEBXD_DISPATCH_TOKEN.");
     return true;
   }
 
@@ -297,11 +297,11 @@ export async function handleLetterboxdCallback(env, callback, deps = {}) {
   const kv = env.BOT_KV;
   const state = kv ? decodeAwaitLetterboxd(await kv.get(awaitLetterboxdKey(chatId))) : null;
   if (!state) {
-    await replyCallback(answer, env, callbackId, "Ожидание Letterboxd уже сброшено.");
+    await replyCallback(answer, env, callbackId, "The Letterboxd wizard was already cleared.");
     return true;
   }
   if (parsed.step !== state.step) {
-    await replyCallback(answer, env, callbackId, "Этот шаг уже пройден.");
+    await replyCallback(answer, env, callbackId, "That step is already done.");
     return true;
   }
   await replyCallback(answer, env, callbackId, "");

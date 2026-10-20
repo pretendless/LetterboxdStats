@@ -100,7 +100,7 @@ async function defaultClearKeyboard(env, chatId, messageId) {
   }
 }
 
-const NEED_START = "Сначала /start — затем ZIP экспорта Letterboxd. Отмена — /stop.";
+const NEED_START = "Send /start first, then the Letterboxd export ZIP. Cancel with /stop.";
 
 async function answer(env, update, send, deps = {}) {
   if (update && update.callback_query) {

@@ -8,7 +8,7 @@ Usage:
   3) Run: python letterboxd_genre_charts.py path/to/letterboxd-export.zip
 
 Optional Telegram progress (chart job): LEBXDBOT_TOKEN + CHAT_ID.
-Edits one message «Подгружаю подробности из TMDB: N/total…» during enrichment; does not print tokens.
+Edits one message "Loading TMDB details: N/total…" during enrichment; does not print tokens.
 
 Creates:
   genre_counts_by_viewing_year.png
@@ -85,7 +85,7 @@ def format_genre_progress(done, total):
     """User-facing progress: unique titles enriched so far / total (genres, countries, people…)."""
     d = max(0, int(done))
     t = max(0, int(total))
-    return f"Подгружаю подробности из TMDB: {d}/{t}…"
+    return f"Loading TMDB details: {d}/{t}…"
 
 
 class TelegramProgress:
@@ -321,7 +321,7 @@ def find_tmdb(name, year, cache):
             time.sleep(0.12)
             return out
         except Exception as e:
-            print(f"Deep-enrich ошибка для {name} ({year}): {e}")
+            print(f"Deep-enrich failed for {name} ({year}): {e}")
             existing = {**existing, "deep": True}
             existing.setdefault("countries", [])
             existing.setdefault("companies", [])
@@ -671,7 +671,7 @@ def chart_watches_by_country(diary, cache, path: Path, top_n: int = TOP_N_DEFAUL
         diary,
         path,
         names_for_row=names_for_row,
-        title="Страны производства — цвет = год просмотра",
+        title="Countries of origin — color is watch year",
         top_n=top_n,
         min_count=1,
         footer=footer,
@@ -727,7 +727,7 @@ def chart_deep_count_tops(
         (
             "watches_by_genre",
             "genres",
-            "Жанры — цвет = год просмотра",
+            "Genres — color is watch year",
             top_n,
             1,
             None,
@@ -735,7 +735,7 @@ def chart_deep_count_tops(
         (
             "watches_by_country",
             "countries",
-            "Страны производства — цвет = год просмотра",
+            "Countries of origin — color is watch year",
             top_n,
             1,
             None,
@@ -743,7 +743,7 @@ def chart_deep_count_tops(
         (
             "watches_by_director",
             "directors",
-            "Режиссёры — цвет = год просмотра",
+            "Directors — color is watch year",
             top_n,
             MIN_PERSON_COUNT,
             None,
@@ -751,7 +751,7 @@ def chart_deep_count_tops(
         (
             "watches_by_actor",
             "cast",
-            "Актёры (top-billed) — цвет = год просмотра",
+            "Actors (top-billed) — color is watch year",
             top_n,
             MIN_PERSON_COUNT,
             None,
@@ -759,7 +759,7 @@ def chart_deep_count_tops(
         (
             "watches_by_language",
             "languages",
-            "Язык оригинала — цвет = год просмотра",
+            "Original language — color is watch year",
             top_n,
             1,
             display_lang,
@@ -767,7 +767,7 @@ def chart_deep_count_tops(
         (
             "watches_by_studio",
             "companies",
-            "Студии — цвет = год просмотра",
+            "Studios — color is watch year",
             top_n,
             MIN_COMPANY_COUNT,
             None,
@@ -814,70 +814,70 @@ def chart_deep_rating_tops(deep: dict, paths: dict, *, top_n=TOP_N_DEFAULT, min_
         (
             "average_rating_by_country",
             "countries_by_rating",
-            "Страны — выше оценка",
+            "Countries — higher rating",
             False,
             None,
         ),
         (
             "worst_average_rating_by_country",
             "countries_by_rating_worst",
-            "Страны — ниже оценка",
+            "Countries — lower rating",
             True,
             None,
         ),
         (
             "average_rating_by_director",
             "directors_by_rating",
-            "Режиссёры — выше оценка",
+            "Directors — higher rating",
             False,
             None,
         ),
         (
             "worst_average_rating_by_director",
             "directors_by_rating_worst",
-            "Режиссёры — ниже оценка",
+            "Directors — lower rating",
             True,
             None,
         ),
         (
             "average_rating_by_actor",
             "actors_by_rating",
-            "Актёры — выше оценка",
+            "Actors — higher rating",
             False,
             None,
         ),
         (
             "worst_average_rating_by_actor",
             "actors_by_rating_worst",
-            "Актёры — ниже оценка",
+            "Actors — lower rating",
             True,
             None,
         ),
         (
             "average_rating_by_language",
             "languages_by_rating",
-            "Язык оригинала — выше оценка",
+            "Original language — higher rating",
             False,
             display_lang,
         ),
         (
             "worst_average_rating_by_language",
             "languages_by_rating_worst",
-            "Язык оригинала — ниже оценка",
+            "Original language — lower rating",
             True,
             display_lang,
         ),
         (
             "average_rating_by_studio",
             "companies_by_rating",
-            "Студии — выше оценка",
+            "Studios — higher rating",
             False,
             None,
         ),
         (
             "worst_average_rating_by_studio",
             "companies_by_rating_worst",
-            "Студии — ниже оценка",
+            "Studios — lower rating",
             True,
             None,
         ),
@@ -919,7 +919,7 @@ def main():
         print("Usage: python letterboxd_genre_charts.py path/to/letterboxd-export.zip")
         sys.exit(2)
     if not TOKEN:
-        print("Не задан TMDB_BEARER_TOKEN. Получите Read Access Token в Settings → API на TMDB и задайте переменную окружения.")
+        print("TMDB_BEARER_TOKEN is not set. Create a Read Access Token under Settings → API on TMDB and set the environment variable.")
         sys.exit(2)
 
     opts = read_chart_options()
@@ -930,7 +930,7 @@ def main():
         include_undated=opts.include_undated,
     )
     if opts.has_window and diary.empty:
-        print("В выбранном диапазоне нет записей дневника с датой просмотра.", file=sys.stderr)
+        print("No diary entries with a watch date in the selected range.", file=sys.stderr)
         sys.exit(2)
     cache = json.loads(CACHE_PATH.read_text(encoding="utf-8")) if CACHE_PATH.exists() else {}
     # Enrich unique titles across diary ∪ watched.
@@ -938,7 +938,7 @@ def main():
     total = len(films)
     progress = TelegramProgress(TG_TOKEN, TG_CHAT)
     print(
-        f"Обогащаю TMDB {total} уникальных сочетаний «название + год»…"
+        f"Enriching {total} unique title and year pairs on TMDB…"
         f" (watched-only: {len(watched_only)}, rated films: {len(film_ratings)})"
     )
     progress.update(0, total, force=True)
@@ -953,7 +953,7 @@ def main():
             # Always call: fills new titles and upgrades legacy genre-only cache.
             find_tmdb(name, year, cache)
         except Exception as e:
-            print(f"Ошибка для {name} ({year}): {e}")
+            print(f"Error for {name} ({year}): {e}")
             if key not in cache:
                 cache[key] = empty_tmdb_entry()
         done += 1
@@ -964,7 +964,7 @@ def main():
         progress.update(done, total, force=(done >= total))
         if done % 25 == 0:
             save_cache(cache)
-            print(f"  {done}/{total} (с жанрами {resolved})")
+            print(f"  {done}/{total} (with genres {resolved})")
     save_cache(cache)
     progress.update(done, total, force=True)
 
@@ -976,7 +976,7 @@ def main():
     unmatched = catalog[catalog["Genre list"].apply(len) == 0][["Name", "Year"]].drop_duplicates()
     unmatched.to_csv("tmdb_unmatched.csv", index=False)
 
-    progress.finish(f"TMDB: {resolved}/{total}. Строю графики…")
+    progress.finish(f"TMDB: {resolved}/{total}. Building charts…")
 
     # Dark theme already applied via apply_dark_chart_theme().
     footer = "Source: Letterboxd diary/watched + TMDB metadata"
@@ -996,11 +996,11 @@ def main():
         vals = np.array([yearly[y][genre] for y in years])
         ax.bar(years, vals, bottom=bottom, label=genre, color=colors[idx], width=0.82)
         bottom += vals
-    ax.set_title("Количество просмотров по жанрам и годам")
-    ax.set_xlabel("Год просмотра"); ax.set_ylabel("Просмотры (жанры суммируются)")
+    ax.set_title("Watches by genre and year")
+    ax.set_xlabel("Watch year"); ax.set_ylabel("Watches (genres are summed)")
     ax.set_xticks(years); ax.tick_params(axis="x", rotation=45)
     leg = ax.legend(
-        title="12 самых частых жанров",
+        title="12 most common genres",
         bbox_to_anchor=(1.02, 1),
         loc="upper left",
         labelcolor=FG,
@@ -1039,10 +1039,10 @@ def main():
             color=categorical_colors(p.shape[1]),
             width=0.82,
         )
-        ax.set_title("Просмотры по десятилетию выхода фильма и жанру")
-        ax.set_xlabel("Десятилетие выхода"); ax.set_ylabel("Количество просмотров")
+        ax.set_title("Watches by release decade and genre")
+        ax.set_xlabel("Release decade"); ax.set_ylabel("Watch count")
         leg = ax.legend(
-            title="10 самых частых жанров",
+            title="10 most common genres",
             bbox_to_anchor=(1.02, 1),
             loc="upper left",
             labelcolor=FG,
@@ -1070,7 +1070,7 @@ def main():
     made_genre_best = chart_rating_hbar(
         genres_by_rating,
         Path("average_rating_by_genre.png"),
-        title=f"Жанры — выше оценка ({gate})",
+        title=f"Genres — higher rating ({gate})",
         footer=footer,
         limit=opts.top_n,
         ascending=False,
@@ -1078,7 +1078,7 @@ def main():
     made_genre_worst = chart_rating_hbar(
         genres_by_rating_worst,
         Path("worst_average_rating_by_genre.png"),
-        title=f"Жанры — ниже оценка ({gate})",
+        title=f"Genres — lower rating ({gate})",
         footer=footer,
         limit=opts.top_n,
         ascending=True,
@@ -1176,7 +1176,7 @@ def main():
         encoding="utf-8",
     )
 
-    print("\nГотово. Созданы файлы:")
+    print("\nDone. Files created:")
     for f in [
         "genre_counts_by_viewing_year.png",
         "average_rating_by_genre.png",
@@ -1190,10 +1190,10 @@ def main():
     ]:
         if Path(f).exists():
             print(" -", f)
-    print(f"Фильмов/сочетаний без найденных жанров: {len(unmatched)}")
-    print(f"Watched-only (не в diary): {len(watched_only)}")
+    print(f"Films without TMDB genres: {len(unmatched)}")
+    print(f"Watched-only (not in diary): {len(watched_only)}")
     print("TMDB data attribution: https://www.themoviedb.org/")
-    progress.finish("Готово, шлю графики.")
+    progress.finish("Done. Sending charts.")
 
 if __name__ == "__main__":
     main()
