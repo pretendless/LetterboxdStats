@@ -7,13 +7,15 @@ fixed anchors (median sRGB of each non-overlapping interior):
 - 0.50 green ``#03E53E``
 - 0.75 orange ``#FC7A02``
 
-``palette_color`` blends in OKLab. From blue to orange the blend is linear.
-The ends continue the same chords three anchor steps past blue and past
-orange (``B + 3(B−G)`` and ``O + 3(O−G)``) and scale chroma into sRGB, so
-``t = 0`` is purple (``#7729FF``) and ``t = 1`` is burgundy (``#A90048``).
-The outer quarters ease with a cube so those ends linger: a rating near
-1.0 stays purple and a rating near 4.5–5 stays burgundy, while 1.625, 2.75,
-and 3.875 stay on the logo colors.
+``palette_color`` is piecewise-linear in OKLab lightness, chroma, and hue.
+``t < 0.05`` stays the purple end (``#7729FF``) and ``t ≥ 0.95`` stays the
+burgundy end (``#A90048``), both the three-step chords past the logo colors.
+Between those holds, each hue family is its own polyline of ``(L, C, h)``
+stops: blues on ``[0.05, 0.25]`` ending at logo blue, greens on
+``(0.25, 0.50]`` ending at logo green, yellows on ``(0.50, 0.75]`` ending
+at logo orange, and a bent red polyline on ``(0.75, 0.95)`` that is not the
+straight orange–burgundy chord. The three logo knots return the measured
+bytes exactly.
 
 Ordered series (earliest or lowest first) bend quartile ranks with a
 piecewise quadratic so the logo knots stay put. See ``categorical_positions``.
@@ -54,6 +56,37 @@ LOGO_ORANGE_HEX = "#FC7A02"
 # (one step is Δt = 0.25, the old ends ``2B−G`` / ``2O−G``). Three steps
 # is where the gamut-mapped chord reads as purple and burgundy.
 OUTER_CHORD_STEPS = 3.0
+
+# Hue families. Purple is only below the first cut; burgundy is only from
+# the last cut up. The logo knots are the right-hand end of the blue, green,
+# and yellow polylines.
+PURPLE_BELOW = 0.05
+BURGUNDY_FROM = 0.95
+
+# Interior stops (fraction of the band, L, C, hue degrees). The band's final
+# stop is the logo color, or burgundy for the red band. Hue is OKLab
+# atan2(b, a), in degrees.
+_BLUE_STOPS = (
+    (0.00, 0.40, 0.14, -105.0),
+    (0.32, 0.78, 0.11, -135.0),
+    (0.68, 0.58, 0.20, -95.0),
+)
+_GREEN_STOPS = (
+    (0.00, 0.55, 0.20, 158.0),
+    (0.35, 0.74, 0.18, 132.0),
+    (0.70, 0.62, 0.22, 150.0),
+)
+_YELLOW_STOPS = (
+    (0.00, 0.90, 0.14, 110.0),
+    (0.38, 0.66, 0.19, 78.0),
+    (0.72, 0.84, 0.16, 98.0),
+)
+# Detours off the orange→burgundy chord, so the reds are not one ramp.
+_RED_STOPS = (
+    (0.28, 0.64, 0.20, 30.0),
+    (0.55, 0.50, 0.21, 14.0),
+    (0.78, 0.62, 0.20, 24.0),
+)
 
 # Björn Ottosson, OKLab (https://bottosson.github.io/posts/oklab/).
 _M1 = (
@@ -164,18 +197,56 @@ def _chord_end(
     return tuple(anchor[i] + steps * (anchor[i] - green[i]) for i in range(3))
 
 
-def _ease_outer(t0: float, t1: float, u: float) -> float:
-    """Linger on the purple and burgundy ends. The middle quarters stay linear.
+def _polar(lab: tuple[float, float, float]) -> tuple[float, float, float]:
+    lightness, a, b = lab
+    return (lightness, math.hypot(a, b), math.atan2(b, a))
 
-    Cube, not a straight blend: ``u³`` below blue and ``1−(1−u)³`` above
-    orange. A rating near 1.0 (and the next step, near 1.2) stays purple,
-    and a rating from about 4.5 to 5 stays burgundy.
+
+def _srgb_from_lch(lightness: float, chroma: float, hue: float) -> tuple[float, float, float]:
+    return oklab_to_srgb(lightness, chroma * math.cos(hue), chroma * math.sin(hue))
+
+
+def _mix_lch(
+    left: tuple[float, float, float],
+    right: tuple[float, float, float],
+    u: float,
+) -> tuple[float, float, float]:
+    """Straight line in OKLab L, C, and hue (hue in radians, not wrapped)."""
+    return _srgb_from_lch(
+        left[0] + u * (right[0] - left[0]),
+        left[1] + u * (right[1] - left[1]),
+        left[2] + u * (right[2] - left[2]),
+    )
+
+
+def _band_color(
+    stops: tuple[tuple[float, float, float, float], ...],
+    end: tuple[float, float, float],
+    u: float,
+    start: tuple[float, float, float] | None = None,
+) -> tuple[float, float, float]:
+    """Polyline through ``stops`` (fraction, L, C, hue degrees), ending at ``end``.
+
+    ``start`` replaces the first stop's LCh when the band begins on a logo
+    color (the red band starts at orange). Other bands pass ``start=None``
+    and use the first stop as written.
     """
-    if t1 <= 0.25:
-        return u * u * u
-    if t0 >= 0.75:
-        return 1.0 - (1.0 - u) ** 3
-    return u
+    points: list[tuple[float, tuple[float, float, float]]] = []
+    if start is not None:
+        points.append((0.0, start))
+    for fraction, lightness, chroma, hue_deg in stops:
+        if start is not None and fraction <= 0.0:
+            continue
+        points.append((fraction, (lightness, chroma, math.radians(hue_deg))))
+    points.append((1.0, end))
+    if u <= points[0][0]:
+        return _mix_lch(points[0][1], points[0][1], 0.0)
+    for (u0, left), (u1, right) in zip(points, points[1:]):
+        if u0 <= u <= u1:
+            span = u1 - u0
+            local = 0.0 if span == 0.0 else (u - u0) / span
+            return _mix_lch(left, right, local)
+    return _mix_lch(points[-1][1], points[-1][1], 0.0)
 
 
 _STOPS: tuple | None = None
@@ -208,10 +279,12 @@ def _palette_stops():
 def palette_color(t: float) -> tuple[float, float, float, float]:
     """RGBA in 0–1 for position t on the shared palette.
 
-    OKLab blend between the knots from ``_palette_stops``. The two middle
-    quarters are linear. The outer quarters ease so the purple and burgundy
-    ends linger (see ``_ease_outer``). t is clamped to [0, 1]. The logo
-    knots return the measured bytes exactly.
+    Hue families, piecewise-linear in OKLab lightness, chroma, and hue.
+    ``t < PURPLE_BELOW`` is the purple end and ``t ≥ BURGUNDY_FROM`` is the
+    burgundy end. Blues, greens, and yellows are polylines that finish on
+    the logo knots; reds bend through ``_RED_STOPS`` instead of the straight
+    chord from orange to burgundy. t is clamped to [0, 1]. The logo knots
+    return the measured bytes exactly.
     """
     try:
         position = float(t)
@@ -222,18 +295,32 @@ def palette_color(t: float) -> tuple[float, float, float, float]:
     elif position > 1.0:
         position = 1.0
     stops = _palette_stops()
-    for stop_t, rgb, _lab in stops:
+    purple = stops[0][1]
+    blue_rgb, blue_lab = stops[1][1], stops[1][2]
+    green_rgb, green_lab = stops[2][1], stops[2][2]
+    orange_rgb, orange_lab = stops[3][1], stops[3][2]
+    burgundy = stops[4][1]
+    burgundy_lab = stops[4][2]
+    if position < PURPLE_BELOW:
+        return _rgba_bytes(purple)
+    if position >= BURGUNDY_FROM:
+        return _rgba_bytes(burgundy)
+    for stop_t, rgb in ((0.25, blue_rgb), (0.5, green_rgb), (0.75, orange_rgb)):
         if abs(position - stop_t) <= 1e-12:
             return _rgba_bytes(rgb)
-    for (t0, _rgb0, lab0), (t1, _rgb1, lab1) in zip(stops, stops[1:]):
-        if t0 <= position <= t1:
-            span = t1 - t0
-            u = 0.0 if span == 0.0 else (position - t0) / span
-            u = _ease_outer(t0, t1, u)
-            lab = tuple(lab0[i] + u * (lab1[i] - lab0[i]) for i in range(3))
-            rgb = oklab_to_srgb(*lab)
-            return (rgb[0], rgb[1], rgb[2], 1.0)
-    return _rgba_bytes(stops[-1][1])
+    if position <= 0.25:
+        u = (position - PURPLE_BELOW) / (0.25 - PURPLE_BELOW)
+        rgb = _band_color(_BLUE_STOPS, _polar(blue_lab), u)
+    elif position <= 0.5:
+        u = (position - 0.25) / 0.25
+        rgb = _band_color(_GREEN_STOPS, _polar(green_lab), u)
+    elif position <= 0.75:
+        u = (position - 0.5) / 0.25
+        rgb = _band_color(_YELLOW_STOPS, _polar(orange_lab), u)
+    else:
+        u = (position - 0.75) / (BURGUNDY_FROM - 0.75)
+        rgb = _band_color(_RED_STOPS, _polar(burgundy_lab), u, start=_polar(orange_lab))
+    return (rgb[0], rgb[1], rgb[2], 1.0)
 
 
 def palette_rgb(t: float) -> tuple[int, int, int]:
