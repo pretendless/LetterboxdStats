@@ -67,17 +67,21 @@ Leave the vendored `tg2tm/` wizard as it is until a separate cutover. Do not rem
 
 ## Chart palette
 
-One palette, `palette_color` in `scripts/letterboxd_palette.py`. Do not add turbo, viridis, coolwarm, or a second rating colormap.
+One palette, `palette_color` in `scripts/letterboxd_palette.py`. It is a smooth piecewise-linear interpolation in OKLab `(L, a, b)` through five knots:
 
-Logo anchors are the median sRGB of each circle's non-overlapping interior (12px erosion, then a center disk; both middle samples of each channel matched):
-
+- 0 purple `#7729FF`
 - 0.25 blue `#3FB7EB` = RGB (63, 183, 235)
 - 0.50 green `#03E53E` = RGB (3, 229, 62)
 - 0.75 orange `#FC7A02` = RGB (252, 122, 2)
+- 1 burgundy `#A90048`
 
-`palette_color(t)` is piecewise-linear in OKLab `(L, a, b)` between five knots. `t = 0` and `t = 1` are the three-step chords (`B + 3(B−G)`, `O + 3(O−G)`, `OUTER_CHORD_STEPS`): `#7729FF` purple, `#A90048` burgundy. The other knots are the logo colors. Each segment is that straight line. No hue bands, holds, or easing. Ratings use `t = (rating − 0.5) / 4.5`, so 1.625 is logo blue, 2.75 is green, and 3.875 is logo orange.
+The three middle knots are the measured logo circles (median sRGB of each non-overlapping interior: 12px erosion, then a center disk). A knot returns those bytes exactly. Each segment is the straight OKLab line between its knots, so lightness does not jump.
 
-Discrete ordered series, earliest or lowest first. Raw rank `q = (i+1)/(N+1)`, then `bend_rank`:
+Never use hue bands, hard cuts, holds, or easing.
+
+A rating maps with `t = (rating − 0.5) / 4.5` (`RATING_VMIN = 0.5`, `RATING_VMAX = 5.0`). So 1.625 is logo blue, 2.75 is green, and 3.875 is logo orange.
+
+Discrete ordered series (watch years, ranked genres), earliest or lowest first, use `bend_rank` on raw rank `q = (i+1)/(N+1)`:
 
 - N = 1 → `[0.5]`
 - N = 2 → `[0.25, 0.75]`
@@ -87,4 +91,13 @@ Discrete ordered series, earliest or lowest first. Raw rank `q = (i+1)/(N+1)`, t
   - `[0.5, 0.75]`: `u = (q−0.5)/0.25`, `t = 0.5 + 0.25 u²` (pull toward green)
   - `[0.75, 1]`: `u = (q−0.75)/0.25`, `t = 1 − 0.25 (1−u)²` (pull toward 1)
 
-N = 3 is blue, green, orange. N = 7 is `[0.0625, 0.25, 0.4375, 0.5, 0.5625, 0.75, 0.9375]` (items 2, 4, 6 are the logo colors).
+N = 3 is blue, green, orange. N = 7 is `[0.0625, 0.25, 0.4375, 0.5, 0.5625, 0.75, 0.9375]` (items 2, 4, and 6 are the logo colors).
+
+## Rating-bar labels
+
+In `chart_rating_hbar` (`scripts/letterboxd_top_charts.py`), `SHORT_BAR_NAME_CHARS` is 15.
+
+- A bar that holds at least 15 name characters keeps the name inside. The name is ellipsized only when the full name does not fit.
+- A shorter bar shows the first 15 characters and an ellipsis, and that label runs past the bar tip.
+- The bold rating sits 0.14 data units past a normal bar tip (`mean_after_bar`).
+- After an overflowing label, the rating keeps at least that same gap past the label: the pixel width of the 0.14 offset, and never under 12 px, plus half the name stroke so the halo is not part of the gap.
