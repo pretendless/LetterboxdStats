@@ -75,7 +75,7 @@ Logo anchors are the median sRGB of each circle's non-overlapping interior (12px
 - 0.50 green `#03E53E` = RGB (3, 229, 62)
 - 0.75 orange `#FC7A02` = RGB (252, 122, 2)
 
-`palette_color(t)` is piecewise-linear in OKLab through those anchors. `t = 0` and `t = 1` extend the blue←green and green→orange chords by one anchor step (`2B − G`, `2O − G`) and scale chroma into sRGB (deeper blue-violet, then red). Ratings use the full 0..1 range: `t = (rating − 0.5) / 4.5`.
+`palette_color(t)` blends in OKLab. From blue (0.25) through orange (0.75) the blend is linear. `t = 0` and `t = 1` extend the blue←green and green→orange chords by three anchor steps (`B + 3(B−G)`, `O + 3(O−G)`, constant `OUTER_CHORD_STEPS`) and scale chroma into sRGB: `#7729FF` purple, `#A90048` burgundy. The outer quarters ease with a cube so those ends linger (`u³` below blue, `1−(1−u)³` above orange). Ratings use the full 0..1 range: `t = (rating − 0.5) / 4.5`, so about 1.0 stays purple, 1.625 is logo blue, 2.75 is green, 3.875 is logo orange, and about 4.5–5 stays burgundy.
 
 Discrete ordered series, earliest or lowest first. Raw rank `q = (i+1)/(N+1)`, then `bend_rank`:
 

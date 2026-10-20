@@ -7,10 +7,13 @@ fixed anchors (median sRGB of each non-overlapping interior):
 - 0.50 green ``#03E53E``
 - 0.75 orange ``#FC7A02``
 
-``palette_color`` is piecewise-linear in OKLab through those anchors. The
-ends continue the same chords one anchor-step past blue and past orange
-(``2B−G`` and ``2O−G``) and scale chroma into sRGB, so 0 stays a readable
-blue-violet and 1 stays a readable red on the black background.
+``palette_color`` blends in OKLab. From blue to orange the blend is linear.
+The ends continue the same chords three anchor steps past blue and past
+orange (``B + 3(B−G)`` and ``O + 3(O−G)``) and scale chroma into sRGB, so
+``t = 0`` is purple (``#7729FF``) and ``t = 1`` is burgundy (``#A90048``).
+The outer quarters ease with a cube so those ends linger: a rating near
+1.0 stays purple and a rating near 4.5–5 stays burgundy, while 1.625, 2.75,
+and 3.875 stay on the logo colors.
 
 Ordered series (earliest or lowest first) bend quartile ranks with a
 piecewise quadratic so the logo knots stay put. See ``categorical_positions``.
@@ -46,6 +49,11 @@ LOGO_ORANGE_RGB = (252, 122, 2)  # #FC7A02 at t = 0.75
 LOGO_BLUE_HEX = "#3FB7EB"
 LOGO_GREEN_HEX = "#03E53E"
 LOGO_ORANGE_HEX = "#FC7A02"
+
+# How far t=0 and t=1 sit past the outer logo colors, in anchor steps
+# (one step is Δt = 0.25, the old ends ``2B−G`` / ``2O−G``). Three steps
+# is where the gamut-mapped chord reads as purple and burgundy.
+OUTER_CHORD_STEPS = 3.0
 
 # Björn Ottosson, OKLab (https://bottosson.github.io/posts/oklab/).
 _M1 = (
@@ -147,6 +155,29 @@ def _rgba_bytes(rgb: tuple[int, int, int]) -> tuple[float, float, float, float]:
     return (rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0, 1.0)
 
 
+def _chord_end(
+    anchor: tuple[float, float, float],
+    green: tuple[float, float, float],
+    steps: float,
+) -> tuple[float, float, float]:
+    """OKLab point ``steps`` anchor-widths past ``anchor``, away from green."""
+    return tuple(anchor[i] + steps * (anchor[i] - green[i]) for i in range(3))
+
+
+def _ease_outer(t0: float, t1: float, u: float) -> float:
+    """Linger on the purple and burgundy ends. The middle quarters stay linear.
+
+    Cube, not a straight blend: ``u³`` below blue and ``1−(1−u)³`` above
+    orange. A rating near 1.0 (and the next step, near 1.2) stays purple,
+    and a rating from about 4.5 to 5 stays burgundy.
+    """
+    if t1 <= 0.25:
+        return u * u * u
+    if t0 >= 0.75:
+        return 1.0 - (1.0 - u) ** 3
+    return u
+
+
 _STOPS: tuple | None = None
 
 
@@ -158,9 +189,11 @@ def _palette_stops():
     blue = _oklab_of_bytes(LOGO_BLUE_RGB)
     green = _oklab_of_bytes(LOGO_GREEN_RGB)
     orange = _oklab_of_bytes(LOGO_ORANGE_RGB)
-    # One anchor step (Δt = 0.25) past each outer logo color, away from green.
-    end0 = _quantize_srgb(oklab_to_srgb(*(2.0 * blue[i] - green[i] for i in range(3))))
-    end1 = _quantize_srgb(oklab_to_srgb(*(2.0 * orange[i] - green[i] for i in range(3))))
+    # Same chord as blue←green and green→orange, extended past the logo
+    # colors and pulled back into sRGB. One step is still light blue / neon
+    # red; OUTER_CHORD_STEPS reaches purple and burgundy.
+    end0 = _quantize_srgb(oklab_to_srgb(*_chord_end(blue, green, OUTER_CHORD_STEPS)))
+    end1 = _quantize_srgb(oklab_to_srgb(*_chord_end(orange, green, OUTER_CHORD_STEPS)))
     raw = (
         (0.0, end0),
         (0.25, LOGO_BLUE_RGB),
@@ -175,8 +208,10 @@ def _palette_stops():
 def palette_color(t: float) -> tuple[float, float, float, float]:
     """RGBA in 0–1 for position t on the shared palette.
 
-    Piecewise-linear in OKLab between the knots from ``_palette_stops``.
-    t is clamped to [0, 1]. The logo knots return the measured bytes exactly.
+    OKLab blend between the knots from ``_palette_stops``. The two middle
+    quarters are linear. The outer quarters ease so the purple and burgundy
+    ends linger (see ``_ease_outer``). t is clamped to [0, 1]. The logo
+    knots return the measured bytes exactly.
     """
     try:
         position = float(t)
@@ -194,6 +229,7 @@ def palette_color(t: float) -> tuple[float, float, float, float]:
         if t0 <= position <= t1:
             span = t1 - t0
             u = 0.0 if span == 0.0 else (position - t0) / span
+            u = _ease_outer(t0, t1, u)
             lab = tuple(lab0[i] + u * (lab1[i] - lab0[i]) for i in range(3))
             rgb = oklab_to_srgb(*lab)
             return (rgb[0], rgb[1], rgb[2], 1.0)

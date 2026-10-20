@@ -16,6 +16,7 @@ from letterboxd_palette import (
     bend_rank,
     categorical_colors,
     categorical_positions,
+    OUTER_CHORD_STEPS,
     oklab_to_srgb,
     palette_color,
     palette_hex,
@@ -57,15 +58,34 @@ def palette_rgb_from(rgba) -> tuple[int, int, int]:
     return _quantize(rgba[:3])
 
 
+def _lab(rgb: tuple[int, int, int]):
+    return srgb_to_oklab(*(c / 255.0 for c in rgb))
+
+
+def _chord(anchor, green, steps: float):
+    return tuple(anchor[i] + steps * (anchor[i] - green[i]) for i in range(3))
+
+
 def test_oklab_segments_hit_anchors_and_extrapolated_ends():
-    """Ends are the logo chords extended by one 0.25 step, then gamut-mapped."""
-    blue = srgb_to_oklab(*(c / 255.0 for c in LOGO_BLUE_RGB))
-    green = srgb_to_oklab(*(c / 255.0 for c in LOGO_GREEN_RGB))
-    orange = srgb_to_oklab(*(c / 255.0 for c in LOGO_ORANGE_RGB))
-    end0 = tuple(2.0 * blue[i] - green[i] for i in range(3))
-    end1 = tuple(2.0 * orange[i] - green[i] for i in range(3))
+    """Ends are the logo chords extended three steps, then gamut-mapped.
+
+    The outer quarters ease (square) so the purple and burgundy linger.
+    Blue through orange stays a straight OKLab line.
+    """
+    blue = _lab(LOGO_BLUE_RGB)
+    green = _lab(LOGO_GREEN_RGB)
+    orange = _lab(LOGO_ORANGE_RGB)
+    assert OUTER_CHORD_STEPS == 3.0
+    end0 = _chord(blue, green, OUTER_CHORD_STEPS)
+    end1 = _chord(orange, green, OUTER_CHORD_STEPS)
     assert palette_rgb(0.0) == _quantize(oklab_to_srgb(*end0))
     assert palette_rgb(1.0) == _quantize(oklab_to_srgb(*end1))
+    # One step is still the old light blue and neon red. Three steps is not.
+    one_low = _quantize(oklab_to_srgb(*_chord(blue, green, 1.0)))
+    one_high = _quantize(oklab_to_srgb(*_chord(orange, green, 1.0)))
+    assert one_low == (125, 133, 255) and palette_hex(0.0) == "#7729FF"
+    assert one_high == (255, 14, 77) and palette_hex(1.0) == "#A90048"
+    assert palette_rgb(0.0) != one_low and palette_rgb(1.0) != one_high
 
     # Halfway from blue to green is the OKLab midpoint, not the sRGB midpoint.
     mid = tuple((blue[i] + green[i]) / 2.0 for i in range(3))
@@ -75,17 +95,35 @@ def test_oklab_segments_hit_anchors_and_extrapolated_ends():
     rgb_mid = tuple((LOGO_BLUE_RGB[i] + LOGO_GREEN_RGB[i]) / (2 * 255) for i in range(3))
     assert not np.allclose(got[:3], rgb_mid, atol=0.01)
 
-    # Ends stay readable on black and read as violet-blue and red.
+    # Midpoint of an outer quarter uses u³, so it sits 1/8 of the way off the
+    # purple end, and 7/8 of the way from orange toward burgundy.
+    low_lab = _lab(palette_rgb(0.0))
+    high_lab = _lab(palette_rgb(1.0))
+    quarter_low = tuple(low_lab[i] + 0.125 * (blue[i] - low_lab[i]) for i in range(3))
+    quarter_high = tuple(orange[i] + 0.875 * (high_lab[i] - orange[i]) for i in range(3))
+    assert np.allclose(palette_color(0.125)[:3], oklab_to_srgb(*quarter_low), atol=1e-7)
+    assert np.allclose(palette_color(0.875)[:3], oklab_to_srgb(*quarter_high), atol=1e-7)
+
     low = palette_rgb(0.0)
     high = palette_rgb(1.0)
-    assert low[2] > low[0] and low[2] > low[1]
-    assert low[0] > LOGO_BLUE_RGB[0]  # more red than the logo blue → violet
-    assert _contrast_on_black(low) >= 4.5
-    assert high[0] > high[1] and high[0] > high[2]
-    assert _contrast_on_black(high) >= 4.5
+    # Purple: blue leads, and red is clearly above green (not the light-blue end).
+    assert low[2] > low[0] > low[1]
+    assert low[0] - low[1] > 40
+    # Burgundy: red leads, green is gone, and it is darker than the neon one-step end.
+    assert high[0] > high[2] > high[1]
+    assert high[1] == 0
+    assert _contrast_on_black(high) < _contrast_on_black(one_high)
+    assert _contrast_on_black(low) >= 2.5
+    assert _contrast_on_black(high) >= 2.5
     assert _contrast_on_black(LOGO_BLUE_RGB) >= 4.5
     assert _contrast_on_black(LOGO_GREEN_RGB) >= 4.5
     assert _contrast_on_black(LOGO_ORANGE_RGB) >= 4.5
+
+
+def _oklab_distance(a: tuple[int, int, int], b: tuple[int, int, int]) -> float:
+    lab_a = srgb_to_oklab(*(c / 255.0 for c in a))
+    lab_b = srgb_to_oklab(*(c / 255.0 for c in b))
+    return sum((lab_a[i] - lab_b[i]) ** 2 for i in range(3)) ** 0.5
 
 
 def _contrast_on_black(rgb: tuple[int, int, int]) -> float:
@@ -159,6 +197,29 @@ def test_rating_scale_uses_full_range_and_same_anchors():
     assert palette_rgb_from(rating_color(2.75)) == LOGO_GREEN_RGB  # t = 0.5
     assert palette_rgb_from(rating_color(3.875)) == LOGO_ORANGE_RGB  # t = 0.75
     assert palette_rgb_from(rating_color(RATING_VMIN)) != LOGO_BLUE_RGB
+
+    # Outer ease: ~1.0 and ~1.2 stay purple, ~1.6 stays logo blue, ~3.9 stays
+    # orange, and 4.5–5 stay burgundy.
+    near_low = palette_rgb_from(rating_color(1.0))
+    near_low_next = palette_rgb_from(rating_color(1.2))
+    near_blue = palette_rgb_from(rating_color(1.6))
+    near_orange = palette_rgb_from(rating_color(3.9))
+    high_mid = palette_rgb_from(rating_color(4.5))
+    high_top = palette_rgb_from(rating_color(4.8))
+    assert near_low[2] > near_low[0] > near_low[1]
+    assert near_low_next[2] > near_low_next[0] > near_low_next[1]
+    assert _oklab_distance(near_low, palette_rgb(0.0)) < _oklab_distance(near_low, LOGO_BLUE_RGB)
+    assert all(abs(near_blue[i] - LOGO_BLUE_RGB[i]) <= 12 for i in range(3))
+    assert near_orange[0] > 230 and near_orange[1] > 90
+    assert _oklab_distance(near_orange, LOGO_ORANGE_RGB) < _oklab_distance(
+        near_orange, palette_rgb(1.0)
+    )
+    for burgundy in (high_mid, high_top, palette_rgb(1.0)):
+        assert burgundy[0] > burgundy[1] + 80
+        assert burgundy[0] > burgundy[2]
+        assert _oklab_distance(burgundy, palette_rgb(1.0)) < _oklab_distance(
+            burgundy, LOGO_ORANGE_RGB
+        )
 
 
 if __name__ == "__main__":
