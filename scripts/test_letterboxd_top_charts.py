@@ -80,11 +80,11 @@ def test_ranked_hbar_grows_taller_with_n(tmp_path: Path | None = None) -> None:
 
 
 def test_categorical_palette_samples_quartile_ranks():
-    """Ordered series use quartile ranks; ratings keep the full 0–1 range."""
+    """Ordered series bend quartile ranks; ratings keep the full 0–1 range."""
     assert categorical_positions(1) == [0.5]
     assert categorical_positions(2) == [0.25, 0.75]
     assert categorical_positions(3) == [0.25, 0.5, 0.75]
-    assert np.allclose(categorical_positions(7), [(i + 1) / 8 for i in range(7)])
+    assert categorical_positions(7) == [0.0625, 0.25, 0.4375, 0.5, 0.5625, 0.75, 0.9375]
     cases = {1: [2024], 2: [2023, 2024], 3: [2022, 2023, 2024]}
     for n, years in cases.items():
         palette = watch_year_palette(years)

@@ -77,10 +77,14 @@ Logo anchors are the median sRGB of each circle's non-overlapping interior (12px
 
 `palette_color(t)` is piecewise-linear in OKLab through those anchors. `t = 0` and `t = 1` extend the blue←green and green→orange chords by one anchor step (`2B − G`, `2O − G`) and scale chroma into sRGB (deeper blue-violet, then red). Ratings use the full 0..1 range: `t = (rating − 0.5) / 4.5`.
 
-Discrete ordered series, earliest or lowest first:
+Discrete ordered series, earliest or lowest first. Raw rank `q = (i+1)/(N+1)`, then `bend_rank`:
 
 - N = 1 → `[0.5]`
 - N = 2 → `[0.25, 0.75]`
-- N ≥ 3 → `t_i = (i + 1) / (N + 1)`
+- N ≥ 3 → piecewise quadratic on `q`, knots fixed:
+  - `[0, 0.25]`: `u = q/0.25`, `t = 0.25 u²` (pull toward 0)
+  - `[0.25, 0.5]`: `u = (q−0.25)/0.25`, `t = 0.25 + 0.25 (1−(1−u)²)` (pull toward green)
+  - `[0.5, 0.75]`: `u = (q−0.5)/0.25`, `t = 0.5 + 0.25 u²` (pull toward green)
+  - `[0.75, 1]`: `u = (q−0.75)/0.25`, `t = 1 − 0.25 (1−u)²` (pull toward 1)
 
-N = 3 is blue, green, orange. N = 7 puts those colors on items 2, 4, and 6 (1-based).
+N = 3 is blue, green, orange. N = 7 is `[0.0625, 0.25, 0.4375, 0.5, 0.5625, 0.75, 0.9375]` (items 2, 4, 6 are the logo colors).
