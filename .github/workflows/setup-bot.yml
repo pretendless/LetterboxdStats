@@ -1,4 +1,6 @@
-# Fill the @lebxdbot BotFather profile in English.
+# Refresh @lebxdbot description, about text and command menu.
+# The visible bot name is set manually in BotFather, not by this workflow.
+# The Start button on an empty chat is Telegram's own control. This workflow does not set it.
 # Does not set the webhook. Run after merge, once LEBXDBOT_TOKEN is a repository secret.
 name: Setup bot
 

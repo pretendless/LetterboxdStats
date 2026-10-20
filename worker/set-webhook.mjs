@@ -5,6 +5,7 @@
 //     LEBXD_WEBHOOK_URL=https://t2t-box.prtndz.workers.dev/lebxd node set-webhook.mjs
 // Do not point @tg2tmbot here. That webhook stays on tg2tmbot until cutover.
 
+import { BOT_COMMANDS } from "./bot_profile.mjs";
 import { telegramFetch } from "./telegram_fetch.mjs";
 
 if (process.env.CONFIRM_STOP_POLLING !== "1") {
@@ -35,14 +36,10 @@ if (!json.ok) {
 }
 console.log("webhook set");
 
-const commands = [
-  { command: "start", description: "Start a Letterboxd chart report" },
-  { command: "stop", description: "Cancel the wizard or a running report" },
-];
 const menu = await telegramFetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify({ commands }),
+  body: JSON.stringify({ commands: BOT_COMMANDS }),
 });
 const menuJson = await menu.json();
 if (!menuJson.ok) {

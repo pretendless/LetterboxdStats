@@ -46,13 +46,28 @@ Example title: Studios — lower rating (at least 3 rated films).
 
 ## Bot profile
 
-After this is on `main`, run the **Setup bot** workflow once. It writes the English BotFather short description, description, and the `/start` and `/stop` command menu. It does not set the webhook. **Set webhook** registers `https://t2t-box.prtndz.workers.dev/lebxd` and the same English command menu.
+An empty chat shows the description below, with Telegram's own Start button under it. That button is part of the Telegram app. A tap sends `/start`, which opens the wizard.
 
-Short description and description:
+**Setup bot** writes the description, the short description, and the `/start` and `/stop` menu. The display name stays whatever BotFather already has. Run **Setup bot** once after this is on `main`. It does not publish the worker and it does not register the webhook.
 
-> A Letterboxd ZIP becomes a dark-theme chart report in this chat. /start begins, /stop cancels.
+Description (empty chat, and “What can this bot do?”):
+
+> Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export.
+>
+> /start, then the ZIP. Next, keep the usual chart set or choose your own: top size from 1 to 100, minimum rated films, USA, English, and a watch period. /stop leaves the questions. A chart run that has already started stops too.
+>
+> Example:
+> /start
+> ZIP file
+> defaults
+
+Short description (profile page, and the text sent with a shared link):
+
+> Letterboxd Stats. Charts from a Letterboxd export. /start opens the wizard.
 
 Commands: start — Start a Letterboxd chart report. stop — Cancel the wizard or a running report.
+
+If the live chat still answers in Russian, also run **Deploy worker**. Those replies are already English on `main` and reach Telegram only after that deploy. **Set webhook** registers `https://t2t-box.prtndz.workers.dev/lebxd` and refreshes the same command menu.
 
 ## Configuration
 
