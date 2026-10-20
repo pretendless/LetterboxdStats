@@ -60,6 +60,9 @@ LANG_LABELS = {
 }
 
 
+SHORT_BAR_NAME_CHARS = 10
+
+
 def display_lang(code) -> str:
     key = str(code or "").strip().lower()
     return LANG_LABELS.get(key) or key or "?"
@@ -494,9 +497,11 @@ def chart_rating_hbar(
 ) -> bool:
     """Horizontal bars for TMDB avg tops.
 
-    A name that fits is drawn inside the bar (white + black stroke). A name that
-    does not fit is drawn in full just left of the bar, light text on the dark
-    background, and ellipsized only when that margin itself is too narrow.
+    Names are white with a black stroke and start inside the bar. A bar that
+    holds at least ``SHORT_BAR_NAME_CHARS`` name characters keeps the label
+    inside, ellipsized only when the full name does not fit. A shorter bar
+    gets exactly that many characters plus … and the label overflows to the
+    right past the bar tip.
     ascending=False → best at top; True → worst at top.
     The mean to the right is bold and colored on the rating scale. The rated-film
     count sits beside it in regular light text as ``(12)``.
@@ -546,7 +551,7 @@ def chart_rating_hbar(
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
 
-    # White fill + black outline so in-bar labels pop on blue→green→red fills.
+    # White fill + black outline reads on blue→green→red fills and on the dark background.
     stroke = [
         path_effects.Stroke(linewidth=3.2, foreground="#000000"),
         path_effects.Normal(),
@@ -555,96 +560,70 @@ def chart_rating_hbar(
     pad_left = 0.08
     # Keep a generous empty tip so stroked names never crowd mean/n outside.
     tip_gap = 0.4
-    outside_gap_pt = 8
-    name_rows = []
-    for yi, bar, rank, label, avg in zip(y, bars, ranks, labels, avgs):
-        raw = f"{rank}. {label}"
-        x1 = max(pad_left, float(avg) - tip_gap)
-        inside_px = abs(ax.transData.transform((x1, float(yi)))[0] - ax.transData.transform((pad_left, float(yi)))[0])
-        inside_w = _text_width_px(
-            ax, renderer, raw, fontsize=name_fs, fontweight="bold", path_effects=stroke
+    gap_px = 8
+
+    def x_px(x: float, yi: float) -> float:
+        return float(ax.transData.transform((x, yi))[0])
+
+    def name_width(text: str) -> float:
+        return _text_width_px(
+            ax, renderer, text, fontsize=name_fs, fontweight="bold", path_effects=stroke
         )
-        name_rows.append((float(yi), bar, raw, float(avg), inside_px, inside_w))
 
-    outside = [row for row in name_rows if row[5] > row[4] or row[4] < 10]
-    if outside:
-        outside_widths = [
-            _text_width_px(ax, renderer, raw, fontsize=name_fs, fontweight="normal")
-            for _yi, _bar, raw, _avg, _inside_px, _inside_w in outside
-        ]
-        gap_px = outside_gap_pt * fig.dpi / 72.0
-        needed = max(outside_widths) + gap_px + 8
-        gutter = float(ax.bbox.x0 - cbar.ax.bbox.x1)
-        deficit = needed - gutter
-        if deficit > 1:
-            pos = ax.get_position()
-            fig_w = float(fig.bbox.width) or 1.0
-            min_width = 0.46
-            shift = min(deficit / fig_w, max(0.0, pos.width - min_width))
-            if shift > 0:
-                ax.set_position([pos.x0 + shift, pos.y0, pos.width - shift, pos.height])
-                fig.canvas.draw()
-                renderer = fig.canvas.get_renderer()
-                # Narrower axes shrink every bar in pixels. Remeasure before choosing inside vs outside.
-                refreshed = []
-                for yi, bar, raw, avg, _inside_px, _inside_w in name_rows:
-                    x1 = max(pad_left, avg - tip_gap)
-                    inside_px = abs(
-                        ax.transData.transform((x1, yi))[0] - ax.transData.transform((pad_left, yi))[0]
-                    )
-                    inside_w = _text_width_px(
-                        ax, renderer, raw, fontsize=name_fs, fontweight="bold", path_effects=stroke
-                    )
-                    refreshed.append((yi, bar, raw, avg, inside_px, inside_w))
-                name_rows = refreshed
-
-    pending: list[tuple] = []
-    for (yi, bar, raw, avg, inside_px, inside_w), rated in zip(name_rows, rateds):
-        if inside_w <= inside_px and inside_px >= 10:
-            txt = ax.text(
-                pad_left,
-                yi,
-                raw,
-                ha="left",
-                va="center",
-                fontsize=name_fs,
-                fontweight="bold",
-                color="#FFFFFF",
-                path_effects=stroke,
-                clip_on=True,
-            )
-            # Hard clip to the bar rectangle — name cannot draw past the tip.
-            txt.set_clip_path(bar)
-        else:
-            gap_px = outside_gap_pt * fig.dpi / 72.0
-            avail = float(ax.bbox.x0 - cbar.ax.bbox.x1) - gap_px - 4
+    rows_drawn = []
+    for yi, bar, rank, label, avg, rated in zip(y, bars, ranks, labels, avgs, rateds):
+        yi, avg = float(yi), float(avg)
+        prefix = f"{rank}. "
+        name = str(label)
+        short = prefix + name[:SHORT_BAR_NAME_CHARS]
+        if len(name) > SHORT_BAR_NAME_CHARS:
+            short += "…"
+        inside_px = max(0.0, x_px(max(pad_left, avg - tip_gap), yi) - x_px(pad_left, yi))
+        inside = name_width(short) <= inside_px
+        if inside:
             shown = _fit_text_to_px(
                 ax,
                 renderer,
-                raw,
-                avail,
+                prefix + name,
+                inside_px,
                 fontsize=name_fs,
-                fontweight="normal",
+                fontweight="bold",
+                path_effects=stroke,
             )
-            ax.annotate(
-                shown,
-                xy=(0, yi),
-                xytext=(-outside_gap_pt, 0),
-                textcoords="offset points",
-                ha="right",
-                va="center",
-                fontsize=name_fs,
-                color=FG,
-                fontweight="normal",
-                clip_on=False,
-                annotation_clip=False,
-                zorder=5,
-            )
+        else:
+            shown = short
+        txt = ax.text(
+            pad_left,
+            yi,
+            shown,
+            ha="left",
+            va="center",
+            fontsize=name_fs,
+            fontweight="bold",
+            color="#FFFFFF",
+            path_effects=stroke,
+            clip_on=inside,
+            zorder=5,
+        )
+        if inside:
+            # Hard clip to the bar rectangle — name cannot draw past the tip.
+            txt.set_clip_path(bar)
+        rows_drawn.append((txt, inside, yi, avg, rated))
+
+    # Overflowing labels push the mean past their right edge so the two never overlap.
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    pending: list[tuple] = []
+    for txt, inside, yi, avg, rated in rows_drawn:
+        mean_x = avg + 0.14
+        if not inside:
+            label_end = txt.get_window_extent(renderer=renderer).x1 + gap_px
+            mean_x = max(mean_x, float(ax.transData.inverted().transform((label_end, 0))[0]))
         # Mean is bold and rating-colored; ``(k)`` stays regular light text beside it.
         mean_label = f"{avg:.2f}"
         style = count_avg_text_style(mean_label)
         mean_artist = ax.text(
-            float(avg) + 0.14,
+            mean_x,
             yi,
             mean_label,
             ha="left",
