@@ -1,0 +1,19 @@
+# Second worker on the same Cloudflare account as tg2tmbot.
+# Script name: t2t-box. Display name: T2T-Box.
+# Do not rename tg2tmbot and do not change its webhook URL.
+name = "t2t-box"
+main = "src/index.js"
+compatibility_date = "2026-10-12"
+workers_dev = true
+
+# CLOUDFLARE_ACCOUNT_ID comes from the environment. Do not commit it.
+# Namespace title t2t-box-BOT_KV. Not the tg2tmbot namespace.
+# Binding stays BOT_KV because the worker reads env.BOT_KV.
+
+[[kv_namespaces]]
+binding = "BOT_KV"
+id = "77ae9d1d59764c3fb82ff615296e0a1e"
+
+# Optional comma-separated chat ids that may see the GitHub Actions run URL.
+# Leave unset for a normal chat: the run link stays hidden.
+# LEBXDBOT_TOKEN, WEBHOOK_SECRET, and GH_DISPATCH_TOKEN are wrangler secrets, not vars.
