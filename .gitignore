@@ -1,0 +1,15 @@
+.DS_Store
+.idea/
+.vscode/
+*.swp
+.env
+.env.*
+*.pem
+*.token
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+.wrangler/
+*.zip

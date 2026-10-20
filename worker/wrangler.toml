@@ -1,0 +1,21 @@
+# One worker for @tg2tmbot and @lebxdbot. Script name t2t-box, display name T2T-Box.
+# Do not rename tg2tmbot and do not deploy this file onto that worker.
+# BOT_KV is the existing tg2tm namespace. Letterboxd keys use the lebxd: prefix.
+# The empty namespace titled t2t-box-BOT_KV is not used.
+name = "t2t-box"
+main = "src/index.js"
+compatibility_date = "2026-10-12"
+workers_dev = true
+
+# CLOUDFLARE_ACCOUNT_ID comes from the environment. Do not commit it.
+
+[[kv_namespaces]]
+binding = "BOT_KV"
+id = "69c9d9f3572a48469a312e5914e8a233"
+
+# Same chat ids as the live tg2tmbot worker. Not a credential.
+[vars]
+LOGIN_CHAT_IDS = "8502935020,5513343655"
+
+# Secrets, not vars: LEBXDBOT_TOKEN, TG2TM_TOKEN, GHLEBXD_DISPATCH_TOKEN,
+# GHTG2TM_DISPATCH_TOKEN, WEBHOOK_SECRET, UPLOADER_SECRET.

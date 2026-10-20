@@ -1,0 +1,14 @@
+{
+  "name": "t2t-box-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/bot.test.js ../vm/test/letterboxd_genres.test.mjs",
+    "deploy": "wrangler deploy",
+    "check-bot": "node check-bot.mjs",
+    "set-webhook": "node set-webhook.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.42.0"
+  }
+}
