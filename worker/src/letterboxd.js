@@ -46,10 +46,10 @@ function workflowOf(env) {
 }
 
 async function cancelRun(fetchImpl, env, runId) {
-  if (!runId || !env.GH_DISPATCH_TOKEN) return 0;
+  if (!runId || !env.GHLEBXD_DISPATCH_TOKEN) return 0;
   const res = await fetchImpl(cancelRunUrl(repoOf(env), runId), {
     method: "POST",
-    headers: githubHeaders(env.GH_DISPATCH_TOKEN),
+    headers: githubHeaders(env.GHLEBXD_DISPATCH_TOKEN),
   });
   return res.status;
 }
@@ -72,7 +72,7 @@ export async function finishLetterboxdDispatch(env, { jobId, chatId, fileId, opt
   let dispatched;
   try {
     dispatched = await dispatchLetterboxdWorkflow(fetchImpl, {
-      token: env.GH_DISPATCH_TOKEN,
+      token: env.GHLEBXD_DISPATCH_TOKEN,
       repo,
       workflow,
       ref,
@@ -95,7 +95,7 @@ export async function finishLetterboxdDispatch(env, { jobId, chatId, fileId, opt
   let run = { id: "", url: "" };
   try {
     run = await findLetterboxdRun(fetchImpl, {
-      token: env.GH_DISPATCH_TOKEN,
+      token: env.GHLEBXD_DISPATCH_TOKEN,
       repo,
       workflow,
       startedAt: when,
@@ -181,8 +181,8 @@ export async function handleLetterboxdDocument(env, message, deps = {}) {
     await send(env, chatId, letterboxdNeedZipText());
     return true;
   }
-  if (!env.GH_DISPATCH_TOKEN) {
-    await send(env, chatId, "Запуск не настроен: нет секрета GH_DISPATCH_TOKEN.");
+  if (!env.GHLEBXD_DISPATCH_TOKEN) {
+    await send(env, chatId, "Запуск не настроен: нет секрета GHLEBXD_DISPATCH_TOKEN.");
     return true;
   }
 

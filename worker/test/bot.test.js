@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { handle } from "../src/index.js";
+import { handle, tg2tmEnv } from "../src/index.js";
 import { letterboxdActiveKey } from "../../vm/letterboxd_genres.js";
 
 function memoryKv() {
@@ -25,13 +25,15 @@ function envWith() {
     BOT_KV: memoryKv(),
     WEBHOOK_SECRET: "webhook-secret",
     LEBXDBOT_TOKEN: "bot-token",
-    GH_DISPATCH_TOKEN: "dispatch-token",
+    GHLEBXD_DISPATCH_TOKEN: "dispatch-token",
+    TG2TM_TOKEN: "tg2tm-token",
+    GHTG2TM_DISPATCH_TOKEN: "tg2tm-dispatch",
     GH_REPO: "pretendless/LetterboxdStats",
   };
 }
 
 function telegramRequest(chatId, text) {
-  return new Request("https://t2t-box.example/telegram", {
+  return new Request("https://t2t-box.example/lebxd", {
     method: "POST",
     headers: { "X-Telegram-Bot-Api-Secret-Token": "webhook-secret", "content-type": "application/json" },
     body: JSON.stringify({ message: { chat: { id: chatId }, text } }),
@@ -39,7 +41,7 @@ function telegramRequest(chatId, text) {
 }
 
 function documentRequest(chatId, document) {
-  return new Request("https://t2t-box.example/telegram", {
+  return new Request("https://t2t-box.example/lebxd", {
     method: "POST",
     headers: { "X-Telegram-Bot-Api-Secret-Token": "webhook-secret", "content-type": "application/json" },
     body: JSON.stringify({ message: { chat: { id: chatId }, document } }),
@@ -47,7 +49,7 @@ function documentRequest(chatId, document) {
 }
 
 function callbackRequest(chatId, data, id = "cb-1") {
-  return new Request("https://t2t-box.example/telegram", {
+  return new Request("https://t2t-box.example/lebxd", {
     method: "POST",
     headers: { "X-Telegram-Bot-Api-Secret-Token": "webhook-secret", "content-type": "application/json" },
     body: JSON.stringify({
@@ -92,7 +94,7 @@ function githubFetch(calls, { runId = 99, createdAt = new Date().toISOString() }
 test("webhook rejects a missing secret and serves health", async () => {
   const env = envWith();
   const denied = await handle(
-    new Request("https://t2t-box.example/telegram", { method: "POST", body: "{}" }),
+    new Request("https://t2t-box.example/lebxd", { method: "POST", body: "{}" }),
     env,
     {},
   );
@@ -110,7 +112,7 @@ test("/start asks for a ZIP and /letterboxd does not", async () => {
   };
   await handle(telegramRequest(7, "/start"), env, { sendMessage });
   assert.match(sent[0].text, /ZIP экспорта Letterboxd/);
-  assert.ok(env.BOT_KV.store.get("await:letterboxd:7"));
+  assert.ok(env.BOT_KV.store.get("lebxd:await:7"));
 
   sent.length = 0;
   await handle(telegramRequest(7, "/start letterboxd"), env, { sendMessage });
@@ -123,7 +125,7 @@ test("/start asks for a ZIP and /letterboxd does not", async () => {
   sent.length = 0;
   await handle(telegramRequest(8, "/letterboxd"), env, { sendMessage });
   assert.equal(sent.length, 0);
-  assert.equal(env.BOT_KV.store.get("await:letterboxd:8"), undefined);
+  assert.equal(env.BOT_KV.store.get("lebxd:await:8"), undefined);
 });
 
 test("/stop clears the wizard and says when there is nothing to cancel", async () => {
@@ -147,7 +149,7 @@ test("/stop clears the wizard and says when there is nothing to cancel", async (
   await handle(telegramRequest(7, "/stop"), env, { sendMessage });
   assert.match(sent[0].text, /ожидание Letterboxd сброшено/);
   assert.match(sent[0].text, /\/start — графики Letterboxd/);
-  assert.equal(env.BOT_KV.store.get("await:letterboxd:7"), undefined);
+  assert.equal(env.BOT_KV.store.get("lebxd:await:7"), undefined);
 
   sent.length = 0;
   await handle(telegramRequest(7, "/stop"), env, { sendMessage });
@@ -208,7 +210,7 @@ test("inline default button answers the callback before dispatch", async () => {
     const dispatch = calls.find((call) => call.url.includes("/dispatches"));
     assert.equal(dispatch.body.inputs.top_n, "20");
     assert.equal(dispatch.body.inputs.min_rated, "3");
-    assert.equal(env.BOT_KV.store.get("await:letterboxd:111"), undefined);
+    assert.equal(env.BOT_KV.store.get("lebxd:await:111"), undefined);
   } finally {
     globalThis.fetch = previousFetch;
   }
@@ -329,8 +331,71 @@ test("worker name is t2t-box and the webhook allows callback_query", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/set-webhook.yml", import.meta.url), "utf8");
   assert.match(toml, /name = "t2t-box"/);
   assert.doesNotMatch(toml, /name = "tg2tmbot"/);
+  assert.match(toml, /id = "69c9d9f3572a48469a312e5914e8a233"/);
+  assert.match(toml, /LOGIN_CHAT_IDS/);
   assert.match(webhook, /\["message", "callback_query"\]/);
-  assert.match(workflow, /https:\/\/t2t-box\.prtndz\.workers\.dev\/telegram/);
+  assert.match(workflow, /https:\/\/t2t-box\.prtndz\.workers\.dev\/lebxd/);
   assert.doesNotMatch(workflow, /tg2tmbot\.prtndz/);
   assert.doesNotMatch(workflow, /TG2TMBOT_TOKEN/);
+});
+
+function post(path, text, chatId = 7) {
+  return new Request(`https://t2t-box.example${path}`, {
+    method: "POST",
+    headers: { "X-Telegram-Bot-Api-Secret-Token": "webhook-secret", "content-type": "application/json" },
+    body: JSON.stringify({ message: { chat: { id: chatId }, text } }),
+  });
+}
+
+test("tg2tm and lebxd use separate tokens, paths, and KV prefixes", async () => {
+  const view = tg2tmEnv({
+    TG2TM_TOKEN: "tg-token",
+    GHTG2TM_DISPATCH_TOKEN: "tg-dispatch",
+    LEBXDBOT_TOKEN: "lb-token",
+    GHLEBXD_DISPATCH_TOKEN: "lb-dispatch",
+    TG2TMBOT_TOKEN: "old-token",
+    GH_DISPATCH_TOKEN: "old-dispatch",
+    UPLOADER_SECRET: "uploader",
+    LOGIN_CHAT_IDS: "8502935020,5513343655",
+  });
+  assert.equal(view.TG2TMBOT_TOKEN, "tg-token");
+  assert.equal(view.TELEGRAM_BOT_TOKEN, "tg-token");
+  assert.equal(view.GH_DISPATCH_TOKEN, "tg-dispatch");
+  assert.equal(view.UPLOADER_SECRET, "uploader");
+  assert.equal(view.LOGIN_CHAT_IDS, "8502935020,5513343655");
+
+  const env = envWith();
+  const sent = [];
+  const sendMessage = async (_env, chatId, text) => {
+    sent.push({ chatId, text });
+    return { message_id: sent.length };
+  };
+  await handle(post("/tg2tm", "/start"), env, { sendMessage });
+  assert.match(sent[0].text, /\/create/);
+  assert.equal(env.BOT_KV.store.get("lebxd:await:7"), undefined);
+
+  sent.length = 0;
+  await handle(post("/tg2tm", "/letterboxd"), env, { sendMessage });
+  assert.match(sent[0].text, /ZIP экспорта Letterboxd/);
+  assert.ok(env.BOT_KV.store.get("await:letterboxd:7"));
+  assert.equal(env.BOT_KV.store.get("lebxd:await:7"), undefined);
+
+  sent.length = 0;
+  await handle(post("/lebxd", "/start", 9), env, { sendMessage });
+  assert.match(sent[0].text, /ZIP экспорта Letterboxd/);
+  assert.ok(env.BOT_KV.store.get("lebxd:await:9"));
+  assert.equal(env.BOT_KV.store.get("await:letterboxd:9"), undefined);
+
+  const missing = await handle(post("/telegram", "/start"), env, { sendMessage });
+  assert.equal(missing.status, 404);
+
+  const denied = await handle(
+    new Request("https://t2t-box.example/tg2tm", {
+      method: "POST",
+      body: JSON.stringify({ message: { chat: { id: 1 }, text: "/start" } }),
+    }),
+    env,
+    { sendMessage },
+  );
+  assert.equal(denied.status, 401);
 });

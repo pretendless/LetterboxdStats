@@ -12,10 +12,10 @@ import {
 export const LETTERBOXD_WORKFLOW = "letterboxd.yml";
 /** @deprecated use LETTERBOXD_WORKFLOW */
 export const LETTERBOXD_GENRES_WORKFLOW = LETTERBOXD_WORKFLOW;
-export const AWAIT_LETTERBOXD_PREFIX = "await:letterboxd:";
+export const AWAIT_LETTERBOXD_PREFIX = "lebxd:await:";
 /** @deprecated use AWAIT_LETTERBOXD_PREFIX */
 export const AWAIT_GENRES_PREFIX = AWAIT_LETTERBOXD_PREFIX;
-export const LETTERBOXD_JOB_PREFIX = "letterboxd:job:";
+export const LETTERBOXD_JOB_PREFIX = "lebxd:job:";
 /** @deprecated use LETTERBOXD_JOB_PREFIX */
 export const GENRES_JOB_PREFIX = LETTERBOXD_JOB_PREFIX;
 
@@ -54,14 +54,14 @@ export function letterboxdJobKey(jobId) {
   return `${LETTERBOXD_JOB_PREFIX}${jobId}`;
 }
 
-export const LETTERBOXD_ACTIVE_PREFIX = "letterboxd:active:";
+export const LETTERBOXD_ACTIVE_PREFIX = "lebxd:active:";
 
 export function letterboxdActiveKey(chatId) {
   return `${LETTERBOXD_ACTIVE_PREFIX}${chatId}`;
 }
 
 export function letterboxdCancelKey(jobId) {
-  return `letterboxd:cancel:${jobId}`;
+  return `lebxd:cancel:${jobId}`;
 }
 
 export function encodeActiveLetterboxd(job) {
@@ -270,7 +270,7 @@ export function letterboxdDispatchedText({ jobId, runUrl }) {
 export const genresDispatchedText = letterboxdDispatchedText;
 
 export function letterboxdDispatchFailText(status) {
-  return `Не удалось запустить letterboxd: GitHub ответил ${status}. Проверьте GH_DISPATCH_TOKEN и workflow letterboxd.yml в main.`;
+  return `Не удалось запустить letterboxd: GitHub ответил ${status}. Проверьте GHLEBXD_DISPATCH_TOKEN и workflow letterboxd.yml в main.`;
 }
 
 /** @deprecated use letterboxdDispatchFailText */

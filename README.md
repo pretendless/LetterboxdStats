@@ -1,8 +1,21 @@
 # LetterboxdStats
 
-[@lebxdbot](https://t.me/lebxdbot) строит графики по ZIP-экспорту Letterboxd. Это отдельный бот и отдельный Cloudflare Worker. Воркер стикеров `tg2tmbot` (@tg2tmbot) здесь не деплоится и не переименовывается. Его webhook не меняется.
+[@lebxdbot](https://t.me/lebxdbot) строит графики по ZIP-экспорту Letterboxd. Код живёт здесь. Исполняет его один Cloudflare Worker `t2t-box` (display name T2T-Box), общий для @tg2tmbot, @lebxdbot и следующих ботов.
 
-Worker script name: `t2t-box`. Display name: T2T-Box. Адрес: `https://t2t-box.prtndz.workers.dev`. Webhook: `POST https://t2t-box.prtndz.workers.dev/telegram`.
+`tg2tmbot` пока живой и отдельно. Этот репозиторий его не переименовывает и не деплоит. Webhook @tg2tmbot остаётся `https://tg2tmbot.prtndz.workers.dev/telegram`, пока общий воркер не обслуживает оба бота.
+
+Адрес `t2t-box`: `https://t2t-box.prtndz.workers.dev`.
+
+| Путь | Бот | Секреты |
+| --- | --- | --- |
+| `POST /tg2tm` | текущее поведение @tg2tmbot, включая `/letterboxd` | `TG2TM_TOKEN`, `GHTG2TM_DISPATCH_TOKEN` |
+| `POST /lebxd` | только `/start` и `/stop` (@lebxdbot) | `LEBXDBOT_TOKEN`, `GHLEBXD_DISPATCH_TOKEN` |
+
+Оба пути проверяют один `WEBHOOK_SECRET`. Кнопки: `allowed_updates` включает `message` и `callback_query`.
+
+Загрузчик Телемоста по-прежнему ходит в `/progress`, `/queue/claim` и соседние пути с `UPLOADER_SECRET`. Чаты администратора — переменная `LOGIN_CHAT_IDS`.
+
+KV binding `BOT_KV` — существующий namespace `tg2tmbot`, id `69c9d9f3572a48469a312e5914e8a233`. Ключи @lebxdbot начинаются с `lebxd:`, чтобы делить этот namespace и не попасть в пустой `t2t-box-BOT_KV`. Пустой namespace не используется.
 
 ## Команды
 
@@ -37,38 +50,41 @@ npm test
 Три ручных workflow, черновик до слития в `main`:
 
 1. **Deploy worker** — `npx wrangler deploy` в `worker/`. Нужны секреты репозитория `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID`.
-2. **Set webhook** — `setWebhook` на `https://t2t-box.prtndz.workers.dev/telegram` и меню `/start`, `/stop`.
+2. **Set webhook** — только @lebxdbot, `setWebhook` на `https://t2t-box.prtndz.workers.dev/lebxd` и меню `/start`, `/stop`. Webhook @tg2tmbot этим workflow не меняется.
 3. **Letterboxd** — графики. Его вызывает воркер, не человек.
 
-KV уже отдельный: namespace с названием `t2t-box-BOT_KV`, binding `BOT_KV`. Это не namespace воркера `tg2tmbot`. Id записан в `worker/wrangler.toml`.
+`worker/wrangler.toml` уже указывает `BOT_KV` на namespace `69c9d9f3572a48469a312e5914e8a233`. На живом `t2t-box` binding пока ещё пустой namespace `t2t-box-BOT_KV`. Этот toml на воркер не выкладывался: деплой `t2t-box` с этим файлом переключит KV, но не трогает скрипт `tg2tmbot`.
 
 Секреты воркера (значения в git не класть):
 
+Секреты воркера `t2t-box` (не каталог `tg2tmbot`):
+
 ```bash
 npx wrangler secret put LEBXDBOT_TOKEN
+npx wrangler secret put TG2TM_TOKEN
+npx wrangler secret put GHLEBXD_DISPATCH_TOKEN
+npx wrangler secret put GHTG2TM_DISPATCH_TOKEN
 npx wrangler secret put WEBHOOK_SECRET
-npx wrangler secret put GH_DISPATCH_TOKEN
-npx wrangler deploy
+npx wrangler secret put UPLOADER_SECRET
 ```
 
-Команды выполняются для worker `t2t-box` (`name` в `wrangler.toml`). Не запускать их в каталоге воркера `tg2tmbot`.
+`npx wrangler deploy` выкладывает только скрипт `t2t-box`. Не запускать wrangler в каталоге живого `tg2tmbot`.
 
 ## Секреты
 
-Значения не придумывать и не копировать токен @tg2tmbot в этот бот.
-
 | Имя | Куда | Что это |
 | --- | --- | --- |
-| `LEBXDBOT_TOKEN` | GitHub → pretendless/LetterboxdStats → Settings → Secrets and variables → Actions | Токен BotFather для @lebxdbot. Не `TG2TMBOT_TOKEN`. |
-| `LEBXDBOT_TOKEN` | Cloudflare worker `t2t-box`: `npx wrangler secret put LEBXDBOT_TOKEN` | То же значение. Им воркер отвечает в Telegram, им job скачивает ZIP. |
-| `WEBHOOK_SECRET` | Тот же GitHub Actions secret и `npx wrangler secret put WEBHOOK_SECRET` на `t2t-box` | Новый секрет только для @lebxdbot. Одинаковое значение в обоих местах. Не секрет webhook `tg2tmbot`. |
-| `TMDB_BEARER_TOKEN` | GitHub Actions secret на pretendless/LetterboxdStats | Read Access Token TMDB для job графиков. Скопировать существующее значение из репозитория @tg2tmbot самостоятельно. На воркер не класть. |
-| `CLOUDFLARE_API_TOKEN` | GitHub Actions secret на pretendless/LetterboxdStats | Тот же аккаунт Cloudflare. Право Workers Scripts Edit и Workers KV Storage Edit. |
-| `CLOUDFLARE_ACCOUNT_ID` | GitHub Actions secret на pretendless/LetterboxdStats | Id того же аккаунта. |
-| `GH_DISPATCH_TOKEN` | Уже есть: секрет Cloudflare на воркере `tg2tmbot` | Fine-grained PAT только на репозиторий Telegram2Telemost (`pretendless/tg2tm`), Actions: Read and write. Его не переносить: он не имеет права на LetterboxdStats. |
-| `GH_DISPATCH_TOKEN` | Новый: `npx wrangler secret put GH_DISPATCH_TOKEN` на воркере `t2t-box` | Новый fine-grained PAT только на `pretendless/LetterboxdStats`, Actions: Read and write. Им воркер вызывает и отменяет `letterboxd.yml`. В GitHub Actions secrets репозитория этот PAT не класть. |
+| `LEBXDBOT_TOKEN` | Уже секрет Production на worker `t2t-box`. Тот же токен — GitHub Actions secret на pretendless/LetterboxdStats | BotFather для @lebxdbot. Не `TG2TMBOT_TOKEN`. Job графиков скачивает ZIP им. |
+| `TG2TM_TOKEN` | Уже секрет Production на worker `t2t-box` | Токен @tg2tmbot для пути `/tg2tm`. На живом `tg2tmbot` секрет до сих пор называется `TG2TMBOT_TOKEN`. |
+| `GHLEBXD_DISPATCH_TOKEN` | Уже секрет Production на worker `t2t-box` | PAT, которым `/lebxd` запускает и отменяет `letterboxd.yml` в LetterboxdStats. |
+| `GHTG2TM_DISPATCH_TOKEN` | Уже секрет Production на worker `t2t-box`. На `tg2tmbot` секрет с тем же именем тоже есть | PAT для workflow @tg2tmbot. |
+| `WEBHOOK_SECRET` | Уже секрет Production на worker `t2t-box`. Для workflow Set webhook — GitHub Actions secret с тем же значением | Один секрет на оба пути `/tg2tm` и `/lebxd`. |
+| `UPLOADER_SECRET` | Ещё нет на `t2t-box`. Есть на `tg2tmbot`. `npx wrangler secret put UPLOADER_SECRET` на `t2t-box` | Bearer для `/progress` и очереди. Скопировать существующее значение самостоятельно. |
+| `LOGIN_CHAT_IDS` | Уже plain-text var на `t2t-box`: `8502935020,5513343655`. То же в `wrangler.toml` | Не секрет. |
+| `TMDB_BEARER_TOKEN` | GitHub Actions secret на pretendless/LetterboxdStats, не на воркере | Read Access Token для job графиков. Скопировать существующее значение самостоятельно. |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | GitHub Actions secrets на pretendless/LetterboxdStats | Деплой `t2t-box`. |
 
-`TG2TMBOT_TOKEN` этот репозиторий не использует.
+Код читает эти имена как есть: `LEBXDBOT_TOKEN`, `TG2TM_TOKEN`, `GHLEBXD_DISPATCH_TOKEN`, `GHTG2TM_DISPATCH_TOKEN`, `WEBHOOK_SECRET`, `UPLOADER_SECRET`, `LOGIN_CHAT_IDS`. Имена `TG2TMBOT_TOKEN` и `GH_DISPATCH_TOKEN` с окружения воркера не читаются.
 
 ## Cutover
 

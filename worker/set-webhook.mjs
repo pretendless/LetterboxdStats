@@ -2,7 +2,8 @@
 // calling getUpdates for this bot: Telegram delivers each update to only one of them.
 //
 //   CONFIRM_STOP_POLLING=1 LEBXDBOT_TOKEN=... WEBHOOK_SECRET=... \
-//     LEBXD_WEBHOOK_URL=https://t2t-box.prtndz.workers.dev/telegram node set-webhook.mjs
+//     LEBXD_WEBHOOK_URL=https://t2t-box.prtndz.workers.dev/lebxd node set-webhook.mjs
+// Do not point @tg2tmbot here. That webhook stays on tg2tmbot until cutover.
 
 import { telegramFetch } from "./telegram_fetch.mjs";
 

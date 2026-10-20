@@ -1,5 +1,5 @@
-# Register @lebxdbot webhook on the t2t-box Worker.
-# Does not change the tg2tmbot webhook.
+# Register @lebxdbot webhook on POST /lebxd of worker t2t-box.
+# Does not change the tg2tmbot webhook. Do not point @tg2tmbot at this worker yet.
 name: Set webhook
 
 on:
@@ -34,4 +34,4 @@ jobs:
           CONFIRM_STOP_POLLING: "1"
           LEBXDBOT_TOKEN: ${{ secrets.LEBXDBOT_TOKEN }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
-          LEBXD_WEBHOOK_URL: https://t2t-box.prtndz.workers.dev/telegram
+          LEBXD_WEBHOOK_URL: https://t2t-box.prtndz.workers.dev/lebxd

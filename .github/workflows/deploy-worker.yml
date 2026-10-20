@@ -1,5 +1,5 @@
-# Deploy @lebxdbot Cloudflare Worker t2t-box (display name T2T-Box).
-# Does not deploy or rename tg2tmbot. Run manually after merging worker changes.
+# Deploy the shared worker t2t-box (display name T2T-Box).
+# Does not deploy or rename tg2tmbot. Run only when t2t-box should take the shared KV.
 name: Deploy worker
 
 on:
