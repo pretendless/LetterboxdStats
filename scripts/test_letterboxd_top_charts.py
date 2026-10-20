@@ -322,38 +322,71 @@ def test_rating_hbar_long_names_no_overlap(tmp_path: Path | None = None):
     assert path.is_file() and path.stat().st_size > 0
 
 
-def test_short_bars_draw_full_names_outside(tmp_path: Path | None = None):
-    """A name that does not fit inside the bar is drawn in full just to its left."""
+def test_short_bars_overflow_ten_chars_long_bars_keep_name_inside(tmp_path: Path | None = None):
+    """Short bar: 10 name chars + … overflowing right. Long bar: full name inside."""
+    import letterboxd_top_charts as charts
+
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-top-charts-test")
     out.mkdir(parents=True, exist_ok=True)
     rows = [
-        {"name": "Pixar", "avg": 4.6, "rated": 12},
-        {"name": "di Bonaventura Pictures", "avg": 1.0, "rated": 3},
+        {"name": "Happy Madison Productions", "avg": 4.6, "rated": 12},
+        {"name": "di Bonaventura Pictures", "avg": 0.6, "rated": 3},
     ]
+    captured: dict = {}
+    real_save = charts.save_dark_figure
+
+    def grab(fig, dest, **kwargs):
+        ax = fig.axes[0]
+        renderer = fig.canvas.get_renderer()
+        captured["texts"] = list(ax.texts)
+        captured["extent"] = {t.get_text(): t.get_window_extent(renderer=renderer) for t in ax.texts}
+        captured["bars"] = [patch.get_window_extent(renderer=renderer) for patch in ax.patches]
+        real_save(fig, dest, **kwargs)
+
+    charts.save_dark_figure = grab
+    try:
+        assert chart_rating_hbar(
+            rows,
+            out / "short-overflow.png",
+            title="Studios — lower rating (at least 3 rated films)",
+        )
+    finally:
+        charts.save_dark_figure = real_save
+    texts = captured["texts"]
+    extent = captured["extent"]
+    by_text = {t.get_text(): t for t in texts}
+
+    short = by_text["2. di Bonaven…"]
+    assert short.get_ha() == "left"
+    assert short.get_clip_on() is False
+    assert short.get_fontweight() == "bold"
+    short_bar = min(captured["bars"], key=lambda box: box.width)
+    assert extent["2. di Bonaven…"].x0 < short_bar.x1 < extent["2. di Bonaven…"].x1
+    assert extent["0.60"].x0 > extent["2. di Bonaven…"].x1
+    assert extent["(3)"].x0 > extent["0.60"].x1
+    assert "2. di Bonaventura Pictures" not in by_text
+
+    long = by_text["1. Happy Madison Productions"]
+    assert long.get_clip_on() is True
+    assert long.get_clip_box() is not None
+    assert _rgba(long.get_color()) == _rgba("#FFFFFF")
+    assert by_text["0.60"].get_fontweight() == "bold"
+    assert by_text["(3)"].get_fontweight() == "normal"
+
+
+def test_names_over_ten_chars_are_not_capped_when_they_fit(tmp_path: Path | None = None):
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-top-charts-test")
+    out.mkdir(parents=True, exist_ok=True)
     texts = _hbar_texts(
         lambda: chart_rating_hbar(
-            rows,
-            out / "short-outside.png",
-            title="Studios — lower rating (at least 3 rated films)",
-            footer="Source: Letterboxd diary/watched + TMDB metadata",
+            [{"name": "Sidney Kimmel Entertainment", "avg": 2.9, "rated": 4}],
+            out / "mid-bar.png",
+            title="Studios — higher rating",
         )
     )
-    outside = [text for text in texts if text.get_text() == "2. di Bonaventura Pictures"]
-    inside = [text for text in texts if text.get_text() == "1. Pixar"]
-    assert len(outside) == 1
-    assert outside[0].get_fontweight() == "normal"
-    assert outside[0].get_ha() == "right"
-    assert outside[0].get_clip_on() is False
-    assert outside[0].get_clip_box() is None
-    assert _rgba(outside[0].get_color()) == _rgba(FG)
-    assert len(inside) == 1
-    assert inside[0].get_fontweight() == "bold"
-    assert inside[0].get_ha() == "left"
-    assert inside[0].get_clip_on() is True
-    assert inside[0].get_clip_box() is not None
-    assert _rgba(inside[0].get_color()) == _rgba("#FFFFFF")
-    assert any(text.get_text() == "1.00" and text.get_fontweight() == "bold" for text in texts)
-    assert any(text.get_text() == "(3)" and text.get_fontweight() == "normal" for text in texts)
+    names = [t.get_text() for t in texts if t.get_text().startswith("1. ")]
+    assert len(names) == 1
+    assert len(names[0].removeprefix("1. ").rstrip("…")) > 10
 
 
 def test_watches_by_genre_stacked_count(tmp_path: Path | None = None):
@@ -697,7 +730,8 @@ if __name__ == "__main__":
     test_rating_hbar_with_in_bar_labels()
     test_rating_hbar_worst_ascending()
     test_rating_hbar_long_names_no_overlap()
-    test_short_bars_draw_full_names_outside()
+    test_short_bars_overflow_ten_chars_long_bars_keep_name_inside()
+    test_names_over_ten_chars_are_not_capped_when_they_fit()
     test_rating_hbar_worst_skips_short_slate()
     test_watches_by_genre_stacked_count()
     test_count_avg_text_style_colors_mean_only()
