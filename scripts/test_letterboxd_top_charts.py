@@ -18,6 +18,7 @@ from letterboxd_palette import (
     palette_color,
     rating_color,
     rating_colormap,
+    srgb_to_oklab,
     watch_year_palette,
 )
 from PIL import Image
@@ -123,11 +124,14 @@ def test_rating_color_fixed_scale_separates_high_band():
     """3.6 vs 4.5 must not collapse into the same flesh band."""
     a = rating_color(3.6, vmin=RATING_VMIN, vmax=RATING_VMAX)
     b = rating_color(4.5, vmin=RATING_VMIN, vmax=RATING_VMAX)
-    # Distinct colors
+    # Distinct colors. Burgundy is darker than orange, so the red byte can fall
+    # while the color still moves toward red in OKLab.
     dist = sum(abs(x - y) for x, y in zip(a[:3], b[:3]))
     assert dist > 0.15
-    # Higher rating redder
-    assert b[0] >= a[0]
+    lab_a = srgb_to_oklab(*a[:3])
+    lab_b = srgb_to_oklab(*b[:3])
+    assert lab_b[1] > lab_a[1]
+    assert lab_b[2] < lab_a[2]
 
 
 def test_release_year_charts(tmp_path: Path | None = None):
@@ -368,6 +372,14 @@ def test_short_bars_overflow_fifteen_chars_long_bars_keep_name_inside(tmp_path: 
     assert extent["2. di Bonaventura..."].x0 < short_bar.x1 < extent["2. di Bonaventura..."].x1
     assert extent["0.60"].x0 > extent["2. di Bonaventura..."].x1
     assert extent["(3)"].x0 > extent["0.60"].x1
+    # After an overflowing label the rating keeps at least the gap used past a
+    # normal bar tip (the 0.14 rating offset), and never less than 12 px.
+    long_bar = max(captured["bars"], key=lambda box: box.width)
+    normal_gap = extent["4.60"].x0 - long_bar.x1
+    overflow_gap = extent["0.60"].x0 - extent["2. di Bonaventura..."].x1
+    assert normal_gap >= 12
+    assert overflow_gap + 0.5 >= normal_gap
+    assert overflow_gap >= 12
     assert "2. di Bonaventura Pictures" not in by_text
 
     long = by_text["1. Happy Madison Productions"]
@@ -468,8 +480,7 @@ def test_count_avg_text_style_colors_mean_only():
     assert _rgba(dash["color"]) == _rgba(FG)
     assert low["path_effects"] and high["path_effects"]
     assert dash["path_effects"] is None
-    # Same ends as the rating charts: low is bluer, high is redder.
-    assert low["color"][2] > low["color"][0]
+    # 1.94 is between logo blue and green; 4.80 is near burgundy, so redder.
     assert high["color"][0] > high["color"][2]
     assert high["color"][0] > low["color"][0]
 

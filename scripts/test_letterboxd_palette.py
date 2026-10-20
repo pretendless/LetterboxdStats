@@ -16,6 +16,7 @@ from letterboxd_palette import (
     bend_rank,
     categorical_colors,
     categorical_positions,
+    OUTER_CHORD_STEPS,
     oklab_to_srgb,
     palette_color,
     palette_hex,
@@ -57,35 +58,76 @@ def palette_rgb_from(rgba) -> tuple[int, int, int]:
     return _quantize(rgba[:3])
 
 
+def _lab(rgb: tuple[int, int, int]):
+    return srgb_to_oklab(*(c / 255.0 for c in rgb))
+
+
+def _chord(anchor, green, steps: float):
+    return tuple(anchor[i] + steps * (anchor[i] - green[i]) for i in range(3))
+
+
 def test_oklab_segments_hit_anchors_and_extrapolated_ends():
-    """Ends are the logo chords extended by one 0.25 step, then gamut-mapped."""
-    blue = srgb_to_oklab(*(c / 255.0 for c in LOGO_BLUE_RGB))
-    green = srgb_to_oklab(*(c / 255.0 for c in LOGO_GREEN_RGB))
-    orange = srgb_to_oklab(*(c / 255.0 for c in LOGO_ORANGE_RGB))
-    end0 = tuple(2.0 * blue[i] - green[i] for i in range(3))
-    end1 = tuple(2.0 * orange[i] - green[i] for i in range(3))
-    assert palette_rgb(0.0) == _quantize(oklab_to_srgb(*end0))
-    assert palette_rgb(1.0) == _quantize(oklab_to_srgb(*end1))
+    """Five knots, straight OKLab lines between them. No holds or bends."""
+    blue = _lab(LOGO_BLUE_RGB)
+    green = _lab(LOGO_GREEN_RGB)
+    orange = _lab(LOGO_ORANGE_RGB)
+    assert OUTER_CHORD_STEPS == 3.0
+    end0 = _chord(blue, green, OUTER_CHORD_STEPS)
+    end1 = _chord(orange, green, OUTER_CHORD_STEPS)
+    assert palette_rgb(0.0) == _quantize(oklab_to_srgb(*end0)) == (119, 41, 255)
+    assert palette_rgb(1.0) == _quantize(oklab_to_srgb(*end1)) == (169, 0, 72)
+    one_low = _quantize(oklab_to_srgb(*_chord(blue, green, 1.0)))
+    one_high = _quantize(oklab_to_srgb(*_chord(orange, green, 1.0)))
+    assert one_low == (125, 133, 255) and palette_hex(0.0) == "#7729FF"
+    assert one_high == (255, 14, 77) and palette_hex(1.0) == "#A90048"
+    # The ends are not held flat: a step in from either end already moves.
+    assert palette_rgb(0.049) != palette_rgb(0.0)
+    assert palette_rgb(0.95) != palette_rgb(1.0)
 
-    # Halfway from blue to green is the OKLab midpoint, not the sRGB midpoint.
-    mid = tuple((blue[i] + green[i]) / 2.0 for i in range(3))
-    got = palette_color(0.375)
-    expect = oklab_to_srgb(*mid)
-    assert np.allclose(got[:3], expect, atol=1e-7)
-    rgb_mid = tuple((LOGO_BLUE_RGB[i] + LOGO_GREEN_RGB[i]) / (2 * 255) for i in range(3))
-    assert not np.allclose(got[:3], rgb_mid, atol=0.01)
-
-    # Ends stay readable on black and read as violet-blue and red.
     low = palette_rgb(0.0)
     high = palette_rgb(1.0)
-    assert low[2] > low[0] and low[2] > low[1]
-    assert low[0] > LOGO_BLUE_RGB[0]  # more red than the logo blue → violet
-    assert _contrast_on_black(low) >= 4.5
-    assert high[0] > high[1] and high[0] > high[2]
-    assert _contrast_on_black(high) >= 4.5
+    assert low[2] > low[0] > low[1]
+    assert low[0] - low[1] > 40
+    assert high[0] > high[2] > high[1]
+    assert high[1] == 0
+    assert _contrast_on_black(high) < _contrast_on_black(one_high)
+    assert _contrast_on_black(low) >= 2.5
+    assert _contrast_on_black(high) >= 2.5
     assert _contrast_on_black(LOGO_BLUE_RGB) >= 4.5
     assert _contrast_on_black(LOGO_GREEN_RGB) >= 4.5
     assert _contrast_on_black(LOGO_ORANGE_RGB) >= 4.5
+
+
+def test_piecewise_linear_oklab_has_no_lightness_jump():
+    """Each segment is the straight OKLab chord, including at the knots."""
+    knots = (0.0, 0.25, 0.5, 0.75, 1.0)
+    for t0, t1 in zip(knots, knots[1:]):
+        lab0 = _lab(palette_rgb(t0))
+        lab1 = _lab(palette_rgb(t1))
+        for fraction in (0.2, 0.5, 0.8):
+            position = t0 + fraction * (t1 - t0)
+            expected = oklab_to_srgb(*(lab0[i] + fraction * (lab1[i] - lab0[i]) for i in range(3)))
+            got = palette_color(position)
+            assert all(abs(got[i] - expected[i]) < 1e-9 for i in range(3))
+        # Lightness on the segment is the straight line between the knots.
+        left_l = lab0[0]
+        right_l = lab1[0]
+        mid_l = srgb_to_oklab(*palette_color((t0 + t1) / 2)[:3])[0]
+        assert abs(mid_l - (left_l + right_l) / 2) < 1e-6
+
+    # Adjacent samples stay close. A band edge would jump by much more.
+    previous = _lab(palette_rgb(0.0))
+    for step in range(1, 201):
+        current = _lab(palette_rgb(step / 200))
+        assert abs(current[0] - previous[0]) < 0.03
+        assert _oklab_distance(palette_rgb((step - 1) / 200), palette_rgb(step / 200)) < 0.08
+        previous = current
+
+
+def _oklab_distance(a: tuple[int, int, int], b: tuple[int, int, int]) -> float:
+    lab_a = srgb_to_oklab(*(c / 255.0 for c in a))
+    lab_b = srgb_to_oklab(*(c / 255.0 for c in b))
+    return sum((lab_a[i] - lab_b[i]) ** 2 for i in range(3)) ** 0.5
 
 
 def _contrast_on_black(rgb: tuple[int, int, int]) -> float:
@@ -160,10 +202,19 @@ def test_rating_scale_uses_full_range_and_same_anchors():
     assert palette_rgb_from(rating_color(3.875)) == LOGO_ORANGE_RGB  # t = 0.75
     assert palette_rgb_from(rating_color(RATING_VMIN)) != LOGO_BLUE_RGB
 
+    # The scale is the same straight blend: 0.7 is just in from purple,
+    # 1.6 is just short of logo blue, and 4.8 is just short of burgundy.
+    assert palette_rgb_from(rating_color(0.7)) != palette_rgb(0.0)
+    assert palette_rgb_from(rating_color(1.6)) != LOGO_BLUE_RGB
+    assert palette_rgb_from(rating_color(4.8)) != palette_rgb(1.0)
+    assert _oklab_distance(palette_rgb_from(rating_color(1.6)), LOGO_BLUE_RGB) < 0.05
+    assert _oklab_distance(palette_rgb_from(rating_color(4.8)), palette_rgb(1.0)) < 0.08
+
 
 if __name__ == "__main__":
     test_logo_anchor_constants_are_the_measured_bytes()
     test_oklab_segments_hit_anchors_and_extrapolated_ends()
+    test_piecewise_linear_oklab_has_no_lightness_jump()
     test_discrete_ranks_n1_n2_n3_n7_and_a_larger_n()
     test_rating_scale_uses_full_range_and_same_anchors()
     print("ok")

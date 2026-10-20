@@ -14,19 +14,43 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 ![Bar chart of film watches per year, each bar labelled with its count and a bold colored average rating](docs/images/watches-by-year.png)
 
-*Watches per year, with the count and the bold colored average rating above each bar.*
+*Watches per year, with the count and the bold colored average rating above each bar. These five years run blue-violet, teal, green, yellow, and red.*
 
 ![Weekday and month bar charts stacked by watch year](docs/images/weekday-month-by-year.png)
 
-*When you watch: weekdays and months, stacked by watch year.*
+*When you watch: weekdays and months, stacked by watch year in the same year colors.*
 
 ![Horizontal bars of the best-rated release years with averages and rated-film counts](docs/images/release-years-higher-rating.png)
 
-*Release years with the highest average rating, among years with at least 3 rated films.*
+*Release years with the highest average rating, among years with at least 3 rated films. Bar color follows the rating scale on the left.*
 
 ![Directors with the lowest average rating; short bars show the first 15 letters of the name with an ellipsis](docs/images/directors-lower-rating.png)
 
 *Directors with the lowest average rating. A bar too short for 15 letters shows the first 15 and an ellipsis.*
+
+![Twenty directors from a 4.80 average down to 1.00, on one smooth scale from burgundy to purple](docs/images/directors-higher-rating-20.png)
+
+*A top 20 across the rating scale: one smooth blend from burgundy at the top, through logo orange, green, and blue, to purple at 1.0. The three shortest bars show 15 letters and an ellipsis past the bar, with the same gap before the rating as after a normal bar.*
+
+![Line chart of average rating by month, with a colored dot on each month](docs/images/average-rating-by-month.png)
+
+*Average rating over the watch months: a line, and a dot colored on the rating scale.*
+
+![Line chart of films watched per month, with dots and a dashed mean](docs/images/viewing-pace.png)
+
+*Viewing pace by month. The dashed line is the mean.*
+
+![Two stacked bar charts: films by release decade, and how ratings are distributed](docs/images/extra-stats-decade-rating.png)
+
+*Release decade and the rating distribution. Color is the watch year.*
+
+![Horizontal bars of watches by genre, stacked by watch year](docs/images/watches-by-genre.png)
+
+*Watches by genre, stacked by watch year.*
+
+![Horizontal bars of films that appear more than once, stacked by watch year](docs/images/top-rewatches.png)
+
+*Films logged more than once, stacked by watch year.*
 
 ## Commands
 
@@ -42,7 +66,7 @@ Dates are month before year. `2021-06.2022` means 2021-01-01 through 2022-06-30.
 
 The report is a set of PNG charts in the chat: calendar (watches, pace, weekdays), extra stats, and TMDB tops for genres, countries of origin, directors, actors, original language, and studios. A rating bar ends with a bold colored average and a regular parenthetical count. A name stays inside its bar and is shortened with an ellipsis only when it does not fit. A bar too short for 15 characters shows the first 15 characters and an ellipsis, running past the end of the bar.
 
-Every chart uses one palette. The anchors are the three logo circles, measured from the non-overlapping interior of each circle: blue `#3FB7EB` at 0.25, green `#03E53E` at 0.50, and orange `#FC7A02` at 0.75. Between the anchors the blend is a straight line in OKLab. The ends continue that line one step past blue and past orange, then pull back into sRGB, so 0 is a deeper blue-violet and 1 is red. A rating uses the whole range: 0.5 maps to 0 and 5 maps to 1. An ordered series (watch years, ranked genres), earliest or lowest first, starts from rank `q = k / (N + 1)` and bends that rank with a quadratic inside each quarter: toward 0 below blue, toward green between blue and orange, and toward 1 above orange. The knots stay put, so three values are blue, green, and orange, and seven values put those colors on the 2nd, 4th, and 6th (`0.25`, `0.5`, `0.75`), with the 1st nearer violet (`0.0625`) and the 7th nearer red (`0.9375`). Two values are blue and orange. One value is green.
+Every chart uses one palette. The anchors are the three logo circles, measured from the non-overlapping interior of each circle: blue `#3FB7EB` at 0.25, green `#03E53E` at 0.50, and orange `#FC7A02` at 0.75. The blend is a straight line in OKLab between five knots: purple `#7729FF` at 0, those three logo colors, and burgundy `#A90048` at 1. A rating uses the whole range: 0.5 maps to 0 and 5 maps to 1. An ordered series (watch years, ranked genres), earliest or lowest first, starts from rank `q = k / (N + 1)` and bends that rank with a quadratic inside each quarter: toward 0 below blue, toward green between blue and orange, and toward 1 above orange. The knots stay put, so three values are blue, green, and orange, and seven values put those colors on the 2nd, 4th, and 6th (`0.25`, `0.5`, `0.75`), with the 1st at `0.0625` and the 7th at `0.9375`. Two values are blue and orange. One value is green.
 
 Example title: Studios — lower rating (at least 3 rated films).
 

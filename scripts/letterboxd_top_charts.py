@@ -556,16 +556,20 @@ def chart_rating_hbar(
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
 
-    # White fill + black outline reads on blue→green→red fills and on the dark background.
+    # White fill + black outline reads on the palette fills and on the dark background.
+    name_stroke_pt = 3.2
     stroke = [
-        path_effects.Stroke(linewidth=3.2, foreground=HALO),
+        path_effects.Stroke(linewidth=name_stroke_pt, foreground=HALO),
         path_effects.Normal(),
     ]
     name_fs = 11
     pad_left = 0.08
     # A few pixels of air so the stroke does not sit on the bar tip.
     end_pad_px = 6
-    gap_px = 8
+    # How far the rating sits past a normal bar tip, in data units.
+    mean_after_bar = 0.14
+    # Overflowing names use that same gap past the label, and never less than 12 px.
+    min_mean_gap_px = 12.0
 
     def x_px(x: float, yi: float) -> float:
         return float(ax.transData.transform((x, yi))[0])
@@ -631,11 +635,16 @@ def chart_rating_hbar(
     # Overflowing labels push the mean past their right edge so the two never overlap.
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
+    normal_gap_px = x_px(mean_after_bar, 0.0) - x_px(0.0, 0.0)
+    # The name halo is drawn outside the text box. Count it so the clear gap
+    # matches the space after a normal bar, and stay at least min_mean_gap_px.
+    name_halo_px = name_stroke_pt * fig.dpi / 72.0 / 2.0
+    overflow_gap_px = max(min_mean_gap_px, normal_gap_px) + name_halo_px
     pending: list[tuple] = []
     for txt, inside, yi, avg, rated in rows_drawn:
-        mean_x = avg + 0.14
+        mean_x = avg + mean_after_bar
         if not inside:
-            label_end = txt.get_window_extent(renderer=renderer).x1 + gap_px
+            label_end = txt.get_window_extent(renderer=renderer).x1 + overflow_gap_px
             mean_x = max(mean_x, float(ax.transData.inverted().transform((label_end, 0))[0]))
         # Mean is bold and rating-colored; ``(k)`` stays regular light text beside it.
         mean_label = f"{avg:.2f}"
