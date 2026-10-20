@@ -13,6 +13,7 @@ from letterboxd_palette import (
     LOGO_ORANGE_RGB,
     RATING_VMAX,
     RATING_VMIN,
+    bend_rank,
     categorical_colors,
     categorical_positions,
     oklab_to_srgb,
@@ -99,6 +100,8 @@ def _contrast_on_black(rgb: tuple[int, int, int]) -> float:
 
 
 def test_discrete_ranks_n1_n2_n3_n7_and_a_larger_n():
+    for knot in (0.0, 0.25, 0.5, 0.75, 1.0):
+        assert bend_rank(knot) == knot
     assert categorical_positions(1) == [0.5]
     assert categorical_colors(1)[0] == palette_color(0.5)
     assert palette_rgb(categorical_positions(1)[0]) == LOGO_GREEN_RGB
@@ -117,23 +120,26 @@ def test_discrete_ranks_n1_n2_n3_n7_and_a_larger_n():
     assert palette_rgb_from(three[2]) == LOGO_ORANGE_RGB
 
     seven_pos = categorical_positions(7)
-    assert seven_pos == [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]
-    assert seven_pos == [(i + 1) / 8 for i in range(7)]
+    assert seven_pos == [0.0625, 0.25, 0.4375, 0.5, 0.5625, 0.75, 0.9375]
     seven = categorical_colors(7)
-    # 1-based items 2, 4, 6.
+    # 1-based items 2, 4, 6 stay on the logo. Item 1 is nearer violet than
+    # the raw rank 0.125; item 7 is nearer the red end; item 3 is nearer green.
     assert palette_rgb_from(seven[1]) == LOGO_BLUE_RGB
     assert palette_rgb_from(seven[3]) == LOGO_GREEN_RGB
     assert palette_rgb_from(seven[5]) == LOGO_ORANGE_RGB
-    assert seven_pos[0] < 0.25
-    assert seven_pos[-1] > 0.75
+    assert seven_pos[0] == 0.0625 and seven_pos[0] < 0.125
+    assert seven_pos[2] == 0.4375 and abs(0.5 - seven_pos[2]) < abs(0.25 - seven_pos[2])
+    assert seven_pos[-1] == 0.9375 and seven_pos[-1] > 0.875
 
-    # A larger N still follows k/(N+1) and reaches past the anchors.
+    # Knots of a longer series stay exact; the ends pull past the raw ranks.
+    raw_eleven = [(i + 1) / 12 for i in range(11)]
     eleven = categorical_positions(11)
-    assert eleven == [(i + 1) / 12 for i in range(11)]
-    assert palette_rgb_from(categorical_colors(11)[2]) == LOGO_BLUE_RGB  # rank 3
-    assert palette_rgb_from(categorical_colors(11)[5]) == LOGO_GREEN_RGB  # rank 6
-    assert palette_rgb_from(categorical_colors(11)[8]) == LOGO_ORANGE_RGB  # rank 9
-    assert eleven[0] < 0.25 and eleven[-1] > 0.75
+    assert eleven[0] < raw_eleven[0]
+    assert eleven[-1] > raw_eleven[-1]
+    assert eleven[2] == 0.25 and eleven[5] == 0.5 and eleven[8] == 0.75
+    assert palette_rgb_from(categorical_colors(11)[2]) == LOGO_BLUE_RGB
+    assert palette_rgb_from(categorical_colors(11)[5]) == LOGO_GREEN_RGB
+    assert palette_rgb_from(categorical_colors(11)[8]) == LOGO_ORANGE_RGB
 
     years = list(range(2018, 2025))  # 7 years, ascending
     palette = watch_year_palette(years)
@@ -141,7 +147,7 @@ def test_discrete_ranks_n1_n2_n3_n7_and_a_larger_n():
     assert palette_rgb_from(palette[2021]) == LOGO_GREEN_RGB
     assert palette_rgb_from(palette[2023]) == LOGO_ORANGE_RGB
     assert palette_rgb_from(palette[2018]) != LOGO_BLUE_RGB
-    assert categorical_positions(7)[0] == 0.125
+    assert categorical_positions(7)[0] == 0.0625
 
 
 def test_rating_scale_uses_full_range_and_same_anchors():

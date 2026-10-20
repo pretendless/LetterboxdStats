@@ -12,8 +12,8 @@ ends continue the same chords one anchor-step past blue and past orange
 (``2B−G`` and ``2O−G``) and scale chroma into sRGB, so 0 stays a readable
 blue-violet and 1 stays a readable red on the black background.
 
-Ordered series (earliest or lowest first) use quartile ranks, with one
-exception for two values. See ``categorical_positions``.
+Ordered series (earliest or lowest first) bend quartile ranks with a
+piecewise quadratic so the logo knots stay put. See ``categorical_positions``.
 """
 
 from __future__ import annotations
@@ -211,29 +211,53 @@ def palette_hex(t: float) -> str:
     return f"#{red:02X}{green:02X}{blue:02X}"
 
 
+def bend_rank(q: float) -> float:
+    """Map a raw rank ``q = k/(N+1)`` onto the palette.
+
+    Piecewise quadratic inside the four anchor intervals. Knots at 0, 0.25,
+    0.5, 0.75, and 1 stay fixed. Elsewhere the curve pulls toward 0, toward
+    green at 0.5, or toward 1:
+
+    - ``[0, 0.25]``: ``u = q/0.25``, ``t = 0.25 u²``
+    - ``[0.25, 0.5]``: ``u = (q−0.25)/0.25``, ``t = 0.25 + 0.25 (1−(1−u)²)``
+    - ``[0.5, 0.75]``: ``u = (q−0.5)/0.25``, ``t = 0.5 + 0.25 u²``
+    - ``[0.75, 1]``: ``u = (q−0.75)/0.25``, ``t = 1 − 0.25 (1−u)²``
+    """
+    if q <= 0.25:
+        u = q / 0.25
+        return 0.25 * u * u
+    if q <= 0.5:
+        u = (q - 0.25) / 0.25
+        return 0.25 + 0.25 * (1.0 - (1.0 - u) ** 2)
+    if q <= 0.75:
+        u = (q - 0.5) / 0.25
+        return 0.5 + 0.25 * u * u
+    u = (q - 0.75) / 0.25
+    return 1.0 - 0.25 * (1.0 - u) ** 2
+
+
 def categorical_positions(n: int) -> list[float]:
     """Positions on the shared palette for an ordered series.
 
     Lowest or earliest is first.
 
-    - N = 1 → ``[0.5]`` (logo green). The rank formula gives the same value.
-    - N = 2 → ``[0.25, 0.75]`` (logo blue, logo orange). Rank ``k/(N+1)``
-      would be 1/3 and 2/3, which these charts do not use.
-    - N ≥ 3 → ``t_i = (i + 1) / (N + 1)`` for i = 0 .. N−1.
+    - N = 1 → ``[0.5]`` (logo green).
+    - N = 2 → ``[0.25, 0.75]`` (logo blue, logo orange).
+    - N ≥ 3 → raw rank ``q_i = (i+1)/(N+1)``, then ``bend_rank(q_i)``.
 
-    That last rule is a quartile rank: rank k = 1..N sits at k/(N+1). The
-    first quartile, median, and third quartile land on 0.25, 0.50, and 0.75
-    when those ranks are integers — N = 3 is blue, green, orange; N = 7 puts
-    blue, green, and orange on items 2, 4, and 6 (1-based) — and on the
-    nearest rank otherwise. Ranks before the first quartile are below 0.25;
-    ranks after the third quartile are above 0.75.
+    The bend leaves the logo anchors exact. N = 3 is blue, green, orange.
+    N = 7 is ``[0.0625, 0.25, 0.4375, 0.5, 0.5625, 0.75, 0.9375]``: items 2,
+    4, and 6 are the logo colors, item 1 sits nearer the violet end, item 3
+    nearer green, and item 7 nearer the red end.
     """
     count = int(n)
     if count <= 0:
         return []
+    if count == 1:
+        return [0.5]
     if count == 2:
         return [0.25, 0.75]
-    return [(i + 1) / (count + 1) for i in range(count)]
+    return [bend_rank((i + 1) / (count + 1)) for i in range(count)]
 
 
 def categorical_colors(n: int, cmap=None) -> list[tuple]:
