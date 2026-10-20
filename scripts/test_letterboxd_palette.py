@@ -16,9 +16,7 @@ from letterboxd_palette import (
     bend_rank,
     categorical_colors,
     categorical_positions,
-    BURGUNDY_FROM,
     OUTER_CHORD_STEPS,
-    PURPLE_BELOW,
     oklab_to_srgb,
     palette_color,
     palette_hex,
@@ -68,46 +66,23 @@ def _chord(anchor, green, steps: float):
     return tuple(anchor[i] + steps * (anchor[i] - green[i]) for i in range(3))
 
 
-def _reads_blue(rgb: tuple[int, int, int]) -> bool:
-    red, green, blue = rgb
-    return blue > red and blue > green and blue - red > 40
-
-
-def _reads_green(rgb: tuple[int, int, int]) -> bool:
-    red, green, blue = rgb
-    return green > red and green > blue and green - red > 30
-
-
-def _reads_yellow(rgb: tuple[int, int, int]) -> bool:
-    red, green, blue = rgb
-    return red > 160 and green > 120 and blue < 90 and green > red * 0.55
-
-
-def _reads_red(rgb: tuple[int, int, int]) -> bool:
-    red, green, blue = rgb
-    return red > green + 60 and red > blue and green < 120
-
-
 def test_oklab_segments_hit_anchors_and_extrapolated_ends():
-    """Ends are still the three-step logo chords. Hue families fill the middle."""
+    """Five knots, straight OKLab lines between them. No holds or bends."""
     blue = _lab(LOGO_BLUE_RGB)
     green = _lab(LOGO_GREEN_RGB)
     orange = _lab(LOGO_ORANGE_RGB)
     assert OUTER_CHORD_STEPS == 3.0
-    assert PURPLE_BELOW == 0.05 and BURGUNDY_FROM == 0.95
     end0 = _chord(blue, green, OUTER_CHORD_STEPS)
     end1 = _chord(orange, green, OUTER_CHORD_STEPS)
-    assert palette_rgb(0.0) == _quantize(oklab_to_srgb(*end0))
-    assert palette_rgb(1.0) == _quantize(oklab_to_srgb(*end1))
+    assert palette_rgb(0.0) == _quantize(oklab_to_srgb(*end0)) == (119, 41, 255)
+    assert palette_rgb(1.0) == _quantize(oklab_to_srgb(*end1)) == (169, 0, 72)
     one_low = _quantize(oklab_to_srgb(*_chord(blue, green, 1.0)))
     one_high = _quantize(oklab_to_srgb(*_chord(orange, green, 1.0)))
     assert one_low == (125, 133, 255) and palette_hex(0.0) == "#7729FF"
     assert one_high == (255, 14, 77) and palette_hex(1.0) == "#A90048"
-
-    # Purple hold below 0.05, burgundy hold from 0.95.
-    assert palette_rgb(0.0) == palette_rgb(0.049) == (119, 41, 255)
-    assert palette_rgb(0.95) == palette_rgb(1.0) == (169, 0, 72)
-    assert palette_rgb(PURPLE_BELOW) != palette_rgb(0.0)
+    # The ends are not held flat: a step in from either end already moves.
+    assert palette_rgb(0.049) != palette_rgb(0.0)
+    assert palette_rgb(0.95) != palette_rgb(1.0)
 
     low = palette_rgb(0.0)
     high = palette_rgb(1.0)
@@ -123,30 +98,30 @@ def test_oklab_segments_hit_anchors_and_extrapolated_ends():
     assert _contrast_on_black(LOGO_ORANGE_RGB) >= 4.5
 
 
-def test_hue_families_and_distinct_shades():
-    """One sample inside each band reads as that family, and the shades differ."""
-    assert _reads_blue(palette_rgb(0.15))
-    assert _reads_green(palette_rgb(0.40))
-    assert _reads_yellow(palette_rgb(0.62))
-    assert _reads_red(palette_rgb(0.85))
+def test_piecewise_linear_oklab_has_no_lightness_jump():
+    """Each segment is the straight OKLab chord, including at the knots."""
+    knots = (0.0, 0.25, 0.5, 0.75, 1.0)
+    for t0, t1 in zip(knots, knots[1:]):
+        lab0 = _lab(palette_rgb(t0))
+        lab1 = _lab(palette_rgb(t1))
+        for fraction in (0.2, 0.5, 0.8):
+            position = t0 + fraction * (t1 - t0)
+            expected = oklab_to_srgb(*(lab0[i] + fraction * (lab1[i] - lab0[i]) for i in range(3)))
+            got = palette_color(position)
+            assert all(abs(got[i] - expected[i]) < 1e-9 for i in range(3))
+        # Lightness on the segment is the straight line between the knots.
+        left_l = lab0[0]
+        right_l = lab1[0]
+        mid_l = srgb_to_oklab(*palette_color((t0 + t1) / 2)[:3])[0]
+        assert abs(mid_l - (left_l + right_l) / 2) < 1e-6
 
-    for samples in ((0.05, 0.114, 0.186), (0.28, 0.3375, 0.48), (0.51, 0.60, 0.74), (0.78, 0.86, 0.945)):
-        colors = [palette_rgb(t) for t in samples]
-        distances = [
-            _oklab_distance(colors[i], colors[j])
-            for i in range(len(colors))
-            for j in range(i + 1, len(colors))
-        ]
-        # The polyline is not flat: the spread inside the band is visible.
-        assert max(distances) > 0.12
-
-    # Reds are not the straight OKLab chord from orange to burgundy.
-    orange = _lab(LOGO_ORANGE_RGB)
-    burgundy = _lab(palette_rgb(1.0))
-    chord = tuple(orange[i] + 0.5 * (burgundy[i] - orange[i]) for i in range(3))
-    got = _lab(palette_rgb(0.85))
-    straight = sum((got[i] - chord[i]) ** 2 for i in range(3)) ** 0.5
-    assert straight > 0.04
+    # Adjacent samples stay close. A band edge would jump by much more.
+    previous = _lab(palette_rgb(0.0))
+    for step in range(1, 201):
+        current = _lab(palette_rgb(step / 200))
+        assert abs(current[0] - previous[0]) < 0.03
+        assert _oklab_distance(palette_rgb((step - 1) / 200), palette_rgb(step / 200)) < 0.08
+        previous = current
 
 
 def _oklab_distance(a: tuple[int, int, int], b: tuple[int, int, int]) -> float:
@@ -227,21 +202,19 @@ def test_rating_scale_uses_full_range_and_same_anchors():
     assert palette_rgb_from(rating_color(3.875)) == LOGO_ORANGE_RGB  # t = 0.75
     assert palette_rgb_from(rating_color(RATING_VMIN)) != LOGO_BLUE_RGB
 
-    # Bands on the rating scale: ~1.2 blue, ~2.3 green, ~3.3 yellow, ~4.3 red.
-    # Burgundy is only the top hold (about 4.8–5). ~1.6 stays on logo blue.
-    assert _reads_blue(palette_rgb_from(rating_color(1.2)))
-    assert _reads_green(palette_rgb_from(rating_color(2.3)))
-    assert _reads_yellow(palette_rgb_from(rating_color(3.3)))
-    assert _reads_red(palette_rgb_from(rating_color(4.3)))
-    assert all(abs(palette_rgb_from(rating_color(1.6))[i] - LOGO_BLUE_RGB[i]) <= 12 for i in range(3))
-    assert palette_rgb_from(rating_color(4.8)) == palette_rgb(1.0)
-    assert palette_rgb_from(rating_color(0.7)) == palette_rgb(0.0)
+    # The scale is the same straight blend: 0.7 is just in from purple,
+    # 1.6 is just short of logo blue, and 4.8 is just short of burgundy.
+    assert palette_rgb_from(rating_color(0.7)) != palette_rgb(0.0)
+    assert palette_rgb_from(rating_color(1.6)) != LOGO_BLUE_RGB
+    assert palette_rgb_from(rating_color(4.8)) != palette_rgb(1.0)
+    assert _oklab_distance(palette_rgb_from(rating_color(1.6)), LOGO_BLUE_RGB) < 0.05
+    assert _oklab_distance(palette_rgb_from(rating_color(4.8)), palette_rgb(1.0)) < 0.08
 
 
 if __name__ == "__main__":
     test_logo_anchor_constants_are_the_measured_bytes()
     test_oklab_segments_hit_anchors_and_extrapolated_ends()
-    test_hue_families_and_distinct_shades()
+    test_piecewise_linear_oklab_has_no_lightness_jump()
     test_discrete_ranks_n1_n2_n3_n7_and_a_larger_n()
     test_rating_scale_uses_full_range_and_same_anchors()
     print("ok")

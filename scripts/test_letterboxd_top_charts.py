@@ -480,8 +480,7 @@ def test_count_avg_text_style_colors_mean_only():
     assert _rgba(dash["color"]) == _rgba(FG)
     assert low["path_effects"] and high["path_effects"]
     assert dash["path_effects"] is None
-    # 1.94 sits in the green band; 4.80 is the burgundy hold.
-    assert low["color"][1] > low["color"][0] and low["color"][1] > low["color"][2]
+    # 1.94 is between logo blue and green; 4.80 is near burgundy, so redder.
     assert high["color"][0] > high["color"][2]
     assert high["color"][0] > low["color"][0]
 

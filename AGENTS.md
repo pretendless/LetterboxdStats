@@ -75,7 +75,7 @@ Logo anchors are the median sRGB of each circle's non-overlapping interior (12px
 - 0.50 green `#03E53E` = RGB (3, 229, 62)
 - 0.75 orange `#FC7A02` = RGB (252, 122, 2)
 
-`palette_color(t)` is piecewise-linear in OKLab lightness, chroma, and hue (`h = atan2(b, a)`). `t = 0` and `t = 1` are still the three-step chords (`B + 3(B−G)`, `O + 3(O−G)`, `OUTER_CHORD_STEPS`): `#7729FF` purple, `#A90048` burgundy. Purple is only `t < 0.05`. Burgundy is only `t ≥ 0.95`. Between those holds, each family is a polyline of `(L, C, h)` stops in `letterboxd_palette.py`: blues on `[0.05, 0.25]` ending at logo blue, greens on `(0.25, 0.50]` ending at logo green, yellows on `(0.50, 0.75]` ending at logo orange, and reds on `(0.75, 0.95)` through `_RED_STOPS` (not the straight orange–burgundy chord). Ratings use `t = (rating − 0.5) / 4.5`, so 1.625 is logo blue, 2.75 is green, and 3.875 is logo orange.
+`palette_color(t)` is piecewise-linear in OKLab `(L, a, b)` between five knots. `t = 0` and `t = 1` are the three-step chords (`B + 3(B−G)`, `O + 3(O−G)`, `OUTER_CHORD_STEPS`): `#7729FF` purple, `#A90048` burgundy. The other knots are the logo colors. Each segment is that straight line. No hue bands, holds, or easing. Ratings use `t = (rating − 0.5) / 4.5`, so 1.625 is logo blue, 2.75 is green, and 3.875 is logo orange.
 
 Discrete ordered series, earliest or lowest first. Raw rank `q = (i+1)/(N+1)`, then `bend_rank`:
 
