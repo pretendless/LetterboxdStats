@@ -322,8 +322,8 @@ def test_rating_hbar_long_names_no_overlap(tmp_path: Path | None = None):
     assert path.is_file() and path.stat().st_size > 0
 
 
-def test_short_bars_overflow_ten_chars_long_bars_keep_name_inside(tmp_path: Path | None = None):
-    """Short bar: 10 name chars + … overflowing right. Long bar: full name inside."""
+def test_short_bars_overflow_fifteen_chars_long_bars_keep_name_inside(tmp_path: Path | None = None):
+    """Short bar: 15 name chars + ... overflowing right. Long bar: full name inside."""
     import letterboxd_top_charts as charts
 
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-top-charts-test")
@@ -356,13 +356,13 @@ def test_short_bars_overflow_ten_chars_long_bars_keep_name_inside(tmp_path: Path
     extent = captured["extent"]
     by_text = {t.get_text(): t for t in texts}
 
-    short = by_text["2. di Bonaven…"]
+    short = by_text["2. di Bonaventura..."]
     assert short.get_ha() == "left"
     assert short.get_clip_on() is False
     assert short.get_fontweight() == "bold"
     short_bar = min(captured["bars"], key=lambda box: box.width)
-    assert extent["2. di Bonaven…"].x0 < short_bar.x1 < extent["2. di Bonaven…"].x1
-    assert extent["0.60"].x0 > extent["2. di Bonaven…"].x1
+    assert extent["2. di Bonaventura..."].x0 < short_bar.x1 < extent["2. di Bonaventura..."].x1
+    assert extent["0.60"].x0 > extent["2. di Bonaventura..."].x1
     assert extent["(3)"].x0 > extent["0.60"].x1
     assert "2. di Bonaventura Pictures" not in by_text
 
@@ -374,19 +374,44 @@ def test_short_bars_overflow_ten_chars_long_bars_keep_name_inside(tmp_path: Path
     assert by_text["(3)"].get_fontweight() == "normal"
 
 
-def test_names_over_ten_chars_are_not_capped_when_they_fit(tmp_path: Path | None = None):
+def test_ellipsis_reaches_the_bar_tip_when_more_than_fifteen_fit(tmp_path: Path | None = None):
+    """A bar that holds 15 characters keeps the label inside and fills the bar."""
+    import letterboxd_top_charts as charts
+
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-top-charts-test")
     out.mkdir(parents=True, exist_ok=True)
-    texts = _hbar_texts(
-        lambda: chart_rating_hbar(
-            [{"name": "Sidney Kimmel Entertainment", "avg": 2.9, "rated": 4}],
-            out / "mid-bar.png",
+    name = "The International Pictures Corporation of Northern Europe"
+    captured: dict = {}
+    real_save = charts.save_dark_figure
+
+    def grab(fig, dest, **kwargs):
+        ax = fig.axes[0]
+        renderer = fig.canvas.get_renderer()
+        label = next(t for t in ax.texts if t.get_text().startswith("1. "))
+        captured["label"] = label.get_text()
+        captured["clip"] = label.get_clip_on()
+        captured["label_box"] = label.get_window_extent(renderer=renderer)
+        captured["bar"] = ax.patches[0].get_window_extent(renderer=renderer)
+        real_save(fig, dest, **kwargs)
+
+    charts.save_dark_figure = grab
+    try:
+        assert chart_rating_hbar(
+            [{"name": name, "avg": 2.2, "rated": 4}],
+            out / "filled-bar.png",
             title="Studios — higher rating",
         )
-    )
-    names = [t.get_text() for t in texts if t.get_text().startswith("1. ")]
-    assert len(names) == 1
-    assert len(names[0].removeprefix("1. ").rstrip("…")) > 10
+    finally:
+        charts.save_dark_figure = real_save
+    shown = captured["label"].removeprefix("1. ")
+    assert shown.endswith("...")
+    assert len(shown.removesuffix("...").rstrip()) > 15
+    assert name not in captured["label"]
+    bar = captured["bar"]
+    gap = bar.x1 - captured["label_box"].x1
+    assert captured["clip"] is True
+    assert 0 <= gap < 28
+    assert gap < bar.width * 0.12
 
 
 def test_watches_by_genre_stacked_count(tmp_path: Path | None = None):
@@ -730,8 +755,8 @@ if __name__ == "__main__":
     test_rating_hbar_with_in_bar_labels()
     test_rating_hbar_worst_ascending()
     test_rating_hbar_long_names_no_overlap()
-    test_short_bars_overflow_ten_chars_long_bars_keep_name_inside()
-    test_names_over_ten_chars_are_not_capped_when_they_fit()
+    test_short_bars_overflow_fifteen_chars_long_bars_keep_name_inside()
+    test_ellipsis_reaches_the_bar_tip_when_more_than_fifteen_fit()
     test_rating_hbar_worst_skips_short_slate()
     test_watches_by_genre_stacked_count()
     test_count_avg_text_style_colors_mean_only()

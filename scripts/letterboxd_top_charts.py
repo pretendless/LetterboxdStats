@@ -60,7 +60,8 @@ LANG_LABELS = {
 }
 
 
-SHORT_BAR_NAME_CHARS = 10
+SHORT_BAR_NAME_CHARS = 15
+NAME_ELLIPSIS = "..."
 
 
 def display_lang(code) -> str:
@@ -100,10 +101,11 @@ def _fit_text_to_px(
     fontsize: float,
     fontweight: str = "bold",
     path_effects=None,
+    ellipsis: str = "…",
 ) -> str:
-    """Truncate ``text`` with … so its rendered width is at most ``max_px``."""
+    """Truncate ``text`` with an ellipsis so its rendered width is at most ``max_px``."""
     if max_px < 8:
-        return "…"
+        return ellipsis
 
     def width_px(candidate: str) -> float:
         return _text_width_px(
@@ -118,10 +120,10 @@ def _fit_text_to_px(
     if width_px(text) <= max_px:
         return text
     lo, hi = 0, len(text)
-    best = "…"
+    best = ellipsis
     while lo <= hi:
         mid = (lo + hi) // 2
-        candidate = "…" if mid <= 0 else text[:mid].rstrip() + "…"
+        candidate = ellipsis if mid <= 0 else text[:mid].rstrip() + ellipsis
         if width_px(candidate) <= max_px:
             best = candidate
             lo = mid + 1
@@ -497,11 +499,12 @@ def chart_rating_hbar(
 ) -> bool:
     """Horizontal bars for TMDB avg tops.
 
-    Names are white with a black stroke and start inside the bar. A bar that
-    holds at least ``SHORT_BAR_NAME_CHARS`` name characters keeps the label
-    inside, ellipsized only when the full name does not fit. A shorter bar
-    gets exactly that many characters plus … and the label overflows to the
-    right past the bar tip.
+    Names are white with a black stroke and start inside the bar. The label is
+    measured against the bar width minus a small end pad. A bar that holds at
+    least ``SHORT_BAR_NAME_CHARS`` name characters keeps the label inside,
+    ellipsized only when the full name does not fit, so the text reaches nearly
+    to the tip. A shorter bar shows exactly that many characters plus ``...``
+    and overflows to the right past the tip.
     ascending=False → best at top; True → worst at top.
     The mean to the right is bold and colored on the rating scale. The rated-film
     count sits beside it in regular light text as ``(12)``.
@@ -542,7 +545,7 @@ def chart_rating_hbar(
     style_axes(ax)
 
     # Layout must be finalized before measuring text against data coordinates.
-    cbar = _rating_colorbar(fig, ax, location="left", size="large")
+    _rating_colorbar(fig, ax, location="left", size="large")
     if footer:
         fig.text(0.01, 0.01, footer, fontsize=7, color=FG)
         fig.tight_layout(rect=[0.02, 0.03, 1, 1])
@@ -558,8 +561,8 @@ def chart_rating_hbar(
     ]
     name_fs = 11
     pad_left = 0.08
-    # Keep a generous empty tip so stroked names never crowd mean/n outside.
-    tip_gap = 0.4
+    # A few pixels of air so the stroke does not sit on the bar tip.
+    end_pad_px = 6
     gap_px = 8
 
     def x_px(x: float, yi: float) -> float:
@@ -570,16 +573,28 @@ def chart_rating_hbar(
             ax, renderer, text, fontsize=name_fs, fontweight="bold", path_effects=stroke
         )
 
+    def name_chars_that_fit(prefix: str, name: str, max_px: float) -> int:
+        if max_px <= 0 or not name:
+            return 0
+        lo, hi = 0, len(name)
+        best = 0
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            if name_width(prefix + name[:mid]) <= max_px:
+                best = mid
+                lo = mid + 1
+            else:
+                hi = mid - 1
+        return best
+
     rows_drawn = []
     for yi, bar, rank, label, avg, rated in zip(y, bars, ranks, labels, avgs, rateds):
         yi, avg = float(yi), float(avg)
         prefix = f"{rank}. "
         name = str(label)
-        short = prefix + name[:SHORT_BAR_NAME_CHARS]
-        if len(name) > SHORT_BAR_NAME_CHARS:
-            short += "…"
-        inside_px = max(0.0, x_px(max(pad_left, avg - tip_gap), yi) - x_px(pad_left, yi))
-        inside = name_width(short) <= inside_px
+        inside_px = max(0.0, x_px(avg, yi) - end_pad_px - x_px(pad_left, yi))
+        fitted = name_chars_that_fit(prefix, name, inside_px)
+        inside = fitted >= len(name) or fitted >= SHORT_BAR_NAME_CHARS
         if inside:
             shown = _fit_text_to_px(
                 ax,
@@ -589,9 +604,10 @@ def chart_rating_hbar(
                 fontsize=name_fs,
                 fontweight="bold",
                 path_effects=stroke,
+                ellipsis=NAME_ELLIPSIS,
             )
         else:
-            shown = short
+            shown = prefix + name[:SHORT_BAR_NAME_CHARS].rstrip() + NAME_ELLIPSIS
         txt = ax.text(
             pad_left,
             yi,
