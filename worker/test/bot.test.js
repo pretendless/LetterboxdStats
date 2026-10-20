@@ -111,12 +111,12 @@ test("/start asks for a ZIP and /letterboxd does not", async () => {
     return { message_id: sent.length };
   };
   await handle(telegramRequest(7, "/start"), env, { sendMessage });
-  assert.match(sent[0].text, /ZIP экспорта Letterboxd/);
+  assert.match(sent[0].text, /Letterboxd export ZIP/);
   assert.ok(env.BOT_KV.store.get("lebxd:await:7"));
 
   sent.length = 0;
   await handle(telegramRequest(7, "/start letterboxd"), env, { sendMessage });
-  assert.match(sent[0].text, /ZIP экспорта Letterboxd/);
+  assert.match(sent[0].text, /Letterboxd export ZIP/);
 
   sent.length = 0;
   await handle(telegramRequest(7, "/start other"), env, { sendMessage });
@@ -143,17 +143,17 @@ test("/stop clears the wizard and says when there is nothing to cancel", async (
   );
   sent.length = 0;
   await handle(telegramRequest(7, "не zip"), env, { sendMessage });
-  assert.match(sent[0].text, /Нужен файл \.zip/);
+  assert.match(sent[0].text, /Send a Letterboxd export \.zip/);
 
   sent.length = 0;
   await handle(telegramRequest(7, "/stop"), env, { sendMessage });
-  assert.match(sent[0].text, /ожидание Letterboxd сброшено/);
-  assert.match(sent[0].text, /\/start — графики Letterboxd/);
+  assert.match(sent[0].text, /wizard was cleared/);
+  assert.match(sent[0].text, /\/start — Letterboxd charts/);
   assert.equal(env.BOT_KV.store.get("lebxd:await:7"), undefined);
 
   sent.length = 0;
   await handle(telegramRequest(7, "/stop"), env, { sendMessage });
-  assert.match(sent[0].text, /нечего прерывать/);
+  assert.match(sent[0].text, /Nothing to cancel/);
 });
 
 test("defaults dispatch letterboxd.yml and hide the run link", async () => {
@@ -167,7 +167,7 @@ test("defaults dispatch letterboxd.yml and hide the run link", async () => {
   const fetch = githubFetch(calls);
   await handle(telegramRequest(111, "/start"), env, { sendMessage, fetch });
   await handle(documentRequest(111, ZIP), env, { sendMessage, fetch });
-  assert.match(sent.map((row) => row.text).join("\n"), /Как строим графики/);
+  assert.match(sent.map((row) => row.text).join("\n"), /How should the charts be built/);
   assert.equal(calls.find((call) => call.url.includes("/dispatches")), undefined);
 
   sent.length = 0;
@@ -235,7 +235,7 @@ test("custom range 2021-06.2022 dispatches 2021-01-01 through 2022-06-30", async
   await say("нет");
   await say("свой диапазон");
   await say("2021-06.2022");
-  assert.match(sent.at(-1).text, /без даты/i);
+  assert.match(sent.at(-1).text, /no diary date/i);
   await say("нет");
   const dispatch = calls.find((call) => call.url.includes("/dispatches"));
   assert.equal(dispatch.body.inputs.top_n, "20");
@@ -265,7 +265,7 @@ test("/stop cancels a dispatched chart run", async () => {
 
   sent.length = 0;
   await handle(telegramRequest(9, "/stop"), env, { sendMessage, fetch });
-  assert.match(sent[0].text, /Запуск графиков остановлен/);
+  assert.match(sent[0].text, /Chart run stopped/);
   const cancel = calls.find((call) => call.url.endsWith("/actions/runs/4242/cancel"));
   assert.ok(cancel);
   assert.equal(cancel.method, "POST");
@@ -273,7 +273,7 @@ test("/stop cancels a dispatched chart run", async () => {
 
   sent.length = 0;
   await handle(telegramRequest(9, "/stop"), env, { sendMessage, fetch });
-  assert.match(sent[0].text, /нечего прерывать/);
+  assert.match(sent[0].text, /Nothing to cancel/);
 });
 
 test("/stop during dispatch cancels the run instead of announcing it", async () => {
@@ -318,11 +318,11 @@ test("/stop during dispatch cancels the run instead of announcing it", async () 
   await handle(telegramRequest(3, "по умолчанию"), env, { sendMessage, fetch, waitUntil });
   assert.ok(pending);
   await handle(telegramRequest(3, "/stop"), env, { sendMessage, fetch, waitUntil });
-  assert.match(sent.map((row) => row.text).join("\n"), /Запуск графиков остановлен/);
+  assert.match(sent.map((row) => row.text).join("\n"), /Chart run stopped/);
   releaseDispatch();
   await pending;
   assert.ok(calls.some((call) => call.url.endsWith("/actions/runs/77/cancel")));
-  assert.doesNotMatch(sent.map((row) => row.text).join("\n"), /Запуск принят/);
+  assert.doesNotMatch(sent.map((row) => row.text).join("\n"), /Run accepted/);
 });
 
 test("worker name is t2t-box and the webhook allows callback_query", () => {
@@ -337,6 +337,16 @@ test("worker name is t2t-box and the webhook allows callback_query", () => {
   assert.match(workflow, /https:\/\/t2t-box\.prtndz\.workers\.dev\/lebxd/);
   assert.doesNotMatch(workflow, /tg2tmbot\.prtndz/);
   assert.doesNotMatch(workflow, /TG2TMBOT_TOKEN/);
+  const readme = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
+  const agents = readFileSync(new URL("../../AGENTS.md", import.meta.url), "utf8");
+  assert.doesNotMatch(readme, /Telegram2Telemost|tg2tmbot|\/tg2tm|sticker/i);
+  assert.match(agents, /POST \/tg2tm/);
+  assert.match(agents, /69c9d9f3572a48469a312e5914e8a233/);
+  assert.match(agents, /77ae9d1d59764c3fb82ff615296e0a1e/);
+  assert.match(agents, /GHLEBXD_DISPATCH_TOKEN/);
+  assert.match(agents, /GHTG2TM_DISPATCH_TOKEN/);
+  assert.match(agents, /GH_DISPATCH_TOKEN/);
+  assert.match(agents, /8502935020,5513343655/);
 });
 
 function post(path, text, chatId = 7) {
@@ -382,7 +392,7 @@ test("tg2tm and lebxd use separate tokens, paths, and KV prefixes", async () => 
 
   sent.length = 0;
   await handle(post("/lebxd", "/start", 9), env, { sendMessage });
-  assert.match(sent[0].text, /ZIP экспорта Letterboxd/);
+  assert.match(sent[0].text, /Letterboxd export ZIP/);
   assert.ok(env.BOT_KV.store.get("lebxd:await:9"));
   assert.equal(env.BOT_KV.store.get("await:letterboxd:9"), undefined);
 

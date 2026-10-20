@@ -36,8 +36,8 @@ if (!json.ok) {
 console.log("webhook set");
 
 const commands = [
-  { command: "start", description: "Графики Letterboxd" },
-  { command: "stop", description: "Прервать ввод или запуск" },
+  { command: "start", description: "Start a Letterboxd chart report" },
+  { command: "stop", description: "Cancel the wizard or a running report" },
 ];
 const menu = await telegramFetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
   method: "POST",

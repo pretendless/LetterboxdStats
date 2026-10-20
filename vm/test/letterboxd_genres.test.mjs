@@ -85,6 +85,7 @@ test("watch bounds are month-before-year; one value is the whole interval", () =
   });
   assert.deepEqual(parseWatchInterval("06.2012"), { dateFrom: "2012-06-01", dateTo: "2012-06-30" });
   assert.deepEqual(parseWatchInterval("март 2012"), { dateFrom: "2012-03-01", dateTo: "2012-03-31" });
+  assert.deepEqual(parseWatchInterval("March 2012"), { dateFrom: "2012-03-01", dateTo: "2012-03-31" });
   assert.equal(parseWatchInterval("2012-06"), null);
   assert.equal(parseWatchInterval("2012-06-15"), null);
   assert.equal(parseWatchInterval("2021.06"), null);
@@ -125,19 +126,19 @@ test("top size is any integer from 1 to 100", () => {
   const bad = advanceLetterboxdWizard(state, { kind: "text", text: "9999" });
   assert.equal(bad.state.step, "top_n");
   assert.equal(bad.dispatch, undefined);
-  assert.match(bad.messages[0].text, /от 1 до 100/);
+  assert.match(bad.messages[0].text, /from 1 to 100/);
   const zero = advanceLetterboxdWizard(state, { kind: "text", text: "0" });
   assert.equal(zero.state.step, "top_n");
-  assert.match(zero.messages[0].text, /от 1 до 100/);
+  assert.match(zero.messages[0].text, /from 1 to 100/);
 });
 
 test("wizard prompts are html, with a default line and examples", () => {
   const mode = letterboxdModePrompt();
-  assert.match(mode.text, /<b>Как строим графики\?<\/b>/);
-  assert.match(mode.text, /«По умолчанию» сразу собирает обычный набор/);
-  assert.match(mode.text, /Кнопки ниже или ответ текстом/);
-  assert.doesNotMatch(mode.text, /Например:/);
-  assert.doesNotMatch(mode.text, /По умолчанию: по умолчанию/);
+  assert.match(mode.text, /<b>How should the charts be built\?<\/b>/);
+  assert.match(mode.text, /Default builds the usual set/);
+  assert.match(mode.text, /Buttons below, or reply with text/);
+  assert.doesNotMatch(mode.text, /For example:/);
+  assert.doesNotMatch(mode.text, /Default: default/);
   assert.equal(mode.reply_markup.inline_keyboard[0][0].callback_data, "lb:def");
   assert.equal(mode.reply_markup.inline_keyboard[0][1].callback_data, "lb:cus");
   const now = new Date("2026-10-20T00:00:00Z");
@@ -146,10 +147,10 @@ test("wizard prompts are html, with a default line and examples", () => {
     { kind: "callback", step: "period", choice: "custom" },
     now,
   );
-  assert.match(range.messages[0].text, /<b>Какой период взять\?<\/b>/);
+  assert.match(range.messages[0].text, /<b>Which period\?<\/b>/);
   assert.match(range.messages[0].text, /2021-06\.2022/);
   assert.match(range.messages[0].text, /15\.06\.2021 - 20\.08\.2022/);
-  assert.match(range.messages[0].text, /По умолчанию: весь период/);
+  assert.match(range.messages[0].text, /Default: full period/);
   const labels = range.messages[0].reply_markup.inline_keyboard.flat().map((button) => button.text);
   assert.deepEqual(labels, [
     "2026",
@@ -157,9 +158,9 @@ test("wizard prompts are html, with a default line and examples", () => {
     "2024",
     "2023",
     "2022",
-    "Последние 3 года",
-    "Последние 5 лет",
-    "По умолчанию: весь период",
+    "Last 3 years",
+    "Last 5 years",
+    "Default: full period",
   ]);
   const top = advanceLetterboxdWizard(
     { step: "top_n", fileId: "BQACAgIAAxkBAAI1234567890" },
@@ -168,13 +169,13 @@ test("wizard prompts are html, with a default line and examples", () => {
   );
   assert.equal(top.state.topN, 20);
   assert.equal(top.state.step, "min_rated");
-  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "✅ По умолчанию (3)");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "✅ Default (3)");
   const minText = top.messages[0].text;
-  assert.match(minText, /<b>Минимум оценённых фильмов<\/b>/);
-  assert.match(minText, /При 3 режиссёр с двумя оценёнными фильмами в топ не попадёт/);
-  assert.match(minText, /Графики по числу просмотров этот порог не используют/);
-  assert.match(minText, /Например: 3, 5, 10/);
-  assert.match(minText, /По умолчанию: 3/);
+  assert.match(minText, /<b>Minimum rated films<\/b>/);
+  assert.match(minText, /a director with two rated films is left out/);
+  assert.match(minText, /Watch-count charts ignore this threshold/);
+  assert.match(minText, /For example: 3, 5, 10/);
+  assert.match(minText, /Default: 3/);
   const year = advanceLetterboxdWizard(
     range.state,
     { kind: "callback", step: "range_start", year: 2024 },
@@ -213,29 +214,30 @@ test("binary steps keep the default button and drop the repeated lines", () => {
     { kind: "callback", step: "range_start", year: 2024 },
   );
   for (const message of [usa, english, period, undated]) {
-    assert.doesNotMatch(message.messages[0].text, /Например:/);
-    assert.doesNotMatch(message.messages[0].text, /По умолчанию:/);
+    assert.doesNotMatch(message.messages[0].text, /For example:/);
+    assert.doesNotMatch(message.messages[0].text, /Default:/);
   }
-  assert.match(usa.messages[0].text, /<b>Показывать USA в топе стран\?<\/b>/);
-  assert.match(english.messages[0].text, /<b>Показывать английский в топе языков\?<\/b>/);
-  assert.match(period.messages[0].text, /<b>Весь период или свой диапазон\?<\/b>/);
-  assert.match(undated.messages[0].text, /<b>Добавить фильмы без даты в дневнике\?<\/b>/);
-  assert.equal(usa.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "По умолчанию: да");
-  assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "По умолчанию: да");
-  assert.equal(period.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "По умолчанию: весь период");
-  assert.equal(undated.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "По умолчанию: нет");
-  assert.match(period.messages[0].text, /Весь период — от первого просмотра/);
+  assert.match(usa.messages[0].text, /<b>Show USA in the country top\?<\/b>/);
+  assert.match(english.messages[0].text, /<b>Show English in the language top\?<\/b>/);
+  assert.match(period.messages[0].text, /<b>Full period or a custom range\?<\/b>/);
+  assert.match(undated.messages[0].text, /<b>Add films with no diary date\?<\/b>/);
+  assert.equal(usa.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
+  assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
+  assert.equal(period.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: full period");
+  assert.equal(undated.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
+  assert.match(period.messages[0].text, /Full period runs from the first watch/);
 });
 
 test("every wizard keyboard has a one-tap default button", () => {
   const last = (keyboard) => keyboard.inline_keyboard.at(-1)[0].text;
-  assert.equal(letterboxdModeKeyboard().inline_keyboard[0][0].text, "✅ По умолчанию");
-  assert.equal(last(letterboxdTopKeyboard()), "✅ По умолчанию (20)");
-  assert.equal(last(letterboxdMinKeyboard()), "✅ По умолчанию (3)");
-  assert.equal(last(letterboxdYesNoKeyboard("lb:usa")), "По умолчанию: да");
-  assert.equal(last(letterboxdYesNoKeyboard("lb:en")), "По умолчанию: да");
-  assert.equal(last(letterboxdPeriodKeyboard()), "По умолчанию: весь период");
-  assert.equal(last(letterboxdUndatedKeyboard()), "По умолчанию: нет");
+  assert.equal(letterboxdModeKeyboard().inline_keyboard[0][0].text, "✅ Default");
+  assert.equal(last(letterboxdTopKeyboard()), "✅ Default (20)");
+  assert.equal(last(letterboxdMinKeyboard()), "✅ Default (3)");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:usa")), "Default: yes");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:en")), "Default: yes");
+  assert.equal(last(letterboxdPeriodKeyboard()), "Default: full period");
+  assert.equal(last(letterboxdUndatedKeyboard()), "Default: no");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:und", "нет")), "Default: no");
 });
 
 test("isZipDocument and file_id", () => {
@@ -277,25 +279,27 @@ test("buildLetterboxdDispatch", () => {
 });
 
 test("mapScriptError covers diary and bearer", () => {
-  assert.match(mapScriptError("Не задан TMDB_BEARER_TOKEN", "", 2), /TMDB_BEARER_TOKEN/);
-  assert.match(mapScriptError("В ZIP не найден diary.csv", "", 1), /diary\.csv/);
+  assert.match(mapScriptError("TMDB_BEARER_TOKEN is not set", "", 2), /TMDB_BEARER_TOKEN/);
+  assert.match(mapScriptError("diary.csv was not found in the ZIP.", "", 1), /diary\.csv/);
   assert.match(
-    mapScriptError("В выбранном диапазоне нет записей дневника с датой просмотра.", "", 2),
-    /выбранном диапазоне/,
+    mapScriptError("No diary entries with a watch date in the selected range.", "", 2),
+    /selected range/,
   );
+  assert.match(mapScriptError("diary.csv has no Watched Date column.", "", 1), /Watched Date/);
+  assert.match(mapScriptError("diary.csv is missing columns: Name", "", 1), /missing columns/);
 });
 
 test("calendar captions name the watch-time grain", () => {
   const days = calendarCaptions({ watch_time_grain: "day" });
-  assert.equal(days["views_by_year.png"], "Просмотры по дням");
-  assert.equal(days["average_rating_by_year.png"], "Средняя оценка по дням");
-  assert.equal(days["viewing_pace.png"], "Темп просмотров по дням");
+  assert.equal(days["views_by_year.png"], "Film watches by day");
+  assert.equal(days["average_rating_by_year.png"], "Average rating by day");
+  assert.equal(days["viewing_pace.png"], "Viewing pace by day");
   const months = calendarCaptions({ watch_time_grain: "month" });
-  assert.equal(months["views_by_year.png"], "Просмотры по месяцам");
-  assert.equal(months["viewing_pace.png"], "Темп просмотров по месяцам");
+  assert.equal(months["views_by_year.png"], "Film watches by month");
+  assert.equal(months["viewing_pace.png"], "Viewing pace by month");
   const years = calendarCaptions({});
-  assert.equal(years["views_by_year.png"], "Просмотры по годам");
-  assert.equal(years["viewing_pace.png"], "Темп просмотров по месяцам");
+  assert.equal(years["views_by_year.png"], "Film watches by year");
+  assert.equal(years["viewing_pace.png"], "Viewing pace by month");
 });
 
 test("formatTelegramError expands cause chain", () => {
@@ -341,9 +345,9 @@ test("unmatchedFromWorkdir reads csv", () => {
 });
 
 test("calendarReadyText announces TMDB details phase", () => {
-  assert.match(calendarReadyText(), /Календарные графики готовы/);
+  assert.match(calendarReadyText(), /Calendar charts are ready/);
   assert.match(calendarReadyText(), /TMDB/);
-  assert.match(calendarReadyText(), /режиссёры/);
+  assert.match(calendarReadyText(), /directors/);
 });
 
 test("escapeHtml for film titles", () => {
@@ -357,13 +361,13 @@ test("buildCalendarReportHtml keeps blurb, drops charted tops", () => {
     year_min: 2020,
     year_max: 2024,
     peak_day: "2021-03-15",
-    peak_day_label: "15 марта 2021",
+    peak_day_label: "15 March 2021",
     peak_day_count: 7,
     peak_year: 2023,
     peak_year_count: 40,
-    favorite_weekday: "Сб",
+    favorite_weekday: "Sat",
     favorite_weekday_count: 20,
-    favorite_month: "Окт",
+    favorite_month: "Oct",
     favorite_month_count: 15,
     films_per_month: 4.2,
     rated_count: 70,
@@ -377,12 +381,12 @@ test("buildCalendarReportHtml keeps blurb, drops charted tops", () => {
   });
   assert.match(html, /<b>Letterboxd<\/b>/);
   assert.match(html, /<b>100<\/b>/);
-  assert.match(html, /Больше всего просмотров за день: <b>15 марта 2021<\/b> \(<b>7<\/b>\)/);
-  assert.match(html, /Темп: в среднем <b>4\.2<\/b> фильмов в месяц/);
-  assert.match(html, /средняя <b>3\.75<\/b>/);
+  assert.match(html, /Most watches in one day: <b>15 March 2021<\/b> \(<b>7<\/b>\)/);
+  assert.match(html, /Pace: <b>4\.2<\/b> films per month on average/);
+  assert.match(html, /average <b>3\.75<\/b>/);
   assert.doesNotMatch(html, /Heat/);
-  assert.doesNotMatch(html, /Годы выхода/);
-  assert.doesNotMatch(html, /Повторы/);
+  assert.doesNotMatch(html, /Release years/);
+  assert.doesNotMatch(html, /Most often in the diary/);
   assert.doesNotMatch(html, /parse_mode/);
 });
 
@@ -400,10 +404,10 @@ test("buildGenreReportHtml is short blurb without ranked lists", () => {
     9,
   );
   assert.match(html, /Letterboxd · TMDB/);
-  assert.match(html, /Обогащено/);
+  assert.match(html, /Enriched/);
   assert.match(html, /<b>2<\/b>/);
   assert.doesNotMatch(html, /Comedy/);
-  assert.doesNotMatch(html, /Жанры \(TMDB\) — выше оценка/);
+  assert.doesNotMatch(html, /Genres — higher rating/);
 });
 
 test("buildGenreReportMessages drops people/country bullet tops", () => {
@@ -427,9 +431,9 @@ test("buildGenreReportMessages drops people/country bullet tops", () => {
   });
   assert.equal(msgs.length, 1);
   assert.match(msgs[0], /Letterboxd · TMDB/);
-  assert.match(msgs[0], /графиках/);
+  assert.match(msgs[0], /charts/);
   assert.doesNotMatch(msgs[0], /Nolan/);
-  assert.doesNotMatch(msgs[0], /Страны — выше оценка/);
-  assert.doesNotMatch(msgs[0], /Актёры/);
-  assert.doesNotMatch(msgs[0], /Студии/);
+  assert.doesNotMatch(msgs[0], /Countries — higher rating/);
+  assert.doesNotMatch(msgs[0], /Actors/);
+  assert.doesNotMatch(msgs[0], /Studios/);
 });

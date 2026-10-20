@@ -34,7 +34,7 @@ from letterboxd_top_charts import (
 
 
 def test_display_lang():
-    assert display_lang("en") == "английский"
+    assert display_lang("en") == "English"
     assert display_lang("XX") == "xx"
 
 
@@ -322,6 +322,38 @@ def test_rating_hbar_long_names_no_overlap(tmp_path: Path | None = None):
     assert path.is_file() and path.stat().st_size > 0
 
 
+def test_short_bars_draw_full_names_outside(tmp_path: Path | None = None):
+    """A name that does not fit inside the bar is drawn in full just to its left."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-top-charts-test")
+    out.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {"name": "Pixar", "avg": 4.6, "rated": 12},
+        {"name": "di Bonaventura Pictures", "avg": 1.0, "rated": 3},
+    ]
+    texts = _hbar_texts(
+        lambda: chart_rating_hbar(
+            rows,
+            out / "short-outside.png",
+            title="Studios — lower rating (at least 3 rated films)",
+            footer="Source: Letterboxd diary/watched + TMDB metadata",
+        )
+    )
+    outside = [text for text in texts if text.get_text() == "2. di Bonaventura Pictures"]
+    inside = [text for text in texts if text.get_text() == "1. Pixar"]
+    assert len(outside) == 1
+    assert outside[0].get_fontweight() == "normal"
+    assert outside[0].get_ha() == "right"
+    assert outside[0].get_clip_on() is False
+    assert outside[0].get_clip_box() is None
+    assert _rgba(outside[0].get_color()) == _rgba(FG)
+    assert len(inside) == 1
+    assert inside[0].get_fontweight() == "bold"
+    assert inside[0].get_ha() == "left"
+    assert inside[0].get_clip_on() is True
+    assert inside[0].get_clip_box() is not None
+    assert _rgba(inside[0].get_color()) == _rgba("#FFFFFF")
+    assert any(text.get_text() == "1.00" and text.get_fontweight() == "bold" for text in texts)
+    assert any(text.get_text() == "(3)" and text.get_fontweight() == "normal" for text in texts)
 
 
 def test_watches_by_genre_stacked_count(tmp_path: Path | None = None):
@@ -665,6 +697,7 @@ if __name__ == "__main__":
     test_rating_hbar_with_in_bar_labels()
     test_rating_hbar_worst_ascending()
     test_rating_hbar_long_names_no_overlap()
+    test_short_bars_draw_full_names_outside()
     test_rating_hbar_worst_skips_short_slate()
     test_watches_by_genre_stacked_count()
     test_count_avg_text_style_colors_mean_only()

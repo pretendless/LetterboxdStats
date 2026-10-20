@@ -64,32 +64,36 @@ from letterboxd_ratings import (  # noqa: E402
 
 apply_dark_chart_theme()
 
-WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-MONTHS = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"]
-# Genitive month names for calendar dates («15 марта 2021»).
-MONTHS_GENITIVE = [
-    "января",
-    "февраля",
-    "марта",
-    "апреля",
-    "мая",
-    "июня",
-    "июля",
-    "августа",
-    "сентября",
-    "октября",
-    "ноября",
-    "декабря",
+WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+MONTH_NAMES = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 ]
 RATING_BINS = [round(x * 0.5, 1) for x in range(1, 11)]  # 0.5 … 5.0
 
 
-def format_ru_calendar_date(ts) -> str:
-    """Format a pandas/py datetime as «15 марта 2021»."""
+def format_calendar_date(ts) -> str:
+    """Format a pandas/py datetime as «15 March 2021»."""
     day = int(ts.day)
-    month = MONTHS_GENITIVE[int(ts.month) - 1]
+    month = MONTH_NAMES[int(ts.month) - 1]
     year = int(ts.year)
     return f"{day} {month} {year}"
+
+
+def format_ru_calendar_date(ts) -> str:
+    """Backward-compatible name. Dates are English."""
+    return format_calendar_date(ts)
 
 
 def release_year_avg_lookup(rated_rows: pd.DataFrame | None) -> dict[str, tuple]:
@@ -161,7 +165,7 @@ def build_diary_summary(
             peak_ts = day_counts.index[0]
             peak_day_count = int(day_counts.iloc[0])
             peak_day = str(pd.Timestamp(peak_ts).date())
-            peak_day_label = format_ru_calendar_date(pd.Timestamp(peak_ts))
+            peak_day_label = format_calendar_date(pd.Timestamp(peak_ts))
 
     weekday_counts = df["Watched Date"].dt.weekday.value_counts()
     fav_wd_i = int(weekday_counts.index[0]) if len(weekday_counts) else None
@@ -312,7 +316,7 @@ def stacked_counts(ax, categories: list[str], years: list[int], matrix: np.ndarr
     style_axes(ax)
 
 
-def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Год"):
+def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Watch year"):
     handles = [plt.Rectangle((0, 0), 1, 1, color=colors[y]) for y in years]
     leg = fig.legend(
         handles,
@@ -348,18 +352,18 @@ def chart_weekday_month(df: pd.DataFrame, path: Path) -> None:
 
     fig, axes = plt.subplots(2, 1, figsize=(14, 10), sharey=False)
     fig.suptitle(
-        "Распределение просмотров по дням недели и месяцам с разбивкой по годам",
+        "Watches by weekday and month, split by year",
         fontsize=14,
         y=0.98,
     )
 
-    stacked_counts(axes[0], WEEKDAYS, years, week, colors, "Количество записей о просмотрах")
-    axes[0].set_title("Просмотры по дням недели — состав по годам")
+    stacked_counts(axes[0], WEEKDAYS, years, week, colors, "Watch entries")
+    axes[0].set_title("Watches by weekday — stacked by year")
 
-    stacked_counts(axes[1], MONTHS, years, month, colors, "Количество записей о просмотрах")
-    axes[1].set_title("Просмотры по месяцам — состав по годам")
+    stacked_counts(axes[1], MONTHS, years, month, colors, "Watch entries")
+    axes[1].set_title("Watches by month — stacked by year")
 
-    add_watch_year_legend(fig, years, colors, title="Год")
+    add_watch_year_legend(fig, years, colors, title="Watch year")
     fig.tight_layout(rect=[0, 0, 0.9, 0.96])
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
@@ -369,11 +373,11 @@ def chart_weekday_month(df: pd.DataFrame, path: Path) -> None:
 # ≤45 inclusive days → days; ≤18 inclusive calendar months → months; else years.
 WATCH_GRAIN_DAY_MAX = 45
 WATCH_GRAIN_MONTH_MAX = 18
-GRAIN_PHRASE = {"day": "по дням", "month": "по месяцам", "year": "по годам"}
+GRAIN_PHRASE = {"day": "by day", "month": "by month", "year": "by year"}
 GRAIN_XLABEL = {
-    "day": "День просмотра",
-    "month": "Месяц просмотра",
-    "year": "Год просмотра",
+    "day": "Watch day",
+    "month": "Watch month",
+    "year": "Watch year",
 }
 
 
@@ -553,7 +557,7 @@ def chart_views_by_year(
             color_years.append(int(pd.Timestamp(value).year))
     colors = year_colors(sorted(set(color_years)), palette_years=sorted(set(color_years)))
     bar_colors = [colors.get(y, "#4C78A8") for y in color_years]
-    phrase = GRAIN_PHRASE.get(grain, "по годам")
+    phrase = GRAIN_PHRASE.get(grain, "by year")
 
     n = len(labels)
     # Wider than the count-only chart: each bar carries a count and a mean.
@@ -561,9 +565,9 @@ def chart_views_by_year(
     fig, ax = plt.subplots(figsize=(fig_w, 6))
     x = np.arange(n)
     bars = ax.bar(x, values, color=bar_colors, width=0.8)
-    ax.set_title(f"Количество просмотров фильмов {phrase}")
-    ax.set_xlabel(GRAIN_XLABEL.get(grain, "Год просмотра"))
-    ax.set_ylabel("Количество записей о просмотрах")
+    ax.set_title(f"Film watches {phrase}")
+    ax.set_xlabel(GRAIN_XLABEL.get(grain, "Watch year"))
+    ax.set_ylabel("Watch entries")
     step = 1 if n <= 16 else max(1, n // 14)
     tick_idx = list(range(0, n, step))
     if tick_idx and tick_idx[-1] != n - 1:
@@ -662,7 +666,7 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
         rating_matrix[yi, rating_index[rating]] += 1
 
     fig, axes = plt.subplots(2, 1, figsize=(14, 10), sharey=False)
-    fig.suptitle("Дополнительная статистика Letterboxd", fontsize=14, y=0.98)
+    fig.suptitle("Letterboxd extra stats", fontsize=14, y=0.98)
 
     stacked_counts(
         axes[0],
@@ -670,9 +674,9 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
         years,
         decade_matrix,
         colors,
-        "Количество записей о просмотрах",
+        "Watch entries",
     )
-    axes[0].set_title("Просмотренные фильмы по десятилетию выхода — цвет обозначает год просмотра")
+    axes[0].set_title("Films by release decade — color is watch year")
 
     rating_labels = [f"{r:g}" for r in RATING_BINS]
     stacked_counts(
@@ -681,12 +685,12 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
         years,
         rating_matrix,
         colors,
-        "Количество записей с оценкой",
+        "Rated entries",
     )
-    axes[1].set_title("Распределение оценок — цвет обозначает год просмотра")
-    axes[1].set_xlabel("Оценка Letterboxd")
+    axes[1].set_title("Rating distribution — color is watch year")
+    axes[1].set_xlabel("Letterboxd rating")
 
-    add_watch_year_legend(fig, years, colors, title="Год просмотра")
+    add_watch_year_legend(fig, years, colors, title="Watch year")
     fig.tight_layout(rect=[0, 0, 0.9, 0.96])
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
@@ -700,7 +704,7 @@ def _chart_average_rating_line(
     *,
     title: str,
     xlabel: str,
-    ylabel: str = "Средняя оценка (из 5)",
+    ylabel: str = "Average rating (out of 5)",
 ) -> bool:
     """Line + markers: points colored blue→green→red by mean rating."""
     if not labels or not values:
@@ -890,20 +894,20 @@ def chart_viewing_pace(
             linestyle="--",
             linewidth=1.4,
             zorder=2,
-            label=(f"среднее {avg:.1f}/день" if pace_grain == "day" else f"среднее {avg:.1f}/мес"),
+            label=(f"mean {avg:.1f}/day" if pace_grain == "day" else f"mean {avg:.1f}/mo"),
         )
         leg = ax.legend(loc="upper right", frameon=False, labelcolor=FG, fontsize=10)
         if leg is not None:
             for text in leg.get_texts():
                 text.set_color(FG)
     if pace_grain == "day":
-        ax.set_title("Темп просмотров по дням")
-        ax.set_xlabel("День просмотра")
-        ax.set_ylabel("Фильмов за день")
+        ax.set_title("Viewing pace by day")
+        ax.set_xlabel("Watch day")
+        ax.set_ylabel("Films per day")
     else:
-        ax.set_title("Темп просмотров по месяцам")
-        ax.set_xlabel("Месяц просмотра")
-        ax.set_ylabel("Фильмов за месяц")
+        ax.set_title("Viewing pace by month")
+        ax.set_xlabel("Watch month")
+        ax.set_ylabel("Films per month")
     ax.set_xticks(tick_idx)
     ax.set_xticklabels([labels[i] for i in tick_idx], rotation=45, ha="right")
     ymax = max(counts) if counts else 1
@@ -964,14 +968,14 @@ def chart_average_rating_by_year(
     labels = _grain_tick_labels(grouped.index, grain)
     values = grouped["mean"].astype(float).tolist()
     counts = grouped["count"].astype(int).tolist()
-    phrase = GRAIN_PHRASE.get(grain, "по годам")
+    phrase = GRAIN_PHRASE.get(grain, "by year")
     return _chart_average_rating_line(
         labels,
         values,
         counts,
         path,
-        title=f"Средняя оценка {phrase}",
-        xlabel=GRAIN_XLABEL.get(grain, "Год просмотра"),
+        title=f"Average rating {phrase}",
+        xlabel=GRAIN_XLABEL.get(grain, "Watch year"),
     )
 
 
@@ -1018,8 +1022,8 @@ def chart_average_rating_by_release_decade(
         values,
         counts,
         path,
-        title="Средняя оценка по десятилетию выхода",
-        xlabel="Десятилетие выхода",
+        title="Average rating by release decade",
+        xlabel="Release decade",
     )
 
 
@@ -1073,8 +1077,8 @@ def chart_top_rewatches(df: pd.DataFrame, path: Path, limit: int = 20) -> bool:
         left += vals
     ax.set_yticks(y)
     ax.set_yticklabels(labels)
-    ax.set_xlabel("Записей в дневнике")
-    ax.set_title("Чаще всего в дневнике — цвет = год просмотра")
+    ax.set_xlabel("Diary entries")
+    ax.set_title("Most often in the diary — color is watch year")
     ax.xaxis.grid(True, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     style_axes(ax)
@@ -1082,7 +1086,7 @@ def chart_top_rewatches(df: pd.DataFrame, path: Path, limit: int = 20) -> bool:
     ax.set_xlim(0, xmax * 1.15)
     for yi, total in enumerate(left):
         ax.text(total + xmax * 0.02, yi, str(int(total)), va="center", fontsize=9, color=FG)
-    add_watch_year_legend(fig, years, colors, title="Год просмотра")
+    add_watch_year_legend(fig, years, colors, title="Watch year")
     fig.tight_layout(rect=[0, 0, 0.88, 1])
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
@@ -1105,7 +1109,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         if opts.has_window and diary.empty:
             print(
-                "В выбранном диапазоне нет записей дневника с датой просмотра.",
+                "No diary entries with a watch date in the selected range.",
                 file=sys.stderr,
             )
             return 2
@@ -1204,7 +1208,7 @@ def main(argv: list[str] | None = None) -> int:
     extra_s = (", " + ", ".join(extras)) if extras else ""
     only_n = int(summary.get("watched_only_films") or 0)
     print(
-        "Готово: views_by_weekday_month.png, views_by_year.png, "
+        "Done: views_by_weekday_month.png, views_by_year.png, "
         f"extra_stats_decade_rating.png{extra_s}, diary_summary.json"
         f" (watched-only films: {only_n})"
     )

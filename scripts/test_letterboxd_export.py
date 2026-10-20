@@ -155,7 +155,7 @@ def test_viewing_pace_is_monthly_not_yearly() -> None:
 
 
 def test_peak_viewing_day_from_diary() -> None:
-    """Peak day = calendar date with most diary Watched Date rows (Russian label)."""
+    """Peak day = calendar date with most diary Watched Date rows."""
     diary = pd.DataFrame(
         [
             {"Name": "A", "Year": 2020, "Rating": 4.0, "Watched Date": "2021-03-15"},
@@ -168,8 +168,8 @@ def test_peak_viewing_day_from_diary() -> None:
     summary = build_diary_summary(diary, catalog=diary, watched_only=diary.iloc[0:0].copy())
     assert summary["peak_day"] == "2021-03-15"
     assert summary["peak_day_count"] == 3
-    assert summary["peak_day_label"] == "15 марта 2021"
-    assert format_ru_calendar_date(pd.Timestamp("2021-03-15")) == "15 марта 2021"
+    assert summary["peak_day_label"] == "15 March 2021"
+    assert format_ru_calendar_date(pd.Timestamp("2021-03-15")) == "15 March 2021"
 
 
 def test_diary_latest_beats_older_diary_and_ratings_csv() -> None:
