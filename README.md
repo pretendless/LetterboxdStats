@@ -24,9 +24,9 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 *Release years with the highest average rating, among years with at least 3 rated films.*
 
-![Directors with the lowest average rating; short bars show the first 10 letters of the name with an ellipsis](docs/images/directors-lower-rating.png)
+![Directors with the lowest average rating; short bars show the first 15 letters of the name with an ellipsis](docs/images/directors-lower-rating.png)
 
-*Directors with the lowest average rating. A bar too short for 10 letters shows the first 10 and an ellipsis.*
+*Directors with the lowest average rating. A bar too short for 15 letters shows the first 15 and an ellipsis.*
 
 ## Commands
 
@@ -40,7 +40,7 @@ Dates are month before year. `2021-06.2022` means 2021-01-01 through 2022-06-30.
 
 ## Charts
 
-The report is a set of PNG charts in the chat: calendar (watches, pace, weekdays), extra stats, and TMDB tops for genres, countries of origin, directors, actors, original language, and studios. A rating bar ends with a bold colored average and a regular parenthetical count. A name stays inside its bar and is shortened with an ellipsis only when it does not fit. A bar too short for 10 characters shows the first 10 characters and an ellipsis, running past the end of the bar.
+The report is a set of PNG charts in the chat: calendar (watches, pace, weekdays), extra stats, and TMDB tops for genres, countries of origin, directors, actors, original language, and studios. A rating bar ends with a bold colored average and a regular parenthetical count. A name stays inside its bar and is shortened with an ellipsis only when it does not fit. A bar too short for 15 characters shows the first 15 characters and an ellipsis, running past the end of the bar.
 
 Example title: Studios — lower rating (at least 3 rated films).
 
