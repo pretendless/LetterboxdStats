@@ -4,6 +4,30 @@
 
 Webhook: `POST https://t2t-box.prtndz.workers.dev/lebxd` on the Cloudflare worker `t2t-box`.
 
+## What it produces
+
+You send the ZIP from Letterboxd → Settings → Import & Export → Export Your Data. The bot asks a few questions, then posts a short summary and a series of PNG charts in the same chat. The images below come from synthetic data, not a real export.
+
+![Bot message asking for the watch period, with year and preset buttons](docs/images/wizard-period-step.png)
+
+*The wizard asks one question at a time. Tap a button or type a reply.*
+
+![Bar chart of film watches per year, each bar labelled with its count and a bold colored average rating](docs/images/watches-by-year.png)
+
+*Watches per year, with the count and the bold colored average rating above each bar.*
+
+![Weekday and month bar charts stacked by watch year](docs/images/weekday-month-by-year.png)
+
+*When you watch: weekdays and months, stacked by watch year.*
+
+![Horizontal bars of the best-rated release years with averages and rated-film counts](docs/images/release-years-higher-rating.png)
+
+*Release years with the highest average rating, among years with at least 3 rated films.*
+
+![Directors with the lowest average rating; short bars show the first 10 letters of the name with an ellipsis](docs/images/directors-lower-rating.png)
+
+*Directors with the lowest average rating. A bar too short for 10 letters shows the first 10 and an ellipsis.*
+
 ## Commands
 
 | Command | What it does |
@@ -16,7 +40,7 @@ Dates are month before year. `2021-06.2022` means 2021-01-01 through 2022-06-30.
 
 ## Charts
 
-The report is a set of PNG charts in the chat: calendar (watches, pace, weekdays), extra stats, and TMDB tops for genres, countries of origin, directors, actors, original language, and studios. A rating bar ends with a bold colored average and a regular parenthetical count. When the full name does not fit inside a short bar, it is drawn in full just to the left of the bar.
+The report is a set of PNG charts in the chat: calendar (watches, pace, weekdays), extra stats, and TMDB tops for genres, countries of origin, directors, actors, original language, and studios. A rating bar ends with a bold colored average and a regular parenthetical count. A name stays inside its bar and is shortened with an ellipsis only when it does not fit. A bar too short for 10 characters shows the first 10 characters and an ellipsis, running past the end of the bar.
 
 Example title: Studios — lower rating (at least 3 rated films).
 
