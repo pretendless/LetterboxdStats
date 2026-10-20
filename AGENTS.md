@@ -64,3 +64,23 @@ Month before year. `2021-06.2022` means 2021-01-01 through 2022-06-30.
 ## Copy
 
 Leave the vendored `tg2tm/` wizard as it is until a separate cutover. Do not remove `POST /tg2tm`. Do not put the shared route, `@tg2tmbot`, or Telegram2Telemost into `README.md` or new user-facing chat copy.
+
+## Chart palette
+
+One palette, `palette_color` in `scripts/letterboxd_palette.py`. Do not add turbo, viridis, coolwarm, or a second rating colormap.
+
+Logo anchors are the median sRGB of each circle's non-overlapping interior (12px erosion, then a center disk; both middle samples of each channel matched):
+
+- 0.25 blue `#3FB7EB` = RGB (63, 183, 235)
+- 0.50 green `#03E53E` = RGB (3, 229, 62)
+- 0.75 orange `#FC7A02` = RGB (252, 122, 2)
+
+`palette_color(t)` is piecewise-linear in OKLab through those anchors. `t = 0` and `t = 1` extend the blue←green and green→orange chords by one anchor step (`2B − G`, `2O − G`) and scale chroma into sRGB (deeper blue-violet, then red). Ratings use the full 0..1 range: `t = (rating − 0.5) / 4.5`.
+
+Discrete ordered series, earliest or lowest first:
+
+- N = 1 → `[0.5]`
+- N = 2 → `[0.25, 0.75]`
+- N ≥ 3 → `t_i = (i + 1) / (N + 1)`
+
+N = 3 is blue, green, orange. N = 7 puts those colors on items 2, 4, and 6 (1-based).

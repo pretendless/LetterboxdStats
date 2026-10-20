@@ -42,9 +42,13 @@ from letterboxd_export import (  # noqa: E402
 )
 from letterboxd_options import read_chart_options  # noqa: E402
 from letterboxd_palette import (  # noqa: E402
+    CONNECTOR,
     FG,
     GRID,
+    LOGO_BLUE_HEX,
+    MARKER_EDGE,
     apply_dark_chart_theme,
+    palette_color,
     save_dark_figure,
     style_axes,
     watch_year_palette,
@@ -294,7 +298,7 @@ def build_diary_summary(
 
 
 def year_colors(years: list[int], palette_years: list[int] | None = None):
-    """Watch-year colors; palette_years sets the full turbo span when provided."""
+    """Watch-year colors; palette_years sets the ordered series when provided."""
     scale = sorted(set(int(y) for y in (palette_years if palette_years is not None else years)))
     full = watch_year_palette(scale)
     return {int(y): full[int(y)] for y in years if int(y) in full}
@@ -556,7 +560,7 @@ def chart_views_by_year(
         else:
             color_years.append(int(pd.Timestamp(value).year))
     colors = year_colors(sorted(set(color_years)), palette_years=sorted(set(color_years)))
-    bar_colors = [colors.get(y, "#4C78A8") for y in color_years]
+    bar_colors = [colors.get(y, LOGO_BLUE_HEX) for y in color_years]
     phrase = GRAIN_PHRASE.get(grain, "by year")
 
     n = len(labels)
@@ -706,21 +710,21 @@ def _chart_average_rating_line(
     xlabel: str,
     ylabel: str = "Average rating (out of 5)",
 ) -> bool:
-    """Line + markers: points colored blue→green→red by mean rating."""
+    """Line + markers: points colored on the shared rating palette."""
     if not labels or not values:
         return False
     point_colors = color_bars_by_rating(values)
     fig, ax = plt.subplots(figsize=(max(10.0, len(labels) * 0.45), 6.5))
     x = np.arange(len(labels))
     # Readable connector on dark theme; markers carry the rating color.
-    ax.plot(x, values, color="#9A9A9A", linewidth=1.8, zorder=1, solid_capstyle="round")
+    ax.plot(x, values, color=CONNECTOR, linewidth=1.8, zorder=1, solid_capstyle="round")
     ax.scatter(
         x,
         values,
         c=point_colors,
         s=72,
         zorder=2,
-        edgecolors="#111111",
+        edgecolors=MARKER_EDGE,
         linewidths=0.7,
     )
     ax.set_ylim(0, 5.2)
@@ -868,7 +872,7 @@ def chart_viewing_pace(
     fig_w = max(10.0, min(16.0, n * 0.22))
     fig, ax = plt.subplots(figsize=(fig_w, 5.8))
     x = np.arange(n)
-    line_color = "#5EB8E0"
+    line_color = palette_color(0.25)
     ax.plot(
         x,
         counts,
@@ -881,16 +885,16 @@ def chart_viewing_pace(
     ax.scatter(
         x,
         counts,
-        c=line_color,
+        color=line_color,
         s=28 if n <= 48 else 16,
         zorder=3,
-        edgecolors="#111111",
+        edgecolors=MARKER_EDGE,
         linewidths=0.5,
     )
     if avg is not None and avg > 0:
         ax.axhline(
             float(avg),
-            color="#E0C06A",
+            color=palette_color(0.75),
             linestyle="--",
             linewidth=1.4,
             zorder=2,

@@ -10,10 +10,12 @@ import numpy as np
 
 from letterboxd_palette import (
     FG,
+    LOGO_BLUE_HEX,
     RATING_VMAX,
     RATING_VMIN,
     categorical_colors,
     categorical_positions,
+    palette_color,
     rating_color,
     rating_colormap,
     watch_year_palette,
@@ -51,7 +53,7 @@ def test_ranked_hbar_grows_taller_with_n(tmp_path: Path | None = None) -> None:
     """100 rows keep the same pitch as 20: the PNG gets taller, type is not crammed."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-top-charts-test")
     out.mkdir(parents=True, exist_ok=True)
-    palette = {2020: "#4C78A8"}
+    palette = {2020: LOGO_BLUE_HEX}
 
     def stacked(n: int, path: Path) -> None:
         labels = [f"Film {i}" for i in range(n)]
@@ -77,27 +79,29 @@ def test_ranked_hbar_grows_taller_with_n(tmp_path: Path | None = None) -> None:
     assert Image.open(r100).height > Image.open(r20).height * 3.5
 
 
-def test_categorical_palette_samples_bin_midpoints():
-    """Discrete years use bin centers, not the turbo endpoints."""
-    import matplotlib.pyplot as plt
-
+def test_categorical_palette_samples_quartile_ranks():
+    """Ordered series use quartile ranks; ratings keep the full 0–1 range."""
     assert categorical_positions(1) == [0.5]
     assert categorical_positions(2) == [0.25, 0.75]
-    assert np.allclose(categorical_positions(3), [(i + 0.5) / 3 for i in range(3)])
-    cmap = plt.cm.turbo
+    assert categorical_positions(3) == [0.25, 0.5, 0.75]
+    assert np.allclose(categorical_positions(7), [(i + 1) / 8 for i in range(7)])
     cases = {1: [2024], 2: [2023, 2024], 3: [2022, 2023, 2024]}
     for n, years in cases.items():
         palette = watch_year_palette(years)
         colors = categorical_colors(n)
+        positions = categorical_positions(n)
         for i, year in enumerate(years):
-            assert np.allclose(palette[year], cmap((i + 0.5) / n))
+            assert np.allclose(palette[year], palette_color(positions[i]))
             assert np.allclose(colors[i], palette[year])
-    two = watch_year_palette([2023, 2024])
-    assert not np.allclose(two[2023], cmap(0.0))
-    assert not np.allclose(two[2024], cmap(1.0))
+    # Earliest of three years is logo blue; latest is logo orange.
+    three = watch_year_palette([2022, 2023, 2024])
+    assert np.allclose(three[2022], palette_color(0.25))
+    assert np.allclose(three[2024], palette_color(0.75))
     # Rating colors stay a continuous map of the numeric value.
     assert np.allclose(rating_color(RATING_VMIN), rating_colormap()(0.0))
     assert np.allclose(rating_color(RATING_VMAX), rating_colormap()(1.0))
+    assert np.allclose(rating_color(RATING_VMIN), palette_color(0.0))
+    assert np.allclose(rating_color(RATING_VMAX), palette_color(1.0))
 
 
 def test_rating_colormap_is_blue_green_red():
@@ -746,7 +750,7 @@ if __name__ == "__main__":
     test_display_lang()
     test_top_n_default_about_20()
     test_ranked_hbar_grows_taller_with_n()
-    test_categorical_palette_samples_bin_midpoints()
+    test_categorical_palette_samples_quartile_ranks()
     test_rating_colormap_is_blue_green_red()
     test_rating_color_fixed_scale_separates_high_band()
     test_release_year_charts()

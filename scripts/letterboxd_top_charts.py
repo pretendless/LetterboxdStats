@@ -1,10 +1,10 @@
 """Shared Letterboxd top charts: watch-year stacked counts + rating bars.
 
-Count tops → horizontal bars stacked/colored by viewing-year turbo palette
-(same spirit as watches_by_country.png).
+Count tops → horizontal bars stacked/colored by the shared logo palette
+(same spirit as watches_by_country.png). Earliest watch year is the low end.
 
-Rating tops («выше оценка») → horizontal bars where length = mean rating,
-colored cool→warm (higher = warmer).
+Rating tops → horizontal bars where length = mean rating, colored with
+``palette_color`` on the full 0–1 range (higher = warmer).
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ from letterboxd_options import (
 from letterboxd_palette import (
     FG,
     GRID,
+    HALO,
+    ON_BAR,
     RATING_COLORBAR_LABEL,
     rating_color,
     rating_colormap,
@@ -179,7 +181,7 @@ def _count_avg_stroke():
     import matplotlib.patheffects as path_effects
 
     return [
-        path_effects.Stroke(linewidth=2.0, foreground="#000000"),
+        path_effects.Stroke(linewidth=2.0, foreground=HALO),
         path_effects.Normal(),
     ]
 
@@ -187,8 +189,8 @@ def _count_avg_stroke():
 def count_avg_text_style(label: str) -> dict:
     """Style for the mean beside a count bar.
 
-    A numeric mean is bold and colored with the rating colormap
-    (blue → green → red on the fixed 0.5–5 scale). «—» stays regular white.
+    A numeric mean is bold and colored with the shared palette
+    (full 0–1 range on the fixed 0.5–5 scale). «—» stays regular white.
     """
     text = str(label or "").strip()
     try:
@@ -556,7 +558,7 @@ def chart_rating_hbar(
 
     # White fill + black outline reads on blue→green→red fills and on the dark background.
     stroke = [
-        path_effects.Stroke(linewidth=3.2, foreground="#000000"),
+        path_effects.Stroke(linewidth=3.2, foreground=HALO),
         path_effects.Normal(),
     ]
     name_fs = 11
@@ -616,7 +618,7 @@ def chart_rating_hbar(
             va="center",
             fontsize=name_fs,
             fontweight="bold",
-            color="#FFFFFF",
+            color=ON_BAR,
             path_effects=stroke,
             clip_on=inside,
             zorder=5,
@@ -836,7 +838,7 @@ def single_rating_bar_color(avg: float) -> tuple:
 
 
 def add_rating_colorbar(fig, ax, *, location: str = "right", size: str = "compact") -> None:
-    """Shared colorbar for avg-rating charts (blue→green→red, 0.5–5).
+    """Shared colorbar for avg-rating charts (logo palette, 0.5–5).
 
     Calendar year/decade line charts use size='compact' (default).
     """
