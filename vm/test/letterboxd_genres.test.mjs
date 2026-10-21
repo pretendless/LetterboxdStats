@@ -441,7 +441,7 @@ test("buildLetterboxdDispatch", () => {
   assert.equal(withSearch.body.inputs.search_keywords, "Elijah Wood,2001");
 });
 
-test("search keyword HTML lists name year match sites and watch ratings", () => {
+test("search keyword HTML lists sections by match site with watch ratings", () => {
   const chunks = buildSearchKeywordMessages("Elijah Wood", [
     {
       name: "The Lord of the Rings: The Fellowship of the Ring",
@@ -459,14 +459,20 @@ test("search keyword HTML lists name year match sites and watch ratings", () => 
   assert.equal(chunks.length, 1);
   assert.match(chunks[0], /<b>Search keyword: Elijah Wood<\/b>/);
   assert.match(chunks[0], /2 films/);
+  // Sections in fixed order; genre before actor. Eternal appears under both.
   assert.match(
     chunks[0],
-    /The Lord of the Rings: The Fellowship of the Ring \(2001\) \(actor\) — 5/,
+    /<b>genre<\/b>\n1\. Eternal Sunshine of the Spotless Mind \(2004\): 5, —/,
   );
   assert.match(
     chunks[0],
-    /Eternal Sunshine of the Spotless Mind \(2004\) \(actor, genre\) — 5, —/,
+    /<b>actor<\/b>\n1\. The Lord of the Rings: The Fellowship of the Ring \(2001\): 5\n2\. Eternal Sunshine of the Spotless Mind \(2004\): 5, —/,
   );
+  // No inline match-site parentheses on film lines.
+  assert.doesNotMatch(chunks[0], /\(2001\) \(actor\)/);
+  assert.doesNotMatch(chunks[0], /\(2004\) \(actor/);
+  // Empty sites (director, …) omitted.
+  assert.doesNotMatch(chunks[0], /<b>director<\/b>/);
   assert.deepEqual(buildAllSearchKeywordMessages({ search_keywords: [] }), []);
   assert.match(
     buildSearchKeywordMessages("Nobody", [])[0],
