@@ -210,10 +210,12 @@ def test_liked_heart_helpers_use_black_heart_suit():
     assert len(months) == 3
 
 
-def test_review_mark_helpers_use_note_with_vs15():
-    """U+1F5C8 NOTE (+ FE0E in REVIEW_MARK); chart helpers use base NOTE."""
-    assert REVIEW_NOTE == "\U0001f5c8"
-    assert REVIEW_MARK == "\U0001f5c8\ufe0e"
+def test_review_mark_helpers_use_turned_comma_ornament():
+    """U+275D ❝ for charts and Telegram (no VS15; same style as ♥)."""
+    assert REVIEW_NOTE == "\u275d"
+    assert REVIEW_MARK == "\u275d"
+    assert "\ufe0e" not in REVIEW_MARK
+    assert "\ufe0f" not in REVIEW_MARK
     assert film_title_with_engagement_marks("Short", liked=False, reviewed=False) == "Short"
     assert film_title_with_engagement_marks("Short", reviewed=True) == f"Short{REVIEW_NOTE}"
     assert (
@@ -1406,7 +1408,7 @@ def test_rating_hbar_worst_skips_short_slate(tmp_path: Path | None = None):
 if __name__ == "__main__":
     test_display_lang()
     test_liked_heart_helpers_use_black_heart_suit()
-    test_review_mark_helpers_use_note_with_vs15()
+    test_review_mark_helpers_use_turned_comma_ornament()
     test_no_date_legend_swatch_is_logo_gray_gradient()
     test_top_n_default_about_20()
     test_ranked_hbar_grows_taller_with_n()

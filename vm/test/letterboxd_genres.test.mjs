@@ -20,6 +20,7 @@ import {
   letterboxdUndatedKeyboard,
   letterboxdYesNoKeyboard,
   formatLetterboxdSettingsSummary,
+  LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE,
   parseLetterboxdCallback,
   parseLetterboxdCommand,
   parseLetterboxdSettingsSummary,
@@ -292,6 +293,8 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.match(comedy.messages[0].text, /<b>Show Comedy in the genre tops\?<\/b>/);
   assert.match(keywords.messages[0].text, /<b>Exclude keywords from watch-count tops\?<\/b>/);
   assert.match(search.messages[0].text, /<b>Add search keywords\?<\/b>/);
+  assert.match(search.messages[0].text, /Default is no lists/);
+  assert.doesNotMatch(search.messages[0].text, /Not the same as exclude/);
   assert.match(period.messages[0].text, /<b>Full period or a custom range\?<\/b>/);
   assert.equal(skip.state.step, "search");
   assert.equal(skip.state.includeUSA, true);
@@ -410,7 +413,7 @@ test("isZipDocument and file_id", () => {
   assert.equal(normalizeTelegramFileId("../x"), "");
 });
 
-test("ack summary lists rewatch averages USA English Drama Comedy exclude and search keywords", () => {
+test("ack summary folds USA English Drama Comedy into Exclude with keywords", () => {
   const text = letterboxdAckText("lb-1", {
     topN: 20,
     minRated: 3,
@@ -423,14 +426,15 @@ test("ack summary lists rewatch averages USA English Drama Comedy exclude and se
     searchKeywords: ["Elijah Wood"],
   });
   assert.match(text, /Rewatches in averages: yes/);
-  assert.match(text, /USA: yes/);
-  assert.match(text, /English: no/);
-  assert.match(text, /Drama: no/);
-  assert.match(text, /Comedy: yes/);
-  assert.match(text, /Keyword exclusions: "Wood", "2001"/);
-  assert.match(text, /Search keywords: "Elijah Wood"/);
+  assert.match(text, /Exclude: English, Drama, "Wood", "2001"/);
+  assert.match(text, /Search: "Elijah Wood"/);
+  assert.doesNotMatch(text, /USA:\s*(yes|no)/);
+  assert.doesNotMatch(text, /English:\s*(yes|no)/);
+  assert.match(text, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
   const defaults = letterboxdAckText("lb-2", {});
   assert.match(defaults, /Rewatches in averages: no/);
+  assert.match(defaults, /Exclude: none/);
+  assert.match(defaults, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
 });
 
 test("settings summary parser finds paragraph in noisy text and round-trips", () => {
@@ -450,8 +454,10 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   };
   const summary = formatLetterboxdSettingsSummary(options);
   assert.match(summary, /^Tops: 30\. Threshold: 5\./);
+  assert.match(summary, /Exclude: USA, Drama, "Wood", "2001"/);
   assert.match(summary, /Period: 2021-01-01 — 2022-06-30\./);
   assert.match(summary, /No diary date: yes\./);
+  assert.match(summary, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
   const noisy =
     "Here is my old ack:\n\nZIP received. Building…\n\n" +
     summary +
@@ -474,8 +480,8 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   assert.equal(formatLetterboxdSettingsSummary(parsed), summary);
 
   const fullLine =
-    "Tops: 20. Threshold: 3. Rewatches in averages: no. USA: yes. English: yes. " +
-    "Drama: yes. Comedy: yes. Keyword exclusions: none. Search keywords: none. Period: full.";
+    "Tops: 20. Threshold: 3. Rewatches in averages: no. " +
+    "Exclude: none. Search: none. Period: full.";
   assert.deepEqual(parseLetterboxdSettingsSummary(`noise ${fullLine} trailing`), {
     topN: 20,
     minRated: 3,
@@ -490,6 +496,65 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     dateTo: "",
     includeUndated: false,
   });
+
+  // Flags-only Exclude (Comedy include stays on → omitted).
+  assert.deepEqual(
+    parseLetterboxdSettingsSummary(
+      "Tops: 20. Threshold: 4. Rewatches in averages: no. " +
+        "Exclude: USA, English, Drama. Search: none. Period: full.",
+    ),
+    {
+      topN: 20,
+      minRated: 4,
+      includeRewatchInAverages: false,
+      includeUSA: false,
+      includeEnglish: false,
+      includeDrama: false,
+      includeComedy: true,
+      excludeKeywords: [],
+      searchKeywords: [],
+      dateFrom: "",
+      dateTo: "",
+      includeUndated: false,
+    },
+  );
+
+  // Legacy separate USA:/English: fields + Keyword exclusions still parse.
+  const legacyLine =
+    "Tops: 20. Threshold: 3. Rewatches in averages: no. USA: yes. English: yes. " +
+    "Drama: yes. Comedy: yes. Keyword exclusions: none. Search keywords: none. Period: full.";
+  assert.deepEqual(parseLetterboxdSettingsSummary(legacyLine), {
+    topN: 20,
+    minRated: 3,
+    includeRewatchInAverages: false,
+    includeUSA: true,
+    includeEnglish: true,
+    includeDrama: true,
+    includeComedy: true,
+    excludeKeywords: [],
+    searchKeywords: [],
+    dateFrom: "",
+    dateTo: "",
+    includeUndated: false,
+  });
+
+  const legacyFiltered =
+    "Tops: 20. Threshold: 3. Rewatches in averages: no. USA: no. English: no. " +
+    'Drama: yes. Comedy: yes. Exclude: "Wood". Search: none. Period: full.';
+  assert.deepEqual(parseLetterboxdSettingsSummary(legacyFiltered), {
+    topN: 20,
+    minRated: 3,
+    includeRewatchInAverages: false,
+    includeUSA: false,
+    includeEnglish: false,
+    includeDrama: true,
+    includeComedy: true,
+    excludeKeywords: ["Wood"],
+    searchKeywords: [],
+    dateFrom: "",
+    dateTo: "",
+    includeUndated: false,
+  });
 });
 
 test("settings summary parser rejects missing or malformed text", () => {
@@ -497,15 +562,15 @@ test("settings summary parser rejects missing or malformed text", () => {
   assert.equal(parseLetterboxdSettingsSummary("Tops: 20. Period: full."), null);
   assert.equal(
     parseLetterboxdSettingsSummary(
-      "Tops: 999. Threshold: 3. Rewatches in averages: no. USA: yes. English: yes. " +
-        "Drama: yes. Comedy: yes. Keyword exclusions: none. Search keywords: none. Period: full.",
+      "Tops: 999. Threshold: 3. Rewatches in averages: no. " +
+        "Exclude: none. Search: none. Period: full.",
     ),
     null,
   );
   assert.equal(
     parseLetterboxdSettingsSummary(
-      "Tops: 20. Threshold: 3. Rewatches in averages: maybe. USA: yes. English: yes. " +
-        "Drama: yes. Comedy: yes. Keyword exclusions: none. Search keywords: none. Period: full.",
+      "Tops: 20. Threshold: 3. Rewatches in averages: maybe. " +
+        "Exclude: none. Search: none. Period: full.",
     ),
     null,
   );
@@ -650,8 +715,8 @@ test("search keyword HTML lists sections by match site with watch ratings", () =
   assert.match(chunks[0], /<b>Search keyword: Elijah Wood<\/b>/);
   assert.match(chunks[0], /2 films/);
   // Sections in fixed order; genre before actor. Eternal appears under both.
-  // ♥ (U+2665) and NOTE (U+1F5C8 + FE0E) after year before colon when set.
-  const note = "\u{1F5C8}\uFE0E";
+  // ♥ (U+2665) and ❝ (U+275D, no VS15) after year before colon when set.
+  const reviewMark = "\u275D";
   assert.match(
     chunks[0],
     /<b>genre<\/b>\n1\. Eternal Sunshine of the Spotless Mind \(2004\): 5, —/,
@@ -659,7 +724,7 @@ test("search keyword HTML lists sections by match site with watch ratings", () =
   assert.match(
     chunks[0],
     new RegExp(
-      `<b>actor</b>\\n1\\. The Lord of the Rings: The Fellowship of the Ring \\(2001\\) ♥ ${note}: 5\\n2\\. Eternal Sunshine of the Spotless Mind \\(2004\\): 5, —`,
+      `<b>actor</b>\\n1\\. The Lord of the Rings: The Fellowship of the Ring \\(2001\\) ♥ ${reviewMark}: 5\\n2\\. Eternal Sunshine of the Spotless Mind \\(2004\\): 5, —`,
     ),
   );
   assert.doesNotMatch(chunks[0], /\(2004\) ♥/);

@@ -313,6 +313,37 @@ function formatKeywordSummaryList(words) {
   return words.length ? words.map((word) => `"${word}"`).join(", ") : "none";
 }
 
+/** Fixed-order count-top filters listed under Exclude when they are turned off. */
+const EXCLUDE_SUMMARY_FLAGS = [
+  { label: "USA", key: "includeUSA" },
+  { label: "English", key: "includeEnglish" },
+  { label: "Drama", key: "includeDrama" },
+  { label: "Comedy", key: "includeComedy" },
+];
+
+const EXCLUDE_SUMMARY_FLAG_KEYS = Object.fromEntries(
+  EXCLUDE_SUMMARY_FLAGS.map(({ label, key }) => [label.toLowerCase(), key]),
+);
+
+/**
+ * Exclude clause value: omitted include-filters (USA/English/Drama/Comedy) then
+ * quoted keywords. `none` when nothing is filtered out.
+ */
+function formatExcludeSummaryList(opts) {
+  const parts = [];
+  for (const { label, key } of EXCLUDE_SUMMARY_FLAGS) {
+    if (!opts[key]) parts.push(label);
+  }
+  for (const word of opts.excludeKeywords) {
+    parts.push(`"${word}"`);
+  }
+  return parts.length ? parts.join(", ") : "none";
+}
+
+/** Footnote under the Tops/…/Period paragraph (English bot copy). */
+export const LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE =
+  "You can paste this summary into Paste settings on a later run.";
+
 /** Compact settings paragraph used in the ZIP ack and Paste settings mode. */
 export function formatLetterboxdSettingsSummary(options) {
   const opts = normalizeLetterboxdOptions(options);
@@ -323,17 +354,21 @@ export function formatLetterboxdSettingsSummary(options) {
   return (
     `Tops: ${opts.topN}. Threshold: ${opts.minRated}. ` +
     `Rewatches in averages: ${opts.includeRewatchInAverages ? "yes" : "no"}. ` +
-    `USA: ${opts.includeUSA ? "yes" : "no"}. English: ${opts.includeEnglish ? "yes" : "no"}. ` +
-    `Drama: ${opts.includeDrama ? "yes" : "no"}. Comedy: ${opts.includeComedy ? "yes" : "no"}. ` +
-    `Keyword exclusions: ${formatKeywordSummaryList(opts.excludeKeywords)}. ` +
-    `Search keywords: ${formatKeywordSummaryList(opts.searchKeywords)}. ` +
+    `Exclude: ${formatExcludeSummaryList(opts)}. ` +
+    `Search: ${formatKeywordSummaryList(opts.searchKeywords)}. ` +
     `Period: ${period}.` +
-    undated
+    undated +
+    `\n${LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE}`
   );
 }
 
+// Current shape: flags + keywords live under Exclude (no separate USA:/English: fields).
 const SETTINGS_SUMMARY_RE =
-  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*USA:\s*(yes|no)\.\s*English:\s*(yes|no)\.\s*Drama:\s*(yes|no)\.\s*Comedy:\s*(yes|no)\.\s*Keyword exclusions:\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Search keywords:\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
+  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
+
+// Legacy: separate USA/English/Drama/Comedy yes/no fields + keyword-only Exclude.
+const SETTINGS_SUMMARY_LEGACY_RE =
+  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*USA:\s*(yes|no)\.\s*English:\s*(yes|no)\.\s*Drama:\s*(yes|no)\.\s*Comedy:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
 
 const NO_DIARY_DATE_RE = /No diary date:\s*(yes|no)\./i;
 
@@ -350,21 +385,42 @@ function parseQuotedKeywordList(raw) {
 }
 
 /**
- * Locate and parse a settings summary paragraph (from formatLetterboxdSettingsSummary)
- * inside arbitrary surrounding text. Returns normalized options, or null.
+ * Parse Exclude value: bare USA/English/Drama/Comedy mean those include-flags
+ * are off; quoted tokens are exclude keywords. `none` → all includes on, no keywords.
  */
-export function parseLetterboxdSettingsSummary(text) {
-  const src = String(text || "");
-  const match = src.match(SETTINGS_SUMMARY_RE);
-  if (!match) return null;
-  const topN = Number(match[1]);
-  const minRated = Number(match[2]);
-  if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
-  if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
-  if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
+function parseExcludeSummaryList(raw) {
+  const value = String(raw || "").trim();
+  const out = {
+    includeUSA: true,
+    includeEnglish: true,
+    includeDrama: true,
+    includeComedy: true,
+    excludeKeywords: [],
+  };
+  if (!value || /^none$/i.test(value)) return out;
+  // Consume optional commas between tokens so quoted keywords keep their quotes.
+  const re = /\s*(?:"([^"]*)"|([^,",]+))\s*(?:,|$)/g;
+  let match;
+  while ((match = re.exec(value))) {
+    if (match[1] != null) {
+      if (match[1]) out.excludeKeywords.push(match[1]);
+      continue;
+    }
+    const token = String(match[2] || "").trim();
+    if (!token) continue;
+    const flagKey = EXCLUDE_SUMMARY_FLAG_KEYS[token.toLowerCase()];
+    if (flagKey) {
+      out[flagKey] = false;
+    } else {
+      out.excludeKeywords.push(token);
+    }
+  }
+  out.excludeKeywords = normalizeExcludeKeywords(out.excludeKeywords);
+  return out;
+}
 
-  const yesNo = (value) => String(value).toLowerCase() === "yes";
-  const periodRaw = String(match[10] || "").trim();
+function parsePeriodAndUndated(src, match, periodGroupIndex, yesNo) {
+  const periodRaw = String(match[periodGroupIndex] || "").trim();
   let dateFrom = "";
   let dateTo = "";
   let includeUndated = false;
@@ -377,20 +433,63 @@ export function parseLetterboxdSettingsSummary(text) {
     const undated = afterPeriod.match(NO_DIARY_DATE_RE);
     if (undated) includeUndated = yesNo(undated[1]);
   }
+  return { dateFrom, dateTo, includeUndated };
+}
+
+/**
+ * Locate and parse a settings summary paragraph (from formatLetterboxdSettingsSummary)
+ * inside arbitrary surrounding text. Returns normalized options, or null.
+ * Accepts the current Exclude shape and legacy USA:/Keyword exclusions: forms.
+ */
+export function parseLetterboxdSettingsSummary(text) {
+  const src = String(text || "");
+  const yesNo = (value) => String(value).toLowerCase() === "yes";
+
+  const current = src.match(SETTINGS_SUMMARY_RE);
+  if (current) {
+    const topN = Number(current[1]);
+    const minRated = Number(current[2]);
+    if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
+    if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
+    if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
+    const period = parsePeriodAndUndated(src, current, 6, yesNo);
+    if (!period) return null;
+    const exclude = parseExcludeSummaryList(current[4]);
+    return normalizeLetterboxdOptions({
+      topN,
+      minRated,
+      includeRewatchInAverages: yesNo(current[3]),
+      includeUSA: exclude.includeUSA,
+      includeEnglish: exclude.includeEnglish,
+      includeDrama: exclude.includeDrama,
+      includeComedy: exclude.includeComedy,
+      excludeKeywords: exclude.excludeKeywords,
+      searchKeywords: parseQuotedKeywordList(current[5]),
+      ...period,
+    });
+  }
+
+  const legacy = src.match(SETTINGS_SUMMARY_LEGACY_RE);
+  if (!legacy) return null;
+  const topN = Number(legacy[1]);
+  const minRated = Number(legacy[2]);
+  if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
+  if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
+  if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
+  const period = parsePeriodAndUndated(src, legacy, 10, yesNo);
+  if (!period) return null;
 
   return normalizeLetterboxdOptions({
     topN,
     minRated,
-    includeRewatchInAverages: yesNo(match[3]),
-    includeUSA: yesNo(match[4]),
-    includeEnglish: yesNo(match[5]),
-    includeDrama: yesNo(match[6]),
-    includeComedy: yesNo(match[7]),
-    excludeKeywords: parseQuotedKeywordList(match[8]),
-    searchKeywords: parseQuotedKeywordList(match[9]),
-    dateFrom,
-    dateTo,
-    includeUndated,
+    includeRewatchInAverages: yesNo(legacy[3]),
+    includeUSA: yesNo(legacy[4]),
+    includeEnglish: yesNo(legacy[5]),
+    includeDrama: yesNo(legacy[6]),
+    includeComedy: yesNo(legacy[7]),
+    excludeKeywords: parseQuotedKeywordList(legacy[8]),
+    searchKeywords: parseQuotedKeywordList(legacy[9]),
+    ...period,
   });
 }
 
@@ -880,7 +979,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Add search keywords?",
-        "Optional. After all chart PNGs, each search keyword gets a text list of every catalog film where it matches film metadata (genre, director, actor, studio, country, language, or release year). Not the same as exclude keywords, which only hide chart rows. Default is no lists.",
+        "Optional. After all chart PNGs, each search keyword gets a text list of every catalog film where it matches film metadata (genre, director, actor, studio, country, language, or release year). Default is no lists.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:search", "no"),
     };
