@@ -100,6 +100,8 @@ export const LETTERBOXD_TOP_N_MAX = 100;
 export const LETTERBOXD_MIN_RATED_DEFAULT = 3;
 export const LETTERBOXD_MIN_RATED_MIN = 1;
 export const LETTERBOXD_MIN_RATED_MAX = 50;
+export const LETTERBOXD_EXCLUDE_KEYWORDS_MAX = 20;
+export const LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN = 40;
 
 export function defaultLetterboxdOptions() {
   return {
@@ -109,10 +111,37 @@ export function defaultLetterboxdOptions() {
     includeEnglish: true,
     includeDrama: true,
     includeComedy: true,
+    excludeKeywords: [],
     dateFrom: "",
     dateTo: "",
     includeUndated: false,
   };
+}
+
+export function normalizeExcludeKeywords(value) {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value || "")
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    let word = String(item || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!word) continue;
+    if (word.length > LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN) {
+      word = word.slice(0, LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN).trimEnd();
+    }
+    const key = word.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(word);
+    if (out.length >= LETTERBOXD_EXCLUDE_KEYWORDS_MAX) break;
+  }
+  return out;
 }
 
 function clampInt(value, min, max, fallback) {
@@ -134,6 +163,7 @@ export function normalizeLetterboxdOptions(options) {
     includeEnglish: src.includeEnglish == null ? true : Boolean(src.includeEnglish),
     includeDrama: src.includeDrama == null ? true : Boolean(src.includeDrama),
     includeComedy: src.includeComedy == null ? true : Boolean(src.includeComedy),
+    excludeKeywords: normalizeExcludeKeywords(src.excludeKeywords),
     dateFrom: windowOk ? dateFrom : "",
     dateTo: windowOk ? dateTo : "",
     includeUndated: windowOk ? Boolean(src.includeUndated) : false,
@@ -153,6 +183,9 @@ export function encodeAwaitLetterboxd(state = {}) {
   if (state.includeEnglish != null) out.includeEnglish = Boolean(state.includeEnglish);
   if (state.includeDrama != null) out.includeDrama = Boolean(state.includeDrama);
   if (state.includeComedy != null) out.includeComedy = Boolean(state.includeComedy);
+  if (Array.isArray(state.excludeKeywords) && state.excludeKeywords.length) {
+    out.excludeKeywords = normalizeExcludeKeywords(state.excludeKeywords);
+  }
   if (state.dateFrom) out.dateFrom = String(state.dateFrom);
   if (state.dateTo) out.dateTo = String(state.dateTo);
   if (state.includeUndated != null) out.includeUndated = Boolean(state.includeUndated);
@@ -180,6 +213,9 @@ export function decodeAwaitLetterboxd(raw) {
       includeEnglish: parsed.includeEnglish == null ? null : Boolean(parsed.includeEnglish),
       includeDrama: parsed.includeDrama == null ? null : Boolean(parsed.includeDrama),
       includeComedy: parsed.includeComedy == null ? null : Boolean(parsed.includeComedy),
+      excludeKeywords: Array.isArray(parsed.excludeKeywords)
+        ? normalizeExcludeKeywords(parsed.excludeKeywords)
+        : [],
       dateFrom: String(parsed.dateFrom || ""),
       dateTo: String(parsed.dateTo || ""),
       includeUndated: parsed.includeUndated == null ? null : Boolean(parsed.includeUndated),
@@ -246,12 +282,16 @@ export function letterboxdAckText(jobId, options) {
   const undated = opts.dateFrom
     ? `\nNo diary date: ${opts.includeUndated ? "yes" : "no"}.`
     : "";
+  const keywords = opts.excludeKeywords.length
+    ? opts.excludeKeywords.map((word) => `"${word}"`).join(", ")
+    : "none";
   return (
     "ZIP received. Building Letterboxd charts with GitHub Actions — PNGs will arrive in this chat " +
     "(calendar, extra stats, genres).\n\n" +
     `Tops: ${opts.topN}. Threshold: ${opts.minRated}. ` +
     `USA: ${opts.includeUSA ? "yes" : "no"}. English: ${opts.includeEnglish ? "yes" : "no"}. ` +
     `Drama: ${opts.includeDrama ? "yes" : "no"}. Comedy: ${opts.includeComedy ? "yes" : "no"}. ` +
+    `Keyword exclusions: ${keywords}. ` +
     `Period: ${period}.` +
     undated +
     `\n\nid: ${jobId}`
@@ -571,6 +611,14 @@ export function letterboxdUndatedKeyboard() {
   );
 }
 
+export function letterboxdKeywordsKeyboard(hasWords = false) {
+  const rows = [[button("Done", "lb:kw:done")]];
+  if (!hasWords) {
+    rows.push([button("Default: none", "lb:kw:done")]);
+  }
+  return { inline_keyboard: rows };
+}
+
 function htmlEscape(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -591,7 +639,7 @@ export function letterboxdModePrompt() {
     text: [
       "<b>How should the charts be built?</b>",
       "",
-      "ZIP received. Default builds the usual set right away. Customize sets the top size, countries, language, and dates.",
+      "ZIP received. Default builds the usual set right away. Customize sets the top size, threshold, optional exclusions, and dates.",
       "",
       "Buttons below, or reply with text. Cancel with /stop.",
     ].join("\n"),
@@ -621,6 +669,15 @@ function promptFor(step, state, now = new Date()) {
         "3",
       ),
       reply_markup: letterboxdMinKeyboard(),
+    };
+  }
+  if (step === "exclusions") {
+    return {
+      text: choicePrompt(
+        "Remove some rows from the watch-count tops?",
+        "Yes opens USA, English, Drama, Comedy, and custom keyword exclusions for count / watches charts only. Average-rating tops stay as they are. No keeps every row (same as including USA, English, Drama, and Comedy and adding no keywords).",
+      ),
+      reply_markup: letterboxdYesNoKeyboard("lb:excl", "no"),
     };
   }
   if (step === "usa") {
@@ -657,6 +714,26 @@ function promptFor(step, state, now = new Date()) {
         "Comedy is often near the top. No removes it from the genre charts.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:com"),
+    };
+  }
+  if (step === "keywords") {
+    const words = normalizeExcludeKeywords(state.excludeKeywords);
+    const listed = words.length
+      ? `Already added (${words.length}/${LETTERBOXD_EXCLUDE_KEYWORDS_MAX}): ${words
+          .map((word) => htmlEscape(word))
+          .join(", ")}.`
+      : `None yet. Up to ${LETTERBOXD_EXCLUDE_KEYWORDS_MAX} words, ${LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN} characters each.`;
+    return {
+      text: [
+        "<b>Exclude keywords from watch-count tops?</b>",
+        "",
+        "Send one keyword per message: an actor, director, studio, genre, language, country, or release year (for example 2001). Matching is case-insensitive against the row name on the chart. Watch-year / period filtering stays on the date step.",
+        "",
+        listed,
+        "",
+        'When finished, tap Done. Or send "done".',
+      ].join("\n"),
+      reply_markup: letterboxdKeywordsKeyboard(words.length > 0),
     };
   }
   if (step === "period") {
@@ -717,10 +794,12 @@ export function parseLetterboxdCallback(data) {
   if (match) return { step: "top_n", value: Number(match[1]) };
   match = raw.match(/^lb:m:(3|5|10)$/);
   if (match) return { step: "min_rated", value: Number(match[1]) };
+  if (raw === "lb:excl:1" || raw === "lb:excl:0") return { step: "exclusions", value: raw.endsWith("1") };
   if (raw === "lb:usa:1" || raw === "lb:usa:0") return { step: "usa", value: raw.endsWith("1") };
   if (raw === "lb:en:1" || raw === "lb:en:0") return { step: "english", value: raw.endsWith("1") };
   if (raw === "lb:drama:1" || raw === "lb:drama:0") return { step: "drama", value: raw.endsWith("1") };
   if (raw === "lb:com:1" || raw === "lb:com:0") return { step: "comedy", value: raw.endsWith("1") };
+  if (raw === "lb:kw:done") return { step: "keywords", choice: "done" };
   if (raw === "lb:span") return { step: "period", choice: "full" };
   if (raw === "lb:rng") return { step: "period", choice: "custom" };
   if (raw === "lb:y:1" || raw === "lb:y:3" || raw === "lb:y:5") {
@@ -815,7 +894,27 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
   if (step === "min_rated") {
     const value = kind === "callback" ? input.value : parseBounded(input.text, LETTERBOXD_MIN_RATED_MIN, LETTERBOXD_MIN_RATED_MAX);
     if (value == null) return retry(state, "Need a number from 1 to 50. Buttons: 3, 5, 10. The report has not started.");
-    return go({ ...state, minRated: value }, "usa", now);
+    return go({ ...state, minRated: value }, "exclusions", now);
+  }
+  if (step === "exclusions") {
+    const value = kind === "callback" ? input.value : parseYesNoText(input.text);
+    if (value == null) return retry(state, "Need yes or no. The report has not started.");
+    if (!value) {
+      // No = keep everything: include toggles stay yes, no custom keywords.
+      return go(
+        {
+          ...state,
+          includeUSA: true,
+          includeEnglish: true,
+          includeDrama: true,
+          includeComedy: true,
+          excludeKeywords: [],
+        },
+        "period",
+        now,
+      );
+    }
+    return go({ ...state, excludeKeywords: normalizeExcludeKeywords(state.excludeKeywords) }, "usa", now);
   }
   if (step === "usa") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
@@ -835,7 +934,46 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
   if (step === "comedy") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
     if (value == null) return retry(state, "Need yes or no. The report has not started.");
-    return go({ ...state, includeComedy: value }, "period", now);
+    return go({ ...state, includeComedy: value, excludeKeywords: normalizeExcludeKeywords(state.excludeKeywords) }, "keywords", now);
+  }
+  if (step === "keywords") {
+    const done =
+      (kind === "callback" && input.choice === "done") ||
+      (kind === "text" && ["done", "готово", "достаточно"].includes(normReply(input.text)));
+    if (done) {
+      return go(
+        { ...state, excludeKeywords: normalizeExcludeKeywords(state.excludeKeywords) },
+        "period",
+        now,
+      );
+    }
+    if (kind === "callback") {
+      return retry(state, 'Need a keyword, or tap Done. The report has not started.', now);
+    }
+    const word = String(input.text || "").replace(/\s+/g, " ").trim();
+    if (!word) {
+      return retry(state, "Send a keyword, or tap Done. The report has not started.", now);
+    }
+    if (word.length > LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN) {
+      return retry(
+        state,
+        `Each keyword is at most ${LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN} characters. Shorten it, or tap Done.`,
+        now,
+      );
+    }
+    const current = normalizeExcludeKeywords(state.excludeKeywords);
+    if (current.length >= LETTERBOXD_EXCLUDE_KEYWORDS_MAX) {
+      return retry(
+        state,
+        `At most ${LETTERBOXD_EXCLUDE_KEYWORDS_MAX} keywords. Tap Done to continue.`,
+        now,
+      );
+    }
+    const next = normalizeExcludeKeywords([...current, word]);
+    if (next.length === current.length) {
+      return retry(state, "That keyword is already on the list. Send another, or tap Done.", now);
+    }
+    return go({ ...state, excludeKeywords: next }, "keywords", now);
   }
   if (step === "period") {
     const choice = kind === "callback" ? input.choice : parsePeriodText(input.text);
@@ -907,6 +1045,7 @@ export function buildLetterboxdDispatch({ repo, workflow, ref, jobId, chatId, fi
         include_english: opts.includeEnglish ? "true" : "false",
         include_drama: opts.includeDrama ? "true" : "false",
         include_comedy: opts.includeComedy ? "true" : "false",
+        exclude_keywords: opts.excludeKeywords.join(","),
         date_from: opts.dateFrom,
         date_to: opts.dateTo,
         include_undated: opts.includeUndated ? "true" : "false",

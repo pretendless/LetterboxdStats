@@ -46,6 +46,7 @@ from letterboxd_options import (  # noqa: E402
     is_drama_genre,
     is_english_language,
     is_usa_country,
+    label_matches_exclude_keywords,
     rated_gate_phrase,
     read_chart_options,
 )
@@ -64,6 +65,7 @@ from letterboxd_top_charts import (  # noqa: E402
     TOP_N_DEFAULT,
     chart_diary_entity_stacked,
     chart_rating_hbar,
+    count_avg_text_style,
     display_lang,
 )
 
@@ -729,6 +731,7 @@ def chart_deep_count_tops(
     include_english=True,
     include_drama=True,
     include_comedy=True,
+    exclude_keywords=(),
 ) -> dict:
     """Watch-year stacked count charts for TMDB deep entities.
 
@@ -850,6 +853,7 @@ def chart_deep_count_tops(
             footer=footer,
             avg_by_name=maps.get(field),
             min_rated=min_rated,
+            exclude_keywords=exclude_keywords,
         )
     return made
 
@@ -1031,12 +1035,14 @@ def main():
     years = sorted(diary["Watched Date"].dt.year.dropna().astype(int).unique())
 
     # 1) Stacked yearly counts — diary only (need watch year).
+    exclude_keywords = tuple(opts.exclude_keywords or ())
     all_genres_diary = [
         g
         for genres in diary["Genre list"]
         for g in _filter_genre_names(
             genres, include_drama=opts.include_drama, include_comedy=opts.include_comedy
         )
+        if not label_matches_exclude_keywords(g, exclude_keywords)
     ]
     top_genres = [g for g, _ in Counter(all_genres_diary).most_common(12)]
     yearly = {}
@@ -1045,7 +1051,7 @@ def main():
         yearly[y] = {g: int(subset["Genre list"].apply(lambda gs: g in gs).sum()) for g in top_genres}
     fig, ax = plt.subplots(figsize=(15, 7))
     bottom = np.zeros(len(years))
-    colors = categorical_colors(len(top_genres))
+    colors = categorical_colors(len(top_genres)) if top_genres else []
     for idx, genre in enumerate(top_genres):
         vals = np.array([yearly[y][genre] for y in years])
         ax.bar(years, vals, bottom=bottom, label=genre, color=colors[idx], width=0.82)
@@ -1053,17 +1059,75 @@ def main():
     ax.set_title("Watches by genre and year")
     ax.set_xlabel("Watch year"); ax.set_ylabel("Watches (genres are summed)")
     ax.set_xticks(years); ax.tick_params(axis="x", rotation=45)
-    leg = ax.legend(
-        title="12 most common genres",
-        bbox_to_anchor=(1.02, 1),
-        loc="upper left",
-        labelcolor=FG,
-    )
-    if leg is not None and leg.get_title() is not None:
-        leg.get_title().set_color(FG)
+    if top_genres:
+        leg = ax.legend(
+            title="12 most common genres",
+            bbox_to_anchor=(1.02, 1),
+            loc="upper left",
+            labelcolor=FG,
+        )
+        if leg is not None and leg.get_title() is not None:
+            leg.get_title().set_color(FG)
     style_axes(ax)
+    # Count + mean diary rating above each watch-year stack.
+    year_means = {}
+    if "Rating" in diary.columns:
+        rated = diary[diary["Rating"].notna()].copy()
+        if not rated.empty:
+            rated = rated.assign(_wy=rated["Watched Date"].dt.year)
+            for wy, group in rated.groupby("_wy"):
+                year_means[int(wy)] = float(group["Rating"].mean())
+    ymax = float(bottom.max()) if len(bottom) else 1.0
+    ax.set_ylim(0, ymax * 1.18 if ymax else 1.0)
     fig.text(0.01, 0.01, footer, fontsize=7, color=FG)
     fig.tight_layout(rect=[0, 0.03, 0.84, 1])
+    pending = []
+    for xi, total, year in zip(years, bottom, years):
+        y_lab = float(total) + ymax * 0.02
+        count_artist = ax.text(
+            xi,
+            y_lab,
+            str(int(total)),
+            ha="left",
+            va="bottom",
+            fontsize=7,
+            color=FG,
+            fontweight="normal",
+            clip_on=False,
+        )
+        avg_text = f"{year_means[int(year)]:.2f}" if int(year) in year_means else "—"
+        style = count_avg_text_style(avg_text)
+        avg_artist = ax.text(
+            xi,
+            y_lab,
+            avg_text,
+            ha="left",
+            va="bottom",
+            fontsize=7,
+            color=style["color"],
+            fontweight=style["fontweight"],
+            path_effects=style["path_effects"],
+            clip_on=False,
+        )
+        pending.append((count_artist, avg_artist, y_lab))
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    for count_artist, avg_artist, y_lab in pending:
+        cb = count_artist.get_window_extent(renderer=renderer)
+        ab = avg_artist.get_window_extent(renderer=renderer)
+        total_w = cb.width + 4 + ab.width
+        anchor = ax.transData.transform(count_artist.get_position())
+        start = anchor[0] - total_w / 2
+
+        def _shift(artist, bbox, target_x0, y_data=y_lab):
+            origin = ax.transData.transform(artist.get_position())
+            moved = ax.transData.inverted().transform(
+                (origin[0] + (target_x0 - bbox.x0), origin[1])
+            )
+            artist.set_position((moved[0], y_data))
+
+        _shift(count_artist, cb, start)
+        _shift(avg_artist, ab, start + cb.width + 4)
     save_dark_figure(fig, "genre_counts_by_viewing_year.png")
     plt.close(fig)
 
@@ -1075,11 +1139,15 @@ def main():
     for _, row in catalog.iterrows():
         meta = cache.get(f"{row['Name']}|||{int(row['Year']) if pd.notna(row['Year']) else ''}", {})
         ry = meta.get("tmdb_release_year")
-        genres = _filter_genre_names(
-            meta.get("genres") or [],
-            include_drama=opts.include_drama,
-            include_comedy=opts.include_comedy,
-        )
+        genres = [
+            g
+            for g in _filter_genre_names(
+                meta.get("genres") or [],
+                include_drama=opts.include_drama,
+                include_comedy=opts.include_comedy,
+            )
+            if not label_matches_exclude_keywords(g, exclude_keywords)
+        ]
         if ry and genres:
             decade = (int(ry) // 10) * 10
             for genre in genres:
@@ -1088,8 +1156,14 @@ def main():
         [{"Decade": d, "Genre": g, "Views": n} for (d, g), n in release_decades.items()]
     )
     if not decade_df.empty:
-        common = decade_df.groupby("Genre")["Views"].sum().nlargest(10).index
-        p = decade_df[decade_df["Genre"].isin(common)].pivot_table(index="Decade", columns="Genre", values="Views", aggfunc="sum", fill_value=0).sort_index()
+        common = [
+            g
+            for g in decade_df.groupby("Genre")["Views"].sum().nlargest(10).index
+            if not label_matches_exclude_keywords(g, exclude_keywords)
+        ]
+        p = decade_df[decade_df["Genre"].isin(common)].pivot_table(
+            index="Decade", columns="Genre", values="Views", aggfunc="sum", fill_value=0
+        ).sort_index()
         fig, ax = plt.subplots(figsize=(13, 6))
         p.plot(
             kind="bar",
@@ -1109,8 +1183,67 @@ def main():
         if leg is not None and leg.get_title() is not None:
             leg.get_title().set_color(FG)
         style_axes(ax)
+        totals = p.sum(axis=1)
+        decade_avgs = {}
+        rated_cat = ratings_for_catalog(catalog, film_ratings)
+        if not rated_cat.empty and "Year" in rated_cat.columns:
+            work = rated_cat[rated_cat["Year"].notna()].copy()
+            work["decade"] = work["Year"].map(lambda y: (int(y) // 10) * 10)
+            for decade, group in work.groupby("decade"):
+                decade_avgs[int(decade)] = float(group["Rating"].mean())
+        ymax = float(totals.max()) if len(totals) else 1.0
+        ax.set_ylim(0, ymax * 1.18 if ymax else 1.0)
         fig.text(0.01, 0.01, footer, fontsize=7, color=FG)
         fig.tight_layout(rect=[0, 0.03, 0.83, 1])
+        pending = []
+        for xi, (decade, total) in enumerate(totals.items()):
+            y_lab = float(total) + ymax * 0.02
+            count_artist = ax.text(
+                xi,
+                y_lab,
+                str(int(total)),
+                ha="left",
+                va="bottom",
+                fontsize=7,
+                color=FG,
+                fontweight="normal",
+                clip_on=False,
+            )
+            avg_text = (
+                f"{decade_avgs[int(decade)]:.2f}" if int(decade) in decade_avgs else "—"
+            )
+            style = count_avg_text_style(avg_text)
+            avg_artist = ax.text(
+                xi,
+                y_lab,
+                avg_text,
+                ha="left",
+                va="bottom",
+                fontsize=7,
+                color=style["color"],
+                fontweight=style["fontweight"],
+                path_effects=style["path_effects"],
+                clip_on=False,
+            )
+            pending.append((count_artist, avg_artist, y_lab))
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        for count_artist, avg_artist, y_lab in pending:
+            cb = count_artist.get_window_extent(renderer=renderer)
+            ab = avg_artist.get_window_extent(renderer=renderer)
+            total_w = cb.width + 4 + ab.width
+            anchor = ax.transData.transform(count_artist.get_position())
+            start = anchor[0] - total_w / 2
+
+            def _shift(artist, bbox, target_x0, y_data=y_lab):
+                origin = ax.transData.transform(artist.get_position())
+                moved = ax.transData.inverted().transform(
+                    (origin[0] + (target_x0 - bbox.x0), origin[1])
+                )
+                artist.set_position((moved[0], y_data))
+
+            _shift(count_artist, cb, start)
+            _shift(avg_artist, ab, start + cb.width + 4)
         save_dark_figure(fig, "genre_by_release_decade.png")
         plt.close(fig)
 
@@ -1176,6 +1309,7 @@ def main():
         include_english=opts.include_english,
         include_drama=opts.include_drama,
         include_comedy=opts.include_comedy,
+        exclude_keywords=opts.exclude_keywords,
     )
     rating_paths = {
         "average_rating_by_country": "average_rating_by_country.png",
@@ -1225,6 +1359,7 @@ def main():
         "include_english": bool(opts.include_english),
         "include_drama": bool(opts.include_drama),
         "include_comedy": bool(opts.include_comedy),
+        "exclude_keywords": list(opts.exclude_keywords or ()),
         "date_from": opts.date_from or "",
         "date_to": opts.date_to or "",
         "include_undated": bool(opts.include_undated and opts.has_window),

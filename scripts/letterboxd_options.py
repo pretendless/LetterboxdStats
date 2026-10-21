@@ -1,9 +1,13 @@
-"""Chart options for /letterboxd: top size, rating gate, USA/English/Drama/Comedy, watch window.
+"""Chart options for /letterboxd: top size, rating gate, exclusions, watch window.
 
 Wizard defaults (also the GitHub Actions defaults):
   top_n=20 (allowed 1–100), min_rated=3 (allowed 1–50),
   include USA, include English, include Drama, include Comedy,
+  no custom keyword exclusions,
   full diary span, undated films only on the full span.
+
+Optional keyword exclusions (and the nested USA/English/Drama/Comedy path)
+apply only to quantitative / count tops — never to average-rating tops.
 
 The wizard rejects anything outside 1–100 (a typo like 9999 never dispatches).
 This module clamps a manual workflow_dispatch into the same bounds. Chart
@@ -12,8 +16,9 @@ height grows with the row count; point sizes stay put.
 
 from __future__ import annotations
 
+import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from letterboxd_ratings import passes_rated_threshold
 
@@ -23,6 +28,8 @@ TOP_N_DEFAULT = 20
 MIN_RATED_MIN = 1
 MIN_RATED_MAX = 50
 MIN_RATED_DEFAULT = 3
+EXCLUDE_KEYWORDS_MAX = 20
+EXCLUDE_KEYWORD_MAX_LEN = 40
 
 _USA_NAMES = {
     "united states of america",
@@ -124,6 +131,68 @@ def format_count_avg_label(avg, rated, min_rated: int) -> str:
     return f"{avg_f:.2f}"
 
 
+def format_single_rating_label(avg) -> str:
+    """Avg for a single-film bar (rewatches): no multi-film rated gate."""
+    try:
+        avg_f = float(avg)
+    except (TypeError, ValueError):
+        return "—"
+    if not (avg_f > 0):
+        return "—"
+    return f"{avg_f:.2f}"
+
+
+def parse_exclude_keywords(value) -> tuple[str, ...]:
+    """Parse a comma-separated string or JSON list of exclusion keywords."""
+    if value is None:
+        return ()
+    if isinstance(value, (list, tuple)):
+        raw_items = [str(item) for item in value]
+    else:
+        text = str(value).strip()
+        if not text:
+            return ()
+        if text.startswith("["):
+            try:
+                parsed = json.loads(text)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                parsed = None
+            if isinstance(parsed, list):
+                raw_items = [str(item) for item in parsed]
+            else:
+                raw_items = [part.strip() for part in text.split(",")]
+        else:
+            raw_items = [part.strip() for part in text.split(",")]
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw_items:
+        word = " ".join(str(item or "").split()).strip()
+        if not word:
+            continue
+        if len(word) > EXCLUDE_KEYWORD_MAX_LEN:
+            word = word[:EXCLUDE_KEYWORD_MAX_LEN].rstrip()
+        key = word.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(word)
+        if len(out) >= EXCLUDE_KEYWORDS_MAX:
+            break
+    return tuple(out)
+
+
+def label_matches_exclude_keywords(label, keywords) -> bool:
+    """True when any keyword is a case-insensitive substring of the bar label."""
+    text = str(label or "").casefold()
+    if not text:
+        return False
+    for word in keywords or ():
+        needle = str(word or "").strip().casefold()
+        if needle and needle in text:
+            return True
+    return False
+
+
 def rated_gate_phrase(min_rated: int) -> str:
     return f"at least {int(min_rated)} rated films"
 
@@ -136,6 +205,7 @@ class ChartOptions:
     include_english: bool = True
     include_drama: bool = True
     include_comedy: bool = True
+    exclude_keywords: tuple[str, ...] = field(default_factory=tuple)
     date_from: str | None = None
     date_to: str | None = None
     include_undated: bool = False
@@ -173,6 +243,7 @@ def read_chart_options(env: dict | None = None) -> ChartOptions:
         include_english=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_ENGLISH"), True),
         include_drama=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_DRAMA"), True),
         include_comedy=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_COMEDY"), True),
+        exclude_keywords=parse_exclude_keywords(src.get("LETTERBOXD_EXCLUDE_KEYWORDS")),
         date_from=date_from,
         date_to=date_to,
         include_undated=include_undated,

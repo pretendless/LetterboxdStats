@@ -40,7 +40,11 @@ from letterboxd_export import (  # noqa: E402
     load_export,
     ratings_for_catalog,
 )
-from letterboxd_options import read_chart_options  # noqa: E402
+from letterboxd_options import (  # noqa: E402
+    format_single_rating_label,
+    label_matches_exclude_keywords,
+    read_chart_options,
+)
 from letterboxd_palette import (  # noqa: E402
     CONNECTOR,
     FG,
@@ -307,7 +311,7 @@ def year_colors(years: list[int], palette_years: list[int] | None = None):
 
 
 def stacked_counts(ax, categories: list[str], years: list[int], matrix: np.ndarray, colors: dict, ylabel: str):
-    """matrix shape: (len(years), len(categories))"""
+    """matrix shape: (len(years), len(categories)). Returns stack totals per category."""
     bottom = np.zeros(len(categories))
     x = np.arange(len(categories))
     for yi, year in enumerate(years):
@@ -320,6 +324,56 @@ def stacked_counts(ax, categories: list[str], years: list[int], matrix: np.ndarr
     ax.yaxis.grid(True, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     style_axes(ax)
+    return bottom
+
+
+def _place_count_avg_above_totals(fig, ax, totals, avg_labels, *, y_pad, fontsize=7) -> None:
+    """Count + mean centered above each stacked column total."""
+    pending = []
+    for xi, total, label in zip(range(len(totals)), totals, avg_labels):
+        y = float(total) + y_pad
+        count = ax.text(
+            xi,
+            y,
+            str(int(total)),
+            ha="left",
+            va="bottom",
+            fontsize=fontsize,
+            color=FG,
+            fontweight="normal",
+            clip_on=False,
+        )
+        style = count_avg_text_style(label)
+        avg = ax.text(
+            xi,
+            y,
+            label,
+            ha="left",
+            va="bottom",
+            fontsize=fontsize,
+            color=style["color"],
+            fontweight=style["fontweight"],
+            path_effects=style["path_effects"],
+            clip_on=False,
+        )
+        pending.append((count, avg, y))
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    gap = 4.0
+    for count, avg, y in pending:
+        cb = count.get_window_extent(renderer=renderer)
+        ab = avg.get_window_extent(renderer=renderer)
+        total_w = cb.width + gap + ab.width
+        anchor = ax.transData.transform(count.get_position())
+        start = anchor[0] - total_w / 2
+
+        def shift(artist, bbox, target_x0, y_data=y):
+            origin = ax.transData.transform(artist.get_position())
+            moved = ax.transData.inverted().transform((origin[0] + (target_x0 - bbox.x0), origin[1]))
+            artist.set_position((moved[0], y_data))
+
+        shift(count, cb, start)
+        shift(avg, ab, start + cb.width + gap)
 
 
 def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Watch year"):
@@ -356,6 +410,16 @@ def chart_weekday_month(df: pd.DataFrame, path: Path) -> None:
         week[yi, int(row["weekday"])] += 1
         month[yi, int(row["month"]) - 1] += 1
 
+    week_avgs = ["—"] * 7
+    month_avgs = ["—"] * 12
+    if "Rating" in df.columns:
+        rated = df[df["Rating"].notna()].copy()
+        if not rated.empty:
+            for wd, group in rated.groupby("weekday"):
+                week_avgs[int(wd)] = f"{float(group['Rating'].mean()):.2f}"
+            for mo, group in rated.groupby("month"):
+                month_avgs[int(mo) - 1] = f"{float(group['Rating'].mean()):.2f}"
+
     fig, axes = plt.subplots(2, 1, figsize=(14, 10), sharey=False)
     fig.suptitle(
         "Watches by weekday and month, split by year",
@@ -363,14 +427,24 @@ def chart_weekday_month(df: pd.DataFrame, path: Path) -> None:
         y=0.98,
     )
 
-    stacked_counts(axes[0], WEEKDAYS, years, week, colors, "Watch entries")
+    week_totals = stacked_counts(axes[0], WEEKDAYS, years, week, colors, "Watch entries")
     axes[0].set_title("Watches by weekday — stacked by year")
+    week_max = float(week_totals.max()) if len(week_totals) else 1.0
+    axes[0].set_ylim(0, week_max * 1.18 if week_max else 1.0)
 
-    stacked_counts(axes[1], MONTHS, years, month, colors, "Watch entries")
+    month_totals = stacked_counts(axes[1], MONTHS, years, month, colors, "Watch entries")
     axes[1].set_title("Watches by month — stacked by year")
+    month_max = float(month_totals.max()) if len(month_totals) else 1.0
+    axes[1].set_ylim(0, month_max * 1.18 if month_max else 1.0)
 
     add_watch_year_legend(fig, years, colors, title="Watch year")
     fig.tight_layout(rect=[0, 0, 0.9, 0.96])
+    _place_count_avg_above_totals(
+        fig, axes[0], week_totals, week_avgs, y_pad=week_max * 0.02
+    )
+    _place_count_avg_above_totals(
+        fig, axes[1], month_totals, month_avgs, y_pad=month_max * 0.02
+    )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
 
@@ -674,7 +748,7 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
     fig, axes = plt.subplots(2, 1, figsize=(14, 10), sharey=False)
     fig.suptitle("Letterboxd extra stats", fontsize=14, y=0.98)
 
-    stacked_counts(
+    decade_totals = stacked_counts(
         axes[0],
         decades,
         years,
@@ -683,9 +757,19 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
         "Watch entries",
     )
     axes[0].set_title("Films by release decade — color is watch year")
+    decade_avgs = ["—"] * len(decades)
+    if "Rating" in df.columns:
+        rated = df[df["Rating"].notna() & df["decade"].notna()].copy()
+        if not rated.empty:
+            means = rated.groupby("decade")["Rating"].mean()
+            for i, label in enumerate(decades):
+                if label in means.index:
+                    decade_avgs[i] = f"{float(means.loc[label]):.2f}"
+    decade_max = float(decade_totals.max()) if len(decade_totals) else 1.0
+    axes[0].set_ylim(0, decade_max * 1.18 if decade_max else 1.0)
 
     rating_labels = [f"{r:g}" for r in RATING_BINS]
-    stacked_counts(
+    rating_totals = stacked_counts(
         axes[1],
         rating_labels,
         years,
@@ -695,9 +779,22 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
     )
     axes[1].set_title("Rating distribution — color is watch year")
     axes[1].set_xlabel("Letterboxd rating")
+    # Each column is a rating bin — the mean is the bin itself when it has entries.
+    rating_avgs = [
+        f"{float(bin_v):.2f}" if float(total) > 0 else "—"
+        for bin_v, total in zip(RATING_BINS, rating_totals)
+    ]
+    rating_max = float(rating_totals.max()) if len(rating_totals) else 1.0
+    axes[1].set_ylim(0, rating_max * 1.18 if rating_max else 1.0)
 
     add_watch_year_legend(fig, years, colors, title="Watch year")
     fig.tight_layout(rect=[0, 0, 0.9, 0.96])
+    _place_count_avg_above_totals(
+        fig, axes[0], decade_totals, decade_avgs, y_pad=decade_max * 0.02
+    )
+    _place_count_avg_above_totals(
+        fig, axes[1], rating_totals, rating_avgs, y_pad=rating_max * 0.02
+    )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
 
@@ -1033,7 +1130,14 @@ def chart_average_rating_by_release_decade(
     )
 
 
-def chart_top_rewatches(df: pd.DataFrame, path: Path, limit: int = 20) -> bool:
+def chart_top_rewatches(
+    df: pd.DataFrame,
+    path: Path,
+    limit: int = 20,
+    *,
+    film_ratings: pd.DataFrame | None = None,
+    exclude_keywords: tuple[str, ...] | list[str] | None = None,
+) -> bool:
     """Horizontal stacked bars of rewatched films, colored by watch year."""
     names = df["Name"].fillna("").astype(str).str.strip()
     years_release = df["Year"] if "Year" in df.columns else pd.Series(dtype=float)
@@ -1048,24 +1152,61 @@ def chart_top_rewatches(df: pd.DataFrame, path: Path, limit: int = 20) -> bool:
         Name=("Name", "first"),
         Year=("Year", "first"),
     )
-    multi = grouped[grouped["count"] >= 2].sort_values("count", ascending=True).tail(limit)
-    if multi.empty:
+    keywords = tuple(exclude_keywords or ())
+    multi = grouped[grouped["count"] >= 2].sort_values("count", ascending=False)
+    kept_rows = []
+    for key_id, row in multi.iterrows():
+        year_val = row["Year"]
+        year_s = f" ({int(year_val)})" if pd.notna(year_val) else ""
+        title = str(row["Name"])
+        label = f"{title}{year_s}"
+        if label_matches_exclude_keywords(label, keywords) or label_matches_exclude_keywords(
+            title, keywords
+        ):
+            continue
+        kept_rows.append((key_id, row, label))
+        if len(kept_rows) >= limit:
+            break
+    if not kept_rows:
         return False
+    # Chart draws bottom→top; reverse so the most-watched sits at the top.
+    kept_rows = list(reversed(kept_rows))
 
-    keys = multi.index.tolist()
+    keys = [key_id for key_id, _, _ in kept_rows]
     all_years = sorted(df["Watched Date"].dt.year.dropna().astype(int).unique().tolist())
     years = sorted(work.loc[work["_key"].isin(keys), "watch_year"].unique().tolist())
     colors = year_colors(years, palette_years=all_years)
 
     labels = []
-    for key_id in keys:
-        row = multi.loc[key_id]
-        year_val = row["Year"]
-        year_s = f" ({int(year_val)})" if pd.notna(year_val) else ""
+    for _key_id, row, label in kept_rows:
         title = str(row["Name"])
         if len(title) > 42:
+            year_val = row["Year"]
+            year_s = f" ({int(year_val)})" if pd.notna(year_val) else ""
             title = title[:40] + "…"
-        labels.append(f"{title}{year_s}")
+            labels.append(f"{title}{year_s}")
+        else:
+            labels.append(label)
+
+    rating_lookup: dict[str, float] = {}
+    if film_ratings is not None and not film_ratings.empty:
+        catalog_keys = work.drop_duplicates(subset=["_key"])
+        rated = ratings_for_catalog(catalog_keys, film_ratings)
+        if rated is not None and not rated.empty:
+            rated = rated.copy()
+            rated["_key"] = film_name_year_key(rated)
+            for _, row in rated.iterrows():
+                try:
+                    rating_lookup[str(row["_key"])] = float(row["Rating"])
+                except (TypeError, ValueError):
+                    continue
+    elif "Rating" in work.columns:
+        rated_rows = work[work["Rating"].notna()].sort_values("Watched Date", kind="mergesort")
+        for _, row in rated_rows.iterrows():
+            try:
+                rating_lookup[str(row["_key"])] = float(row["Rating"])
+            except (TypeError, ValueError):
+                continue
 
     matrix = np.zeros((len(years), len(keys)), dtype=float)
     year_index = {y: i for i, y in enumerate(years)}
@@ -1073,8 +1214,10 @@ def chart_top_rewatches(df: pd.DataFrame, path: Path, limit: int = 20) -> bool:
     for _, row in work[work["_key"].isin(keys)].iterrows():
         matrix[year_index[int(row["watch_year"])], key_index[row["_key"]]] += 1
 
+    avg_labels = [format_single_rating_label(rating_lookup.get(key_id)) for key_id in keys]
+
     # Row pitch stays ~0.42 in so a longer rewatch list gets a taller figure.
-    fig, ax = plt.subplots(figsize=(10, max(4, len(labels) * 0.42)))
+    fig, ax = plt.subplots(figsize=(11, max(4, len(labels) * 0.42)))
     y = np.arange(len(labels))
     left = np.zeros(len(labels))
     for yi, year in enumerate(years):
@@ -1089,11 +1232,41 @@ def chart_top_rewatches(df: pd.DataFrame, path: Path, limit: int = 20) -> bool:
     ax.set_axisbelow(True)
     style_axes(ax)
     xmax = float(left.max()) if len(left) else 1.0
-    ax.set_xlim(0, xmax * 1.15)
+    ax.set_xlim(0, xmax * 1.36)
+    count_artists = []
     for yi, total in enumerate(left):
-        ax.text(total + xmax * 0.02, yi, str(int(total)), va="center", fontsize=9, color=FG)
+        count_artists.append(
+            ax.text(
+                total + xmax * 0.02,
+                yi,
+                str(int(total)),
+                va="center",
+                fontsize=9,
+                color=FG,
+                fontweight="normal",
+                clip_on=False,
+            )
+        )
     add_watch_year_legend(fig, years, colors, title="Watch year")
     fig.tight_layout(rect=[0, 0, 0.88, 1])
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    for artist, label in zip(count_artists, avg_labels):
+        bbox = artist.get_window_extent(renderer=renderer)
+        x_data, _y = ax.transData.inverted().transform((bbox.x1 + 10, bbox.y1))
+        style = count_avg_text_style(label)
+        ax.text(
+            x_data,
+            artist.get_position()[1],
+            label,
+            va="center",
+            ha="left",
+            fontsize=9,
+            color=style["color"],
+            fontweight=style["fontweight"],
+            path_effects=style["path_effects"],
+            clip_on=False,
+        )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
     return True
@@ -1149,7 +1322,13 @@ def main(argv: list[str] | None = None) -> int:
             span_start=span_start,
             span_end=span_end,
         )
-        made_rewatch = chart_top_rewatches(diary, Path("top_rewatches.png"), limit=opts.top_n)
+        made_rewatch = chart_top_rewatches(
+            diary,
+            Path("top_rewatches.png"),
+            limit=opts.top_n,
+            film_ratings=film_ratings,
+            exclude_keywords=opts.exclude_keywords,
+        )
         summary = build_diary_summary(
             diary,
             catalog=catalog,
@@ -1162,6 +1341,7 @@ def main(argv: list[str] | None = None) -> int:
         summary["date_to"] = opts.date_to or ""
         summary["include_undated"] = bool(opts.include_undated and opts.has_window)
         summary["watch_time_grain"] = grain
+        summary["exclude_keywords"] = list(opts.exclude_keywords or ())
         year_avgs = release_year_avg_lookup(ratings_for_catalog(catalog, film_ratings))
         made_release_count = chart_release_years_by_count(
             diary,
@@ -1169,6 +1349,7 @@ def main(argv: list[str] | None = None) -> int:
             top_n=opts.top_n,
             avg_by_name=year_avgs,
             min_rated=opts.min_rated,
+            exclude_keywords=opts.exclude_keywords,
         )
         made_release_rating = chart_release_years_by_rating(
             summary.get("top_rated_release_years") or [],
