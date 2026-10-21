@@ -56,7 +56,7 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 | Command | What it does |
 | --- | --- |
-| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom keywords), the watch period, and films with no diary date. |
+| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. |
 | `/start letterboxd` | The same wizard. This is what `https://t.me/lebxdbot?start=letterboxd` opens. |
 | `/stop` | Clears the wizard. If a chart run is already in GitHub Actions, it stops that run. |
 
@@ -68,8 +68,8 @@ On **Customize**, after top size and the rating-count threshold, the wizard asks
 
 | Choice | What happens |
 | --- | --- |
-| **No** (default) | Keep every row. Same as including USA, English, Drama, and Comedy, and adding no keywords. |
-| **Yes** | Ask the toggles below, then optional custom keywords, then the watch period. |
+| **No** (default) | Keep every row. Same as including USA, English, Drama, and Comedy, and adding no exclude keywords. Then ask about search keywords. |
+| **Yes** | Ask the toggles below, then optional exclude keywords, then search keywords, then the watch period. |
 
 Built-in toggles (only on the **Yes** branch):
 
@@ -77,9 +77,11 @@ Built-in toggles (only on the **Yes** branch):
 - **English** — drop English from the language watch top
 - **Drama** / **Comedy** — drop those genres from the genre watch charts
 
-Custom keywords come next. Send one word or phrase per message (actor, director, studio, genre, language, country, or **release year** such as `2001`). Matching is case-insensitive against the **row name on the chart**. Tap **Done** when finished. Keywords do **not** change the watch-year axis or the date-range step.
+**Exclude keywords** come next on the Yes branch. Send one word or phrase per message (actor, director, studio, genre, language, country, or **release year** such as `2001`). Matching is case-insensitive against the **row name on the chart**. Tap **Done** when finished. They do **not** change the watch-year axis or the date-range step.
 
 These exclusions apply only to **count / watches** tops (genres, countries, directors, actors, languages, studios, release years by watches, rewatches, and the stacked genre charts). **Average-rating** tops (higher / lower) stay unchanged.
+
+**Search keywords** are a separate optional step after exclusions (or after answering No to remove rows). They do not hide chart rows. If you add any, then **after every chart PNG** the bot sends a text list per search keyword: every catalog film (same period / undated rules as the charts) where that keyword is a case-insensitive substring of film metadata — genre, director, top-5 billed actor, studio, country, language, or **release year**. Each line is `Name (Year) (actor, director, …)` naming where it matched. Skip or add none → no lists. Cap is the same as exclude keywords (20 words, 40 characters each).
 
 Bar and column charts label each bar with the **count** and the **average rating** (a dash when the average is below the threshold or missing). Exceptions: the Letterboxd rating distribution in extra stats shows each bucket’s **percent of all ratings on that chart** (bold, two decimal places) plus the absolute count in parentheses (`NN.NN% (count)`; the rating is already the x-axis); Viewing pace and other non-bar pace charts stay unlabeled. Scatter/dot **Average rating by …** charts put the mean above the marker and the rated-film count in parentheses below it. **Most often in the diary** keeps diary-row counts, but its average tip is the mean over all rated diary watches of that film (including rewatches) — the only chart that does not use the unique Name+Year rating.
 

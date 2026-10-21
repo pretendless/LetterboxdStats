@@ -102,6 +102,8 @@ export const LETTERBOXD_MIN_RATED_MIN = 1;
 export const LETTERBOXD_MIN_RATED_MAX = 50;
 export const LETTERBOXD_EXCLUDE_KEYWORDS_MAX = 20;
 export const LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN = 40;
+export const LETTERBOXD_SEARCH_KEYWORDS_MAX = LETTERBOXD_EXCLUDE_KEYWORDS_MAX;
+export const LETTERBOXD_SEARCH_KEYWORD_MAX_LEN = LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN;
 
 export function defaultLetterboxdOptions() {
   return {
@@ -112,13 +114,14 @@ export function defaultLetterboxdOptions() {
     includeDrama: true,
     includeComedy: true,
     excludeKeywords: [],
+    searchKeywords: [],
     dateFrom: "",
     dateTo: "",
     includeUndated: false,
   };
 }
 
-export function normalizeExcludeKeywords(value) {
+function normalizeKeywordList(value, maxWords, maxLen) {
   const raw = Array.isArray(value)
     ? value
     : String(value || "")
@@ -132,16 +135,32 @@ export function normalizeExcludeKeywords(value) {
       .replace(/\s+/g, " ")
       .trim();
     if (!word) continue;
-    if (word.length > LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN) {
-      word = word.slice(0, LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN).trimEnd();
+    if (word.length > maxLen) {
+      word = word.slice(0, maxLen).trimEnd();
     }
     const key = word.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(word);
-    if (out.length >= LETTERBOXD_EXCLUDE_KEYWORDS_MAX) break;
+    if (out.length >= maxWords) break;
   }
   return out;
+}
+
+export function normalizeExcludeKeywords(value) {
+  return normalizeKeywordList(
+    value,
+    LETTERBOXD_EXCLUDE_KEYWORDS_MAX,
+    LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN,
+  );
+}
+
+export function normalizeSearchKeywords(value) {
+  return normalizeKeywordList(
+    value,
+    LETTERBOXD_SEARCH_KEYWORDS_MAX,
+    LETTERBOXD_SEARCH_KEYWORD_MAX_LEN,
+  );
 }
 
 function clampInt(value, min, max, fallback) {
@@ -164,6 +183,7 @@ export function normalizeLetterboxdOptions(options) {
     includeDrama: src.includeDrama == null ? true : Boolean(src.includeDrama),
     includeComedy: src.includeComedy == null ? true : Boolean(src.includeComedy),
     excludeKeywords: normalizeExcludeKeywords(src.excludeKeywords),
+    searchKeywords: normalizeSearchKeywords(src.searchKeywords),
     dateFrom: windowOk ? dateFrom : "",
     dateTo: windowOk ? dateTo : "",
     includeUndated: windowOk ? Boolean(src.includeUndated) : false,
@@ -185,6 +205,9 @@ export function encodeAwaitLetterboxd(state = {}) {
   if (state.includeComedy != null) out.includeComedy = Boolean(state.includeComedy);
   if (Array.isArray(state.excludeKeywords) && state.excludeKeywords.length) {
     out.excludeKeywords = normalizeExcludeKeywords(state.excludeKeywords);
+  }
+  if (Array.isArray(state.searchKeywords) && state.searchKeywords.length) {
+    out.searchKeywords = normalizeSearchKeywords(state.searchKeywords);
   }
   if (state.dateFrom) out.dateFrom = String(state.dateFrom);
   if (state.dateTo) out.dateTo = String(state.dateTo);
@@ -215,6 +238,9 @@ export function decodeAwaitLetterboxd(raw) {
       includeComedy: parsed.includeComedy == null ? null : Boolean(parsed.includeComedy),
       excludeKeywords: Array.isArray(parsed.excludeKeywords)
         ? normalizeExcludeKeywords(parsed.excludeKeywords)
+        : [],
+      searchKeywords: Array.isArray(parsed.searchKeywords)
+        ? normalizeSearchKeywords(parsed.searchKeywords)
         : [],
       dateFrom: String(parsed.dateFrom || ""),
       dateTo: String(parsed.dateTo || ""),
@@ -285,6 +311,9 @@ export function letterboxdAckText(jobId, options) {
   const keywords = opts.excludeKeywords.length
     ? opts.excludeKeywords.map((word) => `"${word}"`).join(", ")
     : "none";
+  const search = opts.searchKeywords.length
+    ? opts.searchKeywords.map((word) => `"${word}"`).join(", ")
+    : "none";
   return (
     "ZIP received. Building Letterboxd charts with GitHub Actions — PNGs will arrive in this chat " +
     "(calendar, extra stats, genres).\n\n" +
@@ -292,6 +321,7 @@ export function letterboxdAckText(jobId, options) {
     `USA: ${opts.includeUSA ? "yes" : "no"}. English: ${opts.includeEnglish ? "yes" : "no"}. ` +
     `Drama: ${opts.includeDrama ? "yes" : "no"}. Comedy: ${opts.includeComedy ? "yes" : "no"}. ` +
     `Keyword exclusions: ${keywords}. ` +
+    `Search keywords: ${search}. ` +
     `Period: ${period}.` +
     undated +
     `\n\nid: ${jobId}`
@@ -619,6 +649,14 @@ export function letterboxdKeywordsKeyboard(hasWords = false) {
   return { inline_keyboard: rows };
 }
 
+export function letterboxdSearchKeywordsKeyboard(hasWords = false) {
+  const rows = [[button("Done", "lb:sk:done")]];
+  if (!hasWords) {
+    rows.push([button("Default: none", "lb:sk:done")]);
+  }
+  return { inline_keyboard: rows };
+}
+
 function htmlEscape(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -639,7 +677,7 @@ export function letterboxdModePrompt() {
     text: [
       "<b>How should the charts be built?</b>",
       "",
-      "ZIP received. Default builds the usual set right away. Customize sets the top size, threshold, optional exclusions, and dates.",
+      "ZIP received. Default builds the usual set right away. Customize sets the top size, threshold, optional exclusions, optional search keywords, and dates.",
       "",
       "Buttons below, or reply with text. Cancel with /stop.",
     ].join("\n"),
@@ -727,13 +765,42 @@ function promptFor(step, state, now = new Date()) {
       text: [
         "<b>Exclude keywords from watch-count tops?</b>",
         "",
-        "Send one keyword per message: an actor, director, studio, genre, language, country, or release year (for example 2001). Matching is case-insensitive against the row name on the chart. Watch-year / period filtering stays on the date step.",
+        "Send one keyword per message: an actor, director, studio, genre, language, country, or release year (for example 2001). Matching is case-insensitive against the row name on the chart. Watch-year / period filtering stays on the date step. This is not the same as search keywords (asked next).",
         "",
         listed,
         "",
         'When finished, tap Done. Or send "done".',
       ].join("\n"),
       reply_markup: letterboxdKeywordsKeyboard(words.length > 0),
+    };
+  }
+  if (step === "search") {
+    return {
+      text: choicePrompt(
+        "Add search keywords?",
+        "Optional. After all chart PNGs, each search keyword gets a text list of every catalog film where it matches film metadata (genre, director, actor, studio, country, language, or release year). Not the same as exclude keywords, which only hide chart rows. Default is no lists.",
+      ),
+      reply_markup: letterboxdYesNoKeyboard("lb:search", "no"),
+    };
+  }
+  if (step === "search_keywords") {
+    const words = normalizeSearchKeywords(state.searchKeywords);
+    const listed = words.length
+      ? `Already added (${words.length}/${LETTERBOXD_SEARCH_KEYWORDS_MAX}): ${words
+          .map((word) => htmlEscape(word))
+          .join(", ")}.`
+      : `None yet. Up to ${LETTERBOXD_SEARCH_KEYWORDS_MAX} words, ${LETTERBOXD_SEARCH_KEYWORD_MAX_LEN} characters each.`;
+    return {
+      text: [
+        "<b>Search keywords for film lists?</b>",
+        "",
+        "Send one search keyword per message (actor, director, studio, genre, language, country, or release year). Matching is case-insensitive against each film’s metadata — not chart row labels. Lists arrive in chat after every chart PNG. Exclude keywords (previous step) only remove rows from watch-count tops.",
+        "",
+        listed,
+        "",
+        'When finished, tap Done. Or send "done".',
+      ].join("\n"),
+      reply_markup: letterboxdSearchKeywordsKeyboard(words.length > 0),
     };
   }
   if (step === "period") {
@@ -800,6 +867,8 @@ export function parseLetterboxdCallback(data) {
   if (raw === "lb:drama:1" || raw === "lb:drama:0") return { step: "drama", value: raw.endsWith("1") };
   if (raw === "lb:com:1" || raw === "lb:com:0") return { step: "comedy", value: raw.endsWith("1") };
   if (raw === "lb:kw:done") return { step: "keywords", choice: "done" };
+  if (raw === "lb:search:1" || raw === "lb:search:0") return { step: "search", value: raw.endsWith("1") };
+  if (raw === "lb:sk:done") return { step: "search_keywords", choice: "done" };
   if (raw === "lb:span") return { step: "period", choice: "full" };
   if (raw === "lb:rng") return { step: "period", choice: "custom" };
   if (raw === "lb:y:1" || raw === "lb:y:3" || raw === "lb:y:5") {
@@ -900,7 +969,7 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
     if (value == null) return retry(state, "Need yes or no. The report has not started.");
     if (!value) {
-      // No = keep everything: include toggles stay yes, no custom keywords.
+      // No = keep everything: include toggles stay yes, no custom exclude keywords.
       return go(
         {
           ...state,
@@ -910,7 +979,7 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
           includeComedy: true,
           excludeKeywords: [],
         },
-        "period",
+        "search",
         now,
       );
     }
@@ -943,7 +1012,7 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
     if (done) {
       return go(
         { ...state, excludeKeywords: normalizeExcludeKeywords(state.excludeKeywords) },
-        "period",
+        "search",
         now,
       );
     }
@@ -974,6 +1043,53 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
       return retry(state, "That keyword is already on the list. Send another, or tap Done.", now);
     }
     return go({ ...state, excludeKeywords: next }, "keywords", now);
+  }
+  if (step === "search") {
+    const value = kind === "callback" ? input.value : parseYesNoText(input.text);
+    if (value == null) return retry(state, "Need yes or no. The report has not started.");
+    if (!value) {
+      return go({ ...state, searchKeywords: [] }, "period", now);
+    }
+    return go({ ...state, searchKeywords: normalizeSearchKeywords(state.searchKeywords) }, "search_keywords", now);
+  }
+  if (step === "search_keywords") {
+    const done =
+      (kind === "callback" && input.choice === "done") ||
+      (kind === "text" && ["done", "готово", "достаточно"].includes(normReply(input.text)));
+    if (done) {
+      return go(
+        { ...state, searchKeywords: normalizeSearchKeywords(state.searchKeywords) },
+        "period",
+        now,
+      );
+    }
+    if (kind === "callback") {
+      return retry(state, 'Need a search keyword, or tap Done. The report has not started.', now);
+    }
+    const word = String(input.text || "").replace(/\s+/g, " ").trim();
+    if (!word) {
+      return retry(state, "Send a search keyword, or tap Done. The report has not started.", now);
+    }
+    if (word.length > LETTERBOXD_SEARCH_KEYWORD_MAX_LEN) {
+      return retry(
+        state,
+        `Each search keyword is at most ${LETTERBOXD_SEARCH_KEYWORD_MAX_LEN} characters. Shorten it, or tap Done.`,
+        now,
+      );
+    }
+    const current = normalizeSearchKeywords(state.searchKeywords);
+    if (current.length >= LETTERBOXD_SEARCH_KEYWORDS_MAX) {
+      return retry(
+        state,
+        `At most ${LETTERBOXD_SEARCH_KEYWORDS_MAX} search keywords. Tap Done to continue.`,
+        now,
+      );
+    }
+    const next = normalizeSearchKeywords([...current, word]);
+    if (next.length === current.length) {
+      return retry(state, "That search keyword is already on the list. Send another, or tap Done.", now);
+    }
+    return go({ ...state, searchKeywords: next }, "search_keywords", now);
   }
   if (step === "period") {
     const choice = kind === "callback" ? input.choice : parsePeriodText(input.text);
@@ -1046,6 +1162,7 @@ export function buildLetterboxdDispatch({ repo, workflow, ref, jobId, chatId, fi
         include_drama: opts.includeDrama ? "true" : "false",
         include_comedy: opts.includeComedy ? "true" : "false",
         exclude_keywords: opts.excludeKeywords.join(","),
+        search_keywords: opts.searchKeywords.join(","),
         date_from: opts.dateFrom,
         date_to: opts.dateTo,
         include_undated: opts.includeUndated ? "true" : "false",

@@ -282,6 +282,65 @@ export function buildGenreReportHtml(summary, unmatchedFallback = 0) {
   return buildGenreReportMessages(summary, unmatchedFallback).join("\n\n");
 }
 
+const TELEGRAM_TEXT_LIMIT = 4096;
+
+/**
+ * Format one search-keyword film list as HTML message chunk(s).
+ * Line: Name (Year) (actor, director, …). Empty list → one short notice.
+ */
+export function buildSearchKeywordMessages(keyword, films) {
+  const word = String(keyword || "").trim();
+  if (!word) return [];
+  const header = `<b>Search keyword: ${escapeHtml(word)}</b>`;
+  const rows = Array.isArray(films) ? films : [];
+  if (!rows.length) {
+    return [`${header}\n\nNo films matched in this catalog.`];
+  }
+  const lines = rows.map((film) => {
+    const name = escapeHtml(film && film.name != null ? film.name : "?");
+    const year =
+      film && film.year != null && Number.isFinite(Number(film.year))
+        ? String(Number(film.year))
+        : "?";
+    const sites = Array.isArray(film && film.matched) ? film.matched.filter(Boolean) : [];
+    const where = sites.length ? sites.map((site) => escapeHtml(site)).join(", ") : "?";
+    return `${name} (${escapeHtml(year)}) (${where})`;
+  });
+  const intro = `${header}\n${rows.length} film${rows.length === 1 ? "" : "s"}\n\n`;
+  const chunks = [];
+  let current = intro;
+  for (const line of lines) {
+    const candidate = current === intro ? current + line : `${current}\n${line}`;
+    if (candidate.length <= TELEGRAM_TEXT_LIMIT) {
+      current = candidate;
+      continue;
+    }
+    if (current && current !== intro) chunks.push(current);
+    const continued = `${header} <i>(continued)</i>\n\n${line}`;
+    if (continued.length <= TELEGRAM_TEXT_LIMIT) {
+      current = continued;
+    } else {
+      // Extremely long single line — hard-split.
+      chunks.push(continued.slice(0, TELEGRAM_TEXT_LIMIT));
+      current = `${header} <i>(continued)</i>\n\n${continued.slice(TELEGRAM_TEXT_LIMIT)}`;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+/** Read search_keyword_lists.json → flat list of HTML messages (one keyword after another). */
+export function buildAllSearchKeywordMessages(payload) {
+  const lists =
+    payload && Array.isArray(payload.search_keywords) ? payload.search_keywords : [];
+  const messages = [];
+  for (const item of lists) {
+    if (!item || !item.keyword) continue;
+    messages.push(...buildSearchKeywordMessages(item.keyword, item.films));
+  }
+  return messages;
+}
+
 export function mapScriptError(stderr, stdout, status) {
   const text = `${stderr || ""}\n${stdout || ""}`;
   if (/TMDB_BEARER_TOKEN/i.test(text)) {
@@ -621,6 +680,25 @@ export async function main() {
       `[letterboxd] genre PNGs sent ${photoResult.sent}/${photoResult.total}; failed: ${photoResult.failed.join("; ")}`,
     );
   }
+
+  // Search-keyword film lists after every chart PNG (skip when none were requested).
+  const searchPayload = readJsonFile(join(workdir, "search_keyword_lists.json"));
+  const searchMessages = buildAllSearchKeywordMessages(searchPayload || {});
+  for (let i = 0; i < searchMessages.length; i++) {
+    const label = `search keyword HTML ${i + 1}/${searchMessages.length}`;
+    try {
+      const ok = await sendTelegramHtml(token, chatId, searchMessages[i], label);
+      if (!ok) {
+        batchFailures.push(`${label} rejected by Telegram`);
+        console.error(`[letterboxd] CONTINUE after fail: ${label} HTTP reject`);
+      }
+    } catch (err) {
+      const detail = err && err.message ? err.message : String(err);
+      batchFailures.push(`${label}: ${detail}`);
+      console.error(`[letterboxd] CONTINUE after fail: ${label}: ${detail}`);
+    }
+  }
+
   if (batchFailures.length) {
     const summary = batchFailures.join(" | ");
     await notifySendFailure(token, chatId, "TMDB HTML/PNG", new Error(summary));
@@ -629,6 +707,7 @@ export async function main() {
 
   console.log("calendar pngs", calendarPngs.join(","));
   console.log("genre pngs", genrePngs.join(","));
+  console.log("search keyword messages", searchMessages.length);
   console.log("workdir files", readdirSync(workdir).join(","));
   console.log("unmatched", unmatched);
 }
