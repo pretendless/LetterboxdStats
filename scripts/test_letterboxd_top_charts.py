@@ -37,6 +37,7 @@ from letterboxd_top_charts import (
     display_lang,
     film_title_with_liked_heart,
     format_liked_tip,
+    normalize_most_liked_sections,
     rank_most_liked,
 )
 
@@ -70,6 +71,42 @@ def test_liked_heart_helpers_use_black_heart_suit():
     # Numbered Most liked line shape (panel draws rank + bold count separately).
     name, count = ranked[0]
     assert f"1. {name} {LIKED_HEART} {count}" == f"1. Fincher {LIKED_HEART} 12"
+    # Single list → one "Most liked" section; empty stays empty.
+    assert normalize_most_liked_sections(ranked) == [("Most liked", ranked)]
+    assert normalize_most_liked_sections([]) == []
+    assert normalize_most_liked_sections(None) == []
+    # Weekday+month: separate titled sections; omit a family with no likes.
+    weekdays = rank_most_liked(
+        {"Sat": 23, "Thu": 20, "Mon": 0, "Sun": 17, "Tue": 16, "Fri": 15, "Wed": 11},
+        top_n=7,
+    )
+    assert weekdays == [
+        ("Sat", 23),
+        ("Thu", 20),
+        ("Sun", 17),
+        ("Tue", 16),
+        ("Fri", 15),
+        ("Wed", 11),
+    ]
+    months = rank_most_liked(
+        {"Oct": 14, "Nov": 13, "Apr": 11, "Jan": 11, "May": 0},
+        top_n=3,
+    )
+    assert months == [("Oct", 14), ("Nov", 13), ("Apr", 11)]
+    sections = normalize_most_liked_sections(
+        most_liked_sections=[
+            ("Most liked weekdays", weekdays),
+            ("Most liked months", months),
+            ("Most liked empty", []),
+        ]
+    )
+    assert sections == [
+        ("Most liked weekdays", weekdays),
+        ("Most liked months", months),
+    ]
+    # Months still respect top_n; weekdays keep the full liked set (here 6 of 7).
+    assert len(weekdays) == 6
+    assert len(months) == 3
 
 
 def test_top_n_default_about_20():
@@ -850,6 +887,116 @@ def test_views_count_bars_show_avg_or_dash(tmp_path: Path | None = None):
     assert "5.00" in day_text
     assert "—" in day_text
     assert all("n=" not in t for t in day_text)
+
+
+def test_weekday_month_most_liked_is_two_lists(tmp_path: Path | None = None):
+    """Combined weekday+month chart: separate Most liked lists, not one mix."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-weekday-month-liked")
+    out.mkdir(parents=True, exist_ok=True)
+    # Sat 2020-01-04, Thu 2020-01-02, Oct Sat 2020-10-03 — three liked films.
+    diary = pd.DataFrame(
+        [
+            {"Name": "Sat Film", "Year": 2000, "Rating": 4.0, "Watched Date": "2020-01-04"},
+            {"Name": "Thu Film", "Year": 2001, "Rating": 3.0, "Watched Date": "2020-01-02"},
+            {"Name": "Oct Film", "Year": 2002, "Rating": 5.0, "Watched Date": "2020-10-03"},
+            {"Name": "Plain", "Year": 2003, "Rating": 2.0, "Watched Date": "2021-03-01"},
+        ]
+    )
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+    liked_keys = {"Sat Film|||2000", "Thu Film|||2001", "Oct Film|||2002"}
+    texts = _texts_on_save(
+        lambda cal: cal.chart_weekday_month(
+            diary,
+            out / "views_by_weekday_month.png",
+            liked_keys=liked_keys,
+            top_n=2,
+        )
+    )
+    labels = {t.get_text() for t in texts}
+    assert "Most liked weekdays" in labels
+    assert "Most liked months" in labels
+    assert "Most liked" not in labels
+    # Weekday lines keep ♥ U+2665; months list is present (Jan/Oct with likes).
+    joined = " ".join(labels)
+    assert LIKED_HEART in joined
+    assert "\u2764" not in joined
+    assert any(t.get_text().startswith("1. Sat ") for t in texts)
+    assert any(t.get_text().startswith("2. Thu ") for t in texts)
+    # top_n=2 still allows both liked months when only two have likes.
+    assert any("Oct" in t.get_text() and LIKED_HEART in t.get_text() for t in texts)
+
+
+def test_most_liked_list_is_compact_on_tall_hbar(tmp_path: Path | None = None):
+    """Tall watches_by_* charts: Most liked stays a dense block, not bar-row pitch."""
+    import matplotlib
+
+    matplotlib.use("Agg", force=False)
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-most-liked-compact")
+    out.mkdir(parents=True, exist_ok=True)
+    n = 20
+    labels = [f"Lang{i}" for i in range(n)]
+    years = [2020, 2021]
+    matrix = np.ones((2, n))
+    palette = {2020: LOGO_BLUE_HEX, 2021: "#03E53E"}
+    # Only a few categories have likes — sparse list on a tall axes.
+    most_liked = [(labels[0], 10), (labels[1], 4), (labels[10], 1), (labels[18], 1)]
+    path = out / "watches_by_language.png"
+    captured: dict = {}
+    import letterboxd_top_charts as charts
+
+    real_save = charts.save_dark_figure
+
+    def grab(fig, dest, **kwargs):
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        ax = fig.axes[0]
+        liked_prefixes = [
+            t
+            for t in ax.texts
+            if LIKED_HEART in t.get_text()
+            and any(t.get_text().startswith(f"{r}. ") for r in (1, 2, 3, 4))
+        ]
+        liked_prefixes.sort(key=lambda t: -t.get_window_extent(renderer=renderer).y0)
+        captured["liked"] = liked_prefixes
+        captured["ax_height"] = ax.get_window_extent(renderer=renderer).height
+        captured["gaps"] = []
+        for a, b in zip(liked_prefixes, liked_prefixes[1:]):
+            ya = a.get_window_extent(renderer=renderer).y0
+            yb = b.get_window_extent(renderer=renderer).y1
+            captured["gaps"].append(ya - yb)
+        if liked_prefixes:
+            top = liked_prefixes[0].get_window_extent(renderer=renderer).y1
+            bottom = liked_prefixes[-1].get_window_extent(renderer=renderer).y0
+            captured["list_span"] = top - bottom
+        real_save(fig, dest, **kwargs)
+
+    charts.save_dark_figure = grab
+    try:
+        assert (
+            chart_stacked_count_hbar(
+                labels,
+                years,
+                matrix,
+                palette,
+                path,
+                title="Original language — color is watch year",
+                most_liked=most_liked,
+            )
+            is True
+        )
+    finally:
+        charts.save_dark_figure = real_save
+
+    assert len(captured.get("liked") or []) == 4
+    gaps = captured["gaps"]
+    assert gaps
+    # Font size 7 → glyph ~9–12 px; allow generous headroom but reject bar pitch.
+    assert max(gaps) < 28, gaps
+    # Full list span must be far shorter than the plot (bar pitch × n).
+    assert captured["list_span"] < captured["ax_height"] * 0.35, (
+        captured["list_span"],
+        captured["ax_height"],
+    )
 
 
 def test_stacked_count_hbar_long_names(tmp_path: Path | None = None):
