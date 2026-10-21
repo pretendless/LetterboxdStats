@@ -630,10 +630,24 @@ def apply_dark_chart_theme() -> None:
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     from matplotlib import font_manager
+    from pathlib import Path
 
     # Prefer DejaVu Sans (ships with matplotlib; also fonts-dejavu on Ubuntu).
+    # Register Noto Sans Symbols 2 when present so U+1F5C8 NOTE (review mark)
+    # can render; DejaVu alone lacks that glyph.
+    symbols2 = Path("/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf")
+    if symbols2.is_file():
+        try:
+            font_manager.fontManager.addfont(str(symbols2))
+        except (OSError, RuntimeError, ValueError):
+            pass
     available = {f.name for f in font_manager.fontManager.ttflist}
     family = "DejaVu Sans" if "DejaVu Sans" in available else "sans-serif"
+    # Keep DejaVu first for Latin; list Symbols2 so callers can pick it for marks.
+    sans = [family]
+    for name in ("Noto Sans Symbols2", "Noto Sans Symbols 2"):
+        if name in available and name not in sans:
+            sans.append(name)
 
     plt.rcParams.update(
         {
@@ -654,6 +668,7 @@ def apply_dark_chart_theme() -> None:
             "savefig.facecolor": BG,
             "savefig.edgecolor": BG,
             "font.family": family,
+            "font.sans-serif": sans,
             "font.size": 9,
             "axes.titlesize": 12,
             "axes.labelsize": 10,

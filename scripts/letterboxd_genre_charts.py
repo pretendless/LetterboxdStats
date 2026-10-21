@@ -43,7 +43,9 @@ from letterboxd_export import (  # noqa: E402
     load_export,
     load_liked_films,
     load_ratings,
+    load_reviewed_films,
     ratings_for_catalog,
+    reviewed_film_keys,
     unique_rated_film_count,
 )
 from letterboxd_options import (  # noqa: E402
@@ -74,6 +76,7 @@ from letterboxd_top_charts import (  # noqa: E402
     chart_rating_hbar,
     count_avg_text_style,
     count_liked_among_keys,
+    count_reviewed_among_keys,
     display_lang,
 )
 
@@ -418,6 +421,15 @@ def _rank_named(
         liked_count = int(st.get("liked") or 0)
         if not liked_count and st.get("_keys") is not None and st.get("_liked_keys") is not None:
             liked_count = count_liked_among_keys(st.get("_keys") or (), st.get("_liked_keys") or ())
+        reviewed_count = int(st.get("reviewed") or 0)
+        if (
+            not reviewed_count
+            and st.get("_keys") is not None
+            and st.get("_reviewed_keys") is not None
+        ):
+            reviewed_count = count_reviewed_among_keys(
+                st.get("_keys") or (), st.get("_reviewed_keys") or ()
+            )
         rows.append(
             {
                 "name": name,
@@ -425,6 +437,7 @@ def _rank_named(
                 "avg": avg,
                 "rated": rated,
                 "liked_count": liked_count,
+                "reviewed_count": reviewed_count,
             }
         )
     if by_avg:
@@ -519,14 +532,17 @@ def aggregate_person_stats(
     include_usa=True,
     include_english=True,
     liked_keys=None,
+    reviewed_keys=None,
 ):
     """Catalog counts (diary∪watched); avgs from ratings.csv ∪ diary joined to catalog."""
     liked = set(liked_keys or ())
-    countries = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0, "liked": 0})
-    directors = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0, "liked": 0})
-    actors = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0, "liked": 0})
-    languages = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0, "liked": 0})
-    companies = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0, "liked": 0})
+    reviewed = set(reviewed_keys or ())
+    blank = {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0, "liked": 0, "reviewed": 0}
+    countries = defaultdict(lambda: dict(blank))
+    directors = defaultdict(lambda: dict(blank))
+    actors = defaultdict(lambda: dict(blank))
+    languages = defaultdict(lambda: dict(blank))
+    companies = defaultdict(lambda: dict(blank))
 
     def bump_count(bucket, name):
         if not name:
@@ -554,6 +570,8 @@ def aggregate_person_stats(
             st["rated"] += 1
             if key in liked:
                 st["liked"] = int(st.get("liked") or 0) + 1
+            if key in reviewed:
+                st["reviewed"] = int(st.get("reviewed") or 0) + 1
 
     def apply_meta(buckets_fn, row, meta):
         for c in meta.get("countries") or []:
@@ -661,10 +679,14 @@ def rank_genres(
     limit_rating=TOP_N_DEFAULT,
     min_rated=MIN_RATED_FOR_TOP,
     liked_keys=None,
+    reviewed_keys=None,
 ):
     """Genre tops: catalog hits; avg from ratings.csv ∪ diary joined to catalog."""
     liked = set(liked_keys or ())
-    stats = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0, "liked": 0})
+    reviewed = set(reviewed_keys or ())
+    stats = defaultdict(
+        lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0, "liked": 0, "reviewed": 0}
+    )
     for _, row in catalog.iterrows():
         for g in row.get("Genre list") or []:
             if g:
@@ -704,6 +726,8 @@ def rank_genres(
                 st["rated"] += 1
                 if film_key in liked:
                     st["liked"] = int(st.get("liked") or 0) + 1
+                if film_key in reviewed:
+                    st["reviewed"] = int(st.get("reviewed") or 0) + 1
     by_count, by_rating, by_rating_worst = _paired_ranks(
         stats,
         min_count=1,
@@ -868,21 +892,27 @@ def build_search_keyword_lists(
     diary=None,
     ratings_csv=None,
     liked_films=None,
+    reviewed_films=None,
 ) -> list[dict]:
     """Film lists per search keyword over the same catalog the charts use.
 
     Each entry: ``{keyword, films: [{name, year, matched: [...], ratings: [...],
-    liked: bool}]}``.
+    liked: bool, reviewed: bool}]}``.
     ``ratings`` has one value per watch (diary order oldest→newest, or one
-    watched-only slot). ``liked`` is True when Name+Year appears in
-    likes/films.csv (film-level; diary has no per-view Like column). Films are
-    unique Name+Year, sorted by year then name. Empty keywords → [].
+    watched-only slot). ``liked`` / ``reviewed`` are True when Name+Year appears
+    in likes/films.csv / reviews.csv. Films are unique Name+Year, sorted by year
+    then name. Empty keywords → [].
     """
     words = [str(w).strip() for w in (keywords or ()) if str(w).strip()]
     if not words or catalog is None or getattr(catalog, "empty", True):
         return []
     ratings_by_key = ratings_csv_lookup(ratings_csv)
     liked_keys = liked_film_keys(liked_films) if not isinstance(liked_films, (set, frozenset)) else set(liked_films)
+    reviewed_keys = (
+        reviewed_film_keys(reviewed_films)
+        if not isinstance(reviewed_films, (set, frozenset))
+        else set(reviewed_films)
+    )
     films = catalog.drop_duplicates(subset=["Name", "Year"]).copy()
     rows = []
     for _, row in films.iterrows():
@@ -908,6 +938,7 @@ def build_search_keyword_lists(
                 "year_values": year_values,
                 "ratings": watch_rating_slots_for_film(name, year_int, diary, ratings_by_key),
                 "liked": film_key in liked_keys,
+                "reviewed": film_key in reviewed_keys,
             }
         )
     rows.sort(
@@ -931,6 +962,7 @@ def build_search_keyword_lists(
                     "matched": sites,
                     "ratings": list(item["ratings"]),
                     "liked": bool(item["liked"]),
+                    "reviewed": bool(item["reviewed"]),
                 }
             )
         out.append({"keyword": word, "films": matched_films})
@@ -1012,6 +1044,7 @@ def chart_deep_count_tops(
     include_comedy=True,
     exclude_keywords=(),
     liked_keys=None,
+    reviewed_keys=None,
 ) -> dict:
     """Watch-year stacked count charts for TMDB deep entities.
 
@@ -1137,6 +1170,7 @@ def chart_deep_count_tops(
             min_rated=min_rated,
             exclude_keywords=exclude_keywords,
             liked_keys=liked_keys,
+            reviewed_keys=reviewed_keys,
             catalog=catalog,
         )
     return made
@@ -1536,6 +1570,8 @@ def main():
     # (genre_share_by_viewing_year.png removed — not sent to Telegram.)
     liked_films = load_liked_films(sys.argv[1])
     liked_keys = liked_film_keys(liked_films)
+    reviewed_films = load_reviewed_films(sys.argv[1])
+    reviewed_keys = reviewed_film_keys(reviewed_films)
     top_for_report, genres_by_rating, genres_by_rating_worst, genre_avgs = rank_genres(
         catalog,
         film_ratings=film_ratings,
@@ -1545,6 +1581,7 @@ def main():
         limit_rating=opts.top_n,
         min_rated=opts.min_rated,
         liked_keys=liked_keys,
+        reviewed_keys=reviewed_keys,
     )
     gate = rated_gate_phrase(opts.min_rated)
     made_genre_best = chart_rating_hbar(
@@ -1575,6 +1612,7 @@ def main():
         include_usa=opts.include_usa,
         include_english=opts.include_english,
         liked_keys=liked_keys,
+        reviewed_keys=reviewed_keys,
     )
     # Count tops: catalog hits stacked by watch year (No date = watched-only).
     count_paths = {
@@ -1601,6 +1639,7 @@ def main():
         include_comedy=opts.include_comedy,
         exclude_keywords=opts.exclude_keywords,
         liked_keys=liked_keys,
+        reviewed_keys=reviewed_keys,
     )
     rating_paths = {
         "average_rating_by_country": "average_rating_by_country.png",
@@ -1676,6 +1715,7 @@ def main():
         diary=diary,
         ratings_csv=ratings_csv,
         liked_films=liked_films,
+        reviewed_films=reviewed_films,
     )
     if search_lists:
         write_search_keyword_lists(Path("search_keyword_lists.json"), search_lists)

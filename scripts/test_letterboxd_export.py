@@ -28,8 +28,10 @@ from letterboxd_export import (
     load_export,
     load_liked_films,
     load_ratings,
+    load_reviewed_films,
     merged_film_ratings,
     ratings_for_averages,
+    reviewed_film_keys,
     scope_letterboxd_frames,
     unique_rated_film_count,
 )
@@ -64,6 +66,7 @@ def _write_zip(
     watched: str | None = None,
     ratings: str | None = None,
     liked_films: str | None = None,
+    reviews: str | None = None,
 ) -> None:
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr("diary.csv", diary)
@@ -73,6 +76,8 @@ def _write_zip(
             zf.writestr("ratings.csv", ratings)
         if liked_films is not None:
             zf.writestr("likes/films.csv", liked_films)
+        if reviews is not None:
+            zf.writestr("reviews.csv", reviews)
 
 
 def test_union_and_diary_wins(tmp: Path) -> None:
@@ -601,6 +606,67 @@ def test_load_liked_films_from_zip(tmp: Path) -> None:
     assert by_name["Other Film"]["liked"] is False
 
 
+def test_load_reviewed_films_from_zip(tmp: Path) -> None:
+    """reviews.csv Name+Year unique; skip likes/reviews.csv; missing → empty."""
+    diary_csv = """Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date
+2024-01-02,Reviewed Film,2020,https://boxd.it/aaa,4.0,,,2024-01-01
+2024-01-03,Other Film,2019,https://boxd.it/bbb,3.0,,,2024-01-02
+"""
+    reviews_csv = """Date,Name,Year,Letterboxd URI,Rating,Rewatch,Review,Tags,Watched Date
+2024-01-02,Reviewed Film,2020,https://boxd.it/rev1,4.0,,great,,2024-01-01
+2024-01-10,Reviewed Film,2020,https://boxd.it/rev2,4.0,Yes,again,,2024-01-09
+2024-02-01,"Paris, Texas",1984,https://boxd.it/rev3,5.0,,note,,2024-02-01
+"""
+    zip_path = tmp / "with_reviews.zip"
+    _write_zip(zip_path, diary_csv, reviews=reviews_csv)
+    reviewed = load_reviewed_films(zip_path)
+    keys = reviewed_film_keys(reviewed)
+    # Unique Name+Year even with two review rows for Reviewed Film.
+    assert keys == {"Reviewed Film|||2020", "Paris, Texas|||1984"}
+
+    zip_no = tmp / "no_reviews.zip"
+    _write_zip(zip_no, diary_csv)
+    assert reviewed_film_keys(load_reviewed_films(zip_no)) == set()
+
+    # likes/reviews.csv alone must not count as film reviews.
+    zip_likes_only = tmp / "likes_reviews_only.zip"
+    with zipfile.ZipFile(zip_likes_only, "w") as zf:
+        zf.writestr("diary.csv", diary_csv)
+        zf.writestr(
+            "likes/reviews.csv",
+            "Date,Letterboxd URI\n2024-01-01,https://boxd.it/someone-else\n",
+        )
+    assert reviewed_film_keys(load_reviewed_films(zip_likes_only)) == set()
+
+    lists = build_search_keyword_lists(
+        load_export(zip_path)[1],
+        {
+            "Reviewed Film|||2020": {
+                "genres": ["Drama"],
+                "directors": [],
+                "cast": [],
+                "companies": [],
+                "countries": [],
+                "original_language": "en",
+            },
+            "Other Film|||2019": {
+                "genres": ["Drama"],
+                "directors": [],
+                "cast": [],
+                "companies": [],
+                "countries": [],
+                "original_language": "en",
+            },
+        },
+        ["Drama"],
+        diary=load_export(zip_path)[0],
+        reviewed_films=reviewed,
+    )
+    by_name = {f["name"]: f for f in lists[0]["films"]}
+    assert by_name["Reviewed Film"]["reviewed"] is True
+    assert by_name["Other Film"]["reviewed"] is False
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as raw:
         tmp = Path(raw)
@@ -617,6 +683,7 @@ def main() -> int:
         test_watch_time_grain_cutoffs()
         test_count_avg_label_and_usa_english_filter()
         test_load_liked_films_from_zip(tmp)
+        test_load_reviewed_films_from_zip(tmp)
     print("test_letterboxd_export: ok")
     return 0
 
