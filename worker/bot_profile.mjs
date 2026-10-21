@@ -15,7 +15,12 @@ export const DESCRIPTION =
   "Example:\n" +
   "/start\n" +
   "ZIP file\n" +
-  "defaults";
+  "defaults\n" +
+  "\n" +
+  "Author / contact:\n" +
+  "https://www.last.fm/user/pretendless\n" +
+  "https://vk.com/prtds\n" +
+  "https://t.me/prtdz";
 
 export const BOT_COMMANDS = [
   { command: "start", description: "Start a Letterboxd chart report" },

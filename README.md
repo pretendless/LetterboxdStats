@@ -86,8 +86,13 @@ Description (empty chat, and “What can this bot do?”):
 > /start
 > ZIP file
 > defaults
+>
+> Author / contact:
+> https://www.last.fm/user/pretendless
+> https://vk.com/prtds
+> https://t.me/prtdz
 
-Short description (profile page, and the text sent with a shared link):
+Short description (profile page, and the text sent with a shared link; keep short — no long URLs here):
 
 > Letterboxd Stats. Charts from a Letterboxd export. /start opens the wizard.
 
