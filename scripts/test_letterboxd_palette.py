@@ -216,7 +216,9 @@ def test_discrete_ranks_use_logo_knots_then_even_midpoints():
         UNDATED_WATCH_YEAR,
         UNDATED_WATCH_YEAR_RGBA,
         is_undated_watch_year,
+        undated_charcoal_colormap,
         undated_horizontal_colormap,
+        undated_vertical_colormap,
         watch_year_legend_label,
     )
     import matplotlib.colors as mcolors
@@ -232,9 +234,11 @@ def test_discrete_ranks_use_logo_knots_then_even_midpoints():
     assert UNDATED_LOGO_BOTTOM_HEX == "#14181C"
     assert UNDATED_GRADIENT_LEFT_HEX == UNDATED_LOGO_TOP_HEX
     assert UNDATED_GRADIENT_RIGHT_HEX == UNDATED_LOGO_BOTTOM_HEX
-    cmap = undated_horizontal_colormap()
-    assert mcolors.to_hex(cmap(0.0)).lower() == UNDATED_GRADIENT_LEFT_HEX.lower()
-    assert mcolors.to_hex(cmap(1.0)).lower() == UNDATED_GRADIENT_RIGHT_HEX.lower()
+    cmap = undated_charcoal_colormap()
+    assert undated_horizontal_colormap() is cmap
+    assert undated_vertical_colormap() is cmap
+    assert mcolors.to_hex(cmap(0.0)).lower() == UNDATED_LOGO_TOP_HEX.lower()
+    assert mcolors.to_hex(cmap(1.0)).lower() == UNDATED_LOGO_BOTTOM_HEX.lower()
     # Two dated years stay logo blue + orange even when No date is present.
     assert with_undated[2020] == categorical_colors(2)[0]
     assert with_undated[2021] == categorical_colors(2)[1]

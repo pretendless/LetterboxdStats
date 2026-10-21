@@ -91,7 +91,7 @@ Discrete ordered series (watch years, ranked genres), earliest or lowest first, 
 
 Four or more values sample the full 0–1 palette. There is no quadratic bend and no snap onto the logo knots. N = 4 is `[0.125, 0.375, 0.625, 0.875]`. N = 7 is `[0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5] / 7`.
 
-Watch-year stacks: dated years alone feed `categorical_positions` via `watch_year_palette`. `UNDATED_WATCH_YEAR` / **No date** is the logo-background charcoal gradient (`UNDATED_LOGO_TOP_HEX` `#2C3440` → `UNDATED_LOGO_BOTTOM_HEX` `#14181C`), rotated 90° to left→right — not a colormap slot and not solid white. Legend swatches use the same horizontal gradient with `UNDATED_LEGEND_EDGE` on black.
+Watch-year stacks: dated years alone feed `categorical_positions` via `watch_year_palette`. `UNDATED_WATCH_YEAR` / **No date** is the logo-background charcoal gradient (`UNDATED_LOGO_TOP_HEX` `#2C3440` → `UNDATED_LOGO_BOTTOM_HEX` `#14181C`) — not a colormap slot and not solid white. Fill orientation follows the bar: **vertical** columns keep the logo axis (top→bottom); **horizontal** bars rotate 90° (left→right). Legend swatches always use the logo-native **vertical** gradient with `UNDATED_LEGEND_EDGE` on black.
 
 ## Rewatch averages toggle
 
@@ -99,7 +99,7 @@ Wizard / Actions / `ChartOptions.include_rewatch_in_averages` (env `LETTERBOXD_I
 
 ## Non-date quantitative count charts
 
-Unit for bar lengths when the category is release metadata or person/genre/studio/language/country (not watch time): **catalog hits** = every diary row + one row per watched-only film already in the period-scoped catalog (`include_undated` still gates whether watched-only enter that catalog). Dated rows stack by watch year; undated rows use the `No date` segment (`UNDATED_WATCH_YEAR` in `letterboxd_palette.py`), painted with the logo charcoal left→right gradient (not on the year colormap). Same unit as `genre_summary` count lists. Do **not** invent watch years for watched-only on watch-year / weekday / month / pace / rating-distribution-by-watch-year / most-often-in-diary charts.
+Unit for bar lengths when the category is release metadata or person/genre/studio/language/country (not watch time): **catalog hits** = every diary row + one row per watched-only film already in the period-scoped catalog (`include_undated` still gates whether watched-only enter that catalog). Dated rows stack by watch year; undated rows use the `No date` segment (`UNDATED_WATCH_YEAR` in `letterboxd_palette.py`), painted with the logo charcoal gradient along the bar axis (not on the year colormap). Same unit as `genre_summary` count lists. The extra-stats **Rating distribution** bottom panel also stacks undated rated catalog entries (ratings.csv / watched-only rated) under **No date**; tip `%` / count / ♥ include them. Do **not** invent watch years for watched-only on watch-year / weekday / month / pace / most-often-in-diary charts (those stay diary-dated only).
 
 ## Rating-bar labels
 
