@@ -252,6 +252,41 @@ def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Wat
     return leg
 
 
+def normalize_most_liked_sections(
+    most_liked: list[tuple[str, int]] | None = None,
+    most_liked_sections: list[tuple[str, list[tuple[str, int]]]] | None = None,
+) -> list[tuple[str, list[tuple[str, int]]]]:
+    """Build titled Most liked blocks for the side panel.
+
+    A single ``most_liked`` list becomes one ``Most liked`` section. Pass
+    ``most_liked_sections`` for stacked category families (weekdays + months).
+    Empty sections are dropped.
+    """
+    def _positive_rows(rows) -> list[tuple[str, int]]:
+        out: list[tuple[str, int]] = []
+        for name, count in rows or []:
+            try:
+                n = int(count)
+            except (TypeError, ValueError):
+                continue
+            if n <= 0:
+                continue
+            out.append((str(name or "").strip() or "?", n))
+        return out
+
+    if most_liked_sections is not None:
+        sections: list[tuple[str, list[tuple[str, int]]]] = []
+        for title, rows in most_liked_sections:
+            cleaned = _positive_rows(rows)
+            if cleaned:
+                sections.append((str(title or "Most liked").strip() or "Most liked", cleaned))
+        return sections
+    cleaned = _positive_rows(most_liked)
+    if not cleaned:
+        return []
+    return [("Most liked", cleaned)]
+
+
 def draw_watch_year_most_liked_panel(
     fig,
     ax,
@@ -259,6 +294,7 @@ def draw_watch_year_most_liked_panel(
     palette: dict,
     most_liked: list[tuple[str, int]] | None = None,
     *,
+    most_liked_sections: list[tuple[str, list[tuple[str, int]]]] | None = None,
     fontsize: float = 7,
     title_fontsize: float = 8,
 ) -> None:
@@ -266,13 +302,18 @@ def draw_watch_year_most_liked_panel(
 
     Call after ``tight_layout`` has reserved a right gutter. Watch year sits on
     top; Most liked below with the same left edge and typography scale. Liked
-    counts are bold. Omits the Most liked block when the list is empty.
+    counts are bold. Omits empty lists. Use ``most_liked_sections`` when a
+    figure stacks distinct category families (e.g. weekdays and months) so each
+    family gets its own titled ranking instead of one mixed list.
+
+    Line spacing is compact (display-pixel gaps from measured text height). It
+    does not stretch to fill the axes or track bar y-positions on tall hbars.
     """
     from matplotlib.lines import Line2D
 
-    liked_rows = list(most_liked or [])
+    sections = normalize_most_liked_sections(most_liked, most_liked_sections)
     year_list = [int(y) for y in (years or [])]
-    if not year_list and not liked_rows:
+    if not year_list and not sections:
         return
 
     # Watch year as a real legend (swatches + labels), anchored top of the gutter.
@@ -313,56 +354,50 @@ def draw_watch_year_most_liked_panel(
             leg.get_title().set_color(FG)
             leg.get_title().set_fontweight("bold")
 
-    if not liked_rows:
+    if not sections:
         return
 
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
+    inv = ax.transAxes.inverted()
     # Anchor Most liked just under the Watch year legend (or axes top if none).
     if leg is not None:
         leg_box = leg.get_window_extent(renderer=renderer)
         # Convert legend bottom-left to axes fraction for the follow-on block.
-        inv = ax.transAxes.inverted()
         x0, y0 = inv.transform((leg_box.x0, leg_box.y0))
         panel_x = float(x0)
-        # Small gap under the legend in axes fraction.
-        start_y = float(y0) - 0.035
+        # Small display-pixel gap under the legend (not axes-fraction — tall
+        # hbars would otherwise open a huge void before the list).
+        gap_under_legend_px = max(4.0, fontsize * 0.55)
+        _px, start_y = inv.transform((leg_box.x0, leg_box.y0 - gap_under_legend_px))
+        y_line = float(start_y)
     else:
         panel_x = 1.02
-        start_y = 1.0
+        y_line = 1.0
 
-    # Title
-    title = ax.text(
-        panel_x,
-        start_y,
-        "Most liked",
-        transform=ax.transAxes,
-        fontsize=title_fontsize,
-        fontweight="bold",
-        color=FG,
-        ha="left",
-        va="top",
-        clip_on=False,
-    )
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    title_box = title.get_window_extent(renderer=renderer)
-    inv = ax.transAxes.inverted()
-    _tx, y_line = inv.transform((title_box.x0, title_box.y0))
-    # Row pitch ≈ one line of legend text.
-    line_pitch = max(0.028, (1.0 / max(len(liked_rows) + 2, 8)) * 0.55)
-    y_line = float(y_line) - 0.012
+    # Compact text block: advance by measured glyph height + a few pixels.
+    # Never stretch inter-line spacing to fill the axes or track bar rows.
+    def _advance_below(box, *, gap_px: float) -> float:
+        _x, next_y = inv.transform((box.x0, box.y0 - gap_px))
+        return float(next_y)
 
-    for rank, (name, count) in enumerate(liked_rows, start=1):
-        # Rank order by like count: ``1. Christopher Nolan ♥ `` + bold count.
-        prefix = f"{rank}. {name} {LIKED_HEART} "
-        name_artist = ax.text(
+    row_gap_px = max(2.0, fontsize * 0.35)
+    title_gap_px = max(3.0, title_fontsize * 0.4)
+    section_gap_px = max(6.0, fontsize * 0.9)
+
+    for section_i, (section_title, liked_rows) in enumerate(sections):
+        if section_i:
+            # Extra breath between titled blocks, still font-sized not axes-tall.
+            y_disp = ax.transAxes.transform((panel_x, y_line))[1]
+            _x, y_line = inv.transform((0.0, y_disp - section_gap_px))
+            y_line = float(y_line)
+        title = ax.text(
             panel_x,
             y_line,
-            prefix,
+            section_title,
             transform=ax.transAxes,
-            fontsize=fontsize,
-            fontweight="normal",
+            fontsize=title_fontsize,
+            fontweight="bold",
             color=FG,
             ha="left",
             va="top",
@@ -370,21 +405,43 @@ def draw_watch_year_most_liked_panel(
         )
         fig.canvas.draw()
         renderer = fig.canvas.get_renderer()
-        nb = name_artist.get_window_extent(renderer=renderer)
-        x_count, _yc = inv.transform((nb.x1 + 1.0, nb.y0))
-        ax.text(
-            float(x_count),
-            y_line,
-            str(int(count)),
-            transform=ax.transAxes,
-            fontsize=fontsize,
-            fontweight="bold",
-            color=FG,
-            ha="left",
-            va="top",
-            clip_on=False,
-        )
-        y_line -= line_pitch
+        title_box = title.get_window_extent(renderer=renderer)
+        y_line = _advance_below(title_box, gap_px=title_gap_px)
+
+        for rank, (name, count) in enumerate(liked_rows, start=1):
+            # Rank order by like count: ``1. Christopher Nolan ♥ `` + bold count.
+            prefix = f"{rank}. {name} {LIKED_HEART} "
+            name_artist = ax.text(
+                panel_x,
+                y_line,
+                prefix,
+                transform=ax.transAxes,
+                fontsize=fontsize,
+                fontweight="normal",
+                color=FG,
+                ha="left",
+                va="top",
+                clip_on=False,
+            )
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            nb = name_artist.get_window_extent(renderer=renderer)
+            x_count, _yc = inv.transform((nb.x1 + 1.0, nb.y0))
+            ax.text(
+                float(x_count),
+                y_line,
+                str(int(count)),
+                transform=ax.transAxes,
+                fontsize=fontsize,
+                fontweight="bold",
+                color=FG,
+                ha="left",
+                va="top",
+                clip_on=False,
+            )
+            # Advance by measured line height in display pixels — never axes
+            # fraction (tall language/director hbars would stretch the list).
+            y_line = _advance_below(nb, gap_px=row_gap_px)
 
 
 def _count_avg_stroke():

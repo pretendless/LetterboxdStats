@@ -605,13 +605,25 @@ def chart_weekday_month(
 
     week_liked = [count_liked_among_keys(week_keys[i], liked) for i in range(7)]
     month_liked = [count_liked_among_keys(month_keys[i], liked) for i in range(12)]
-    most_liked = rank_most_liked(
-        {WEEKDAYS[i]: week_liked[i] for i in range(7)}
-        | {MONTHS[i]: month_liked[i] for i in range(12)},
+    # Two panels → two lists: all liked weekdays (≤7); months capped by top_n.
+    most_liked_weekdays = rank_most_liked(
+        {WEEKDAYS[i]: week_liked[i] for i in range(7)},
+        7,
+    )
+    most_liked_months = rank_most_liked(
+        {MONTHS[i]: month_liked[i] for i in range(12)},
         top_n,
     )
+    most_liked_sections: list[tuple[str, list[tuple[str, int]]]] = []
+    if most_liked_weekdays:
+        most_liked_sections.append(("Most liked weekdays", most_liked_weekdays))
+    if most_liked_months:
+        most_liked_sections.append(("Most liked months", most_liked_months))
+    has_liked_panel = bool(most_liked_sections)
 
-    fig, axes = plt.subplots(2, 1, figsize=(15 if most_liked else 14, 10), sharey=False)
+    fig, axes = plt.subplots(
+        2, 1, figsize=(15 if has_liked_panel else 14, 10), sharey=False
+    )
     fig.suptitle(
         "Watches by weekday and month, split by year",
         fontsize=14,
@@ -628,10 +640,16 @@ def chart_weekday_month(
     month_max = float(month_totals.max()) if len(month_totals) else 1.0
     axes[1].set_ylim(0, month_max * 1.22 if month_max else 1.0)
 
-    right_frac = 0.78 if most_liked else 0.88
+    right_frac = 0.78 if has_liked_panel else 0.88
     fig.tight_layout(rect=[0, 0, right_frac, 0.96])
     draw_watch_year_most_liked_panel(
-        fig, axes[0], years, palette, most_liked, fontsize=8, title_fontsize=9
+        fig,
+        axes[0],
+        years,
+        palette,
+        most_liked_sections=most_liked_sections,
+        fontsize=8,
+        title_fontsize=9,
     )
     _place_count_avg_above_totals(
         fig,
