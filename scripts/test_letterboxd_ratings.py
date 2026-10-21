@@ -105,6 +105,193 @@ def test_release_year_top_uses_unique_rated() -> None:
     assert summary["top_rated_release_years"] == []
 
 
+def _names(rows) -> set[str]:
+    return {r["name"] for r in rows}
+
+
+def _threshold_diary():
+    """Often 5 hits / 5 rated, Short 4/4, Once 1/1, Rewatch 5 diary hits / 1 rated film."""
+    rows = []
+    cache = {}
+
+    def add(name, year, rating, date, *, director, actor, studio, country="USA", lang="en", genres=("Comedy",)):
+        rows.append(
+            {
+                "Name": name,
+                "Year": year,
+                "Rating": rating,
+                "Watched Date": date,
+                "Genre list": list(genres),
+            }
+        )
+        cache[f"{name}|||{year}"] = {
+            "directors": [director],
+            "cast": [actor],
+            "companies": [studio],
+            "countries": [country],
+            "original_language": lang,
+            "genres": list(genres),
+        }
+
+    for i in range(5):
+        add(
+            f"Often {i}",
+            2000 + i,
+            4.0,
+            f"2020-01-{i + 1:02d}",
+            director="Often",
+            actor="Star",
+            studio="Big",
+        )
+    for i in range(4):
+        add(
+            f"Short {i}",
+            2010 + i,
+            3.0,
+            f"2021-02-{i + 1:02d}",
+            director="Short",
+            actor="Brief",
+            studio="Mid",
+        )
+    add(
+        "Once Film",
+        1999,
+        5.0,
+        "2022-03-01",
+        director="Once",
+        actor="Bit",
+        studio="Tiny",
+        country="France",
+        lang="fr",
+        genres=("Drama",),
+    )
+    for i in range(5):
+        add(
+            "Rewatch Film",
+            2010,
+            4.0 - i * 0.5,
+            f"2023-04-{i + 1:02d}",
+            director="Rewatch",
+            actor="Repeat",
+            studio="Loop",
+        )
+    diary = pd.DataFrame(rows)
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+    return diary, cache
+
+
+def _chart_labels(chart_deep_count_tops, top_charts, diary, cache, avg_maps, min_rated):
+    from pathlib import Path
+
+    captured = []
+    real = top_charts.chart_stacked_count_hbar
+
+    def grab(labels, years, matrix, palette, path, **kwargs):
+        captured.append(
+            {
+                "key": Path(path).stem,
+                "labels": list(labels),
+                "avg": list(kwargs.get("avg_labels") or []),
+            }
+        )
+        return True
+
+    out = Path("/tmp/lb-threshold-watch")
+    out.mkdir(parents=True, exist_ok=True)
+    keys = [
+        "watches_by_genre",
+        "watches_by_country",
+        "watches_by_director",
+        "watches_by_actor",
+        "watches_by_language",
+        "watches_by_studio",
+    ]
+    paths = {key: out / f"{key}.png" for key in keys}
+    top_charts.chart_stacked_count_hbar = grab
+    try:
+        chart_deep_count_tops(
+            diary,
+            cache,
+            paths,
+            top_n=10,
+            min_rated=min_rated,
+            avg_maps=avg_maps,
+        )
+    finally:
+        top_charts.chart_stacked_count_hbar = real
+    found = {row["key"]: dict(zip(row["labels"], row["avg"])) for row in captured}
+    return found
+
+
+def test_person_studio_watch_membership_uses_wizard_threshold() -> None:
+    """Director, actor, and studio bars and JSON lists use T on hits.
+
+    A name with diary hits ≥ T stays even when unique rated films are below T;
+    the colored mean is still a dash in that case. T = 1 includes a single hit.
+    Genres, countries, and languages stay at one hit. Rating tops stay on
+    unique rated films. A person-count env var cannot bypass T.
+    """
+    import os
+    from pathlib import Path
+
+    import letterboxd_genre_charts as genre_charts
+    import letterboxd_top_charts as top_charts
+    from letterboxd_genre_charts import aggregate_person_stats, chart_deep_count_tops, rank_genres
+
+    src = Path(genre_charts.__file__).read_text(encoding="utf-8")
+    assert "LETTERBOXD_MIN_PERSON_COUNT" not in src
+    assert "LETTERBOXD_MIN_COMPANY_COUNT" not in src
+    assert "MIN_PERSON_COUNT" not in src
+    assert "MIN_COMPANY_COUNT" not in src
+
+    diary, cache = _threshold_diary()
+    os.environ["LETTERBOXD_MIN_PERSON_COUNT"] = "50"
+    os.environ["LETTERBOXD_MIN_COMPANY_COUNT"] = "50"
+    try:
+        deep = aggregate_person_stats(diary, cache, diary=diary, top_n=10, min_rated=5)
+        genres_c, genres_r, _genres_w, genre_avgs = rank_genres(
+            diary, diary=diary, limit_count=10, limit_rating=10, min_rated=5
+        )
+        avg_maps = dict(deep["avg_maps"])
+        avg_maps["genres"] = genre_avgs
+        charts = _chart_labels(chart_deep_count_tops, top_charts, diary, cache, avg_maps, 5)
+        low = aggregate_person_stats(diary, cache, diary=diary, top_n=10, min_rated=1)
+        low_charts = _chart_labels(chart_deep_count_tops, top_charts, diary, cache, avg_maps, 1)
+    finally:
+        os.environ.pop("LETTERBOXD_MIN_PERSON_COUNT", None)
+        os.environ.pop("LETTERBOXD_MIN_COMPANY_COUNT", None)
+
+    assert _names(deep["directors"]) == {"Often", "Rewatch"}
+    assert _names(deep["directors_by_rating"]) == {"Often"}
+    assert _names(deep["actors"]) == {"Star", "Repeat"}
+    assert _names(deep["actors_by_rating"]) == {"Star"}
+    assert _names(deep["companies"]) == {"Big", "Loop"}
+    assert _names(deep["companies_by_rating"]) == {"Big"}
+    assert "France" in _names(deep["countries"])
+    assert "fr" in _names(deep["languages"])
+    assert "Drama" in _names(genres_c)
+    assert "Drama" not in _names(genres_r)
+
+    assert set(charts["watches_by_director"]) == {"Often", "Rewatch"}
+    assert charts["watches_by_director"]["Often"] == "4.00"
+    assert charts["watches_by_director"]["Rewatch"] == "—"
+    assert set(charts["watches_by_actor"]) == {"Star", "Repeat"}
+    assert charts["watches_by_actor"]["Repeat"] == "—"
+    assert set(charts["watches_by_studio"]) == {"Big", "Loop"}
+    assert charts["watches_by_studio"]["Loop"] == "—"
+    assert "Drama" in charts["watches_by_genre"]
+    assert "France" in charts["watches_by_country"]
+    assert charts["watches_by_country"]["France"] == "—"
+    assert "French" in charts["watches_by_language"]
+
+    assert {"Often", "Rewatch", "Short", "Once"} <= _names(low["directors"])
+    assert "Once" in _names(low["directors_by_rating"])
+    assert {"Often", "Rewatch", "Short", "Once"} <= set(low_charts["watches_by_director"])
+    assert low_charts["watches_by_director"]["Once"] == "5.00"
+    assert "Bit" in low_charts["watches_by_actor"]
+    assert "Tiny" in low_charts["watches_by_studio"]
+
+
 def test_worst_rank_skipped_when_fewer_than_top_m() -> None:
     """Anti-rating list empty unless ≥ M entities pass rated ≥ 3."""
     # 5 qualifying entities — below TOP_N_DEFAULT (~20).
@@ -132,6 +319,7 @@ def main() -> int:
     test_threshold_blocks_rating_top_for_five_plus_one()
     test_release_year_top_uses_unique_rated()
     test_worst_rank_skipped_when_fewer_than_top_m()
+    test_person_studio_watch_membership_uses_wizard_threshold()
     print("test_letterboxd_ratings: ok")
     return 0
 
