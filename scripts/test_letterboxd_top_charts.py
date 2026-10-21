@@ -473,7 +473,7 @@ def test_short_bars_overflow_fifteen_chars_long_bars_keep_name_inside(tmp_path: 
         assert chart_rating_hbar(
             rows,
             out / "short-overflow.png",
-            title="Studios — lower rating (at least 3 rated films)",
+            title="Studios — lower rating (at least 4 rated films)",
         )
     finally:
         charts.save_dark_figure = real_save

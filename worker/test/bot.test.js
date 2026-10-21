@@ -210,7 +210,7 @@ test("inline default button answers the callback before dispatch", async () => {
     assert.ok(order.indexOf("answerCallbackQuery") < order.findIndex((item) => item.startsWith("send:")));
     const dispatch = calls.find((call) => call.url.includes("/dispatches"));
     assert.equal(dispatch.body.inputs.top_n, "20");
-    assert.equal(dispatch.body.inputs.min_rated, "3");
+    assert.equal(dispatch.body.inputs.min_rated, "4");
     assert.equal(env.BOT_KV.store.get("lebxd:await:111"), undefined);
   } finally {
     globalThis.fetch = previousFetch;

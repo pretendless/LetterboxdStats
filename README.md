@@ -22,7 +22,7 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 ![Horizontal bars of the best-rated release years with averages and rated-film counts](docs/images/release-years-higher-rating.png)
 
-*Release years with the highest average rating, among years with at least 3 rated films. Bar color follows the rating scale on the left.*
+*Release years with the highest average rating, among years with at least 4 rated films. Bar color follows the rating scale on the left.*
 
 ![Directors with the lowest average rating; short bars show the first 15 letters of the name with an ellipsis](docs/images/directors-lower-rating.png)
 
@@ -106,7 +106,7 @@ The report is a set of PNG charts in the chat: calendar (watches, pace, weekdays
 
 Every chart uses one palette. The anchors are the three logo circles, measured from the non-overlapping interior of each circle: blue `#3FB7EB` at 0.15, green `#03E53E` at 0.35, and orange `#FC7A02` at 0.8. The blend is a straight line in OKLab between five knots: deep purple `#5922BF` at 0, those three logo colors, and deep burgundy `#890E3A` at 1. The uneven spacing keeps the scale from looking uniform. A rating uses the whole range in reverse: 5 maps to 0 (deep purple) and 0.5 maps to 1 (deep burgundy). An ordered series (watch years, ranked genres), earliest or lowest first, is logo green for one value, logo blue and orange for two, and the three logo colors for three. Four or more values use the even bin midpoints `(i + 0.5) / N`, across the whole palette, with no bend toward the logo colors. Four values are 0.125, 0.375, 0.625, and 0.875. Seven values are 0.5/7, 1.5/7, 2.5/7, 3.5/7, 4.5/7, 5.5/7, and 6.5/7. On watch-year stacks, **No date** (undated catalog rows) uses the Letterboxd logo-background charcoal gradient (`#2C3440` → `#14181C`), rotated 90° to left→right — not a position on that purple→burgundy year scale and not solid white; the legend swatch shows the same horizontal gradient with a thin border on the dark chart surface.
 
-Example title: Studios — lower rating (at least 3 rated films).
+Example title: Studios — lower rating (at least 4 rated films).
 
 ## Bot profile
 
