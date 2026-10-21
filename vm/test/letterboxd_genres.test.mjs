@@ -6,6 +6,7 @@ import {
   decodeAwaitLetterboxd,
   encodeAwaitLetterboxd,
   isZipDocument,
+  letterboxdAckText,
   normalizeTelegramFileId,
   letterboxdMinKeyboard,
   letterboxdModeKeyboard,
@@ -21,6 +22,7 @@ import {
   parseWatchInterval,
 } from "../letterboxd_genres.js";
 import {
+  GENRE_PNGS,
   buildCalendarReportHtml,
   buildGenreReportHtml,
   buildGenreReportMessages,
@@ -98,7 +100,16 @@ test("watch bounds are month-before-year; one value is the whole interval", () =
 });
 
 test("one typed period skips the second bound and asks about undated films", () => {
-  const state = { step: "range_start", fileId: "BQACAgIAAxkBAAI1234567890", topN: 20, minRated: 3, includeUSA: true, includeEnglish: true };
+  const state = {
+    step: "range_start",
+    fileId: "BQACAgIAAxkBAAI1234567890",
+    topN: 20,
+    minRated: 3,
+    includeUSA: true,
+    includeEnglish: true,
+    includeDrama: true,
+    includeComedy: true,
+  };
   const next = advanceLetterboxdWizard(state, { kind: "text", text: "2019" });
   assert.equal(next.state.step, "undated");
   assert.equal(next.state.dateFrom, "2019-01-01");
@@ -212,24 +223,34 @@ test("binary steps keep the default button and drop the repeated lines", () => {
     { kind: "callback", step: "min_rated", value: 3 },
   );
   const english = advanceLetterboxdWizard(usa.state, { kind: "callback", step: "usa", value: true });
-  const period = advanceLetterboxdWizard(english.state, { kind: "callback", step: "english", value: true });
+  const drama = advanceLetterboxdWizard(english.state, { kind: "callback", step: "english", value: true });
+  const comedy = advanceLetterboxdWizard(drama.state, { kind: "callback", step: "drama", value: true });
+  const period = advanceLetterboxdWizard(comedy.state, { kind: "callback", step: "comedy", value: true });
   const undated = advanceLetterboxdWizard(
     { step: "range_start", fileId, dateFrom: "2024-01-01", dateTo: "2024-12-31" },
     { kind: "callback", step: "range_start", year: 2024 },
   );
-  for (const message of [usa, english, period, undated]) {
+  for (const message of [usa, english, drama, comedy, period, undated]) {
     assert.doesNotMatch(message.messages[0].text, /For example:/);
     assert.doesNotMatch(message.messages[0].text, /Default:/);
   }
   assert.match(usa.messages[0].text, /<b>Show USA in the country top\?<\/b>/);
   assert.match(english.messages[0].text, /<b>Show English in the language top\?<\/b>/);
+  assert.match(drama.messages[0].text, /<b>Show Drama in the genre tops\?<\/b>/);
+  assert.match(comedy.messages[0].text, /<b>Show Comedy in the genre tops\?<\/b>/);
   assert.match(period.messages[0].text, /<b>Full period or a custom range\?<\/b>/);
   assert.match(undated.messages[0].text, /<b>Add films with no diary date\?<\/b>/);
   assert.equal(usa.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
   assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
+  assert.equal(drama.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
+  assert.equal(comedy.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
   assert.equal(period.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: full period");
   assert.equal(undated.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
   assert.match(period.messages[0].text, /Full period runs from the first watch/);
+  assert.equal(parseLetterboxdCallback("lb:drama:0").step, "drama");
+  assert.equal(parseLetterboxdCallback("lb:drama:0").value, false);
+  assert.equal(parseLetterboxdCallback("lb:com:1").step, "comedy");
+  assert.equal(parseLetterboxdCallback("lb:com:1").value, true);
 });
 
 test("every wizard keyboard has a one-tap default button", () => {
@@ -239,6 +260,8 @@ test("every wizard keyboard has a one-tap default button", () => {
   assert.equal(last(letterboxdMinKeyboard()), "✅ Default (3)");
   assert.equal(last(letterboxdYesNoKeyboard("lb:usa")), "Default: yes");
   assert.equal(last(letterboxdYesNoKeyboard("lb:en")), "Default: yes");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:drama")), "Default: yes");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:com")), "Default: yes");
   assert.equal(last(letterboxdPeriodKeyboard()), "Default: full period");
   assert.equal(last(letterboxdUndatedKeyboard()), "Default: no");
   assert.equal(last(letterboxdYesNoKeyboard("lb:und", "нет")), "Default: no");
@@ -250,6 +273,39 @@ test("isZipDocument and file_id", () => {
   assert.equal(isZipDocument({ mime_type: "application/zip" }), true);
   assert.equal(normalizeTelegramFileId("BQACAgIAAxkBAAI"), "BQACAgIAAxkBAAI");
   assert.equal(normalizeTelegramFileId("../x"), "");
+});
+
+test("ack summary lists USA English Drama Comedy", () => {
+  const text = letterboxdAckText("lb-1", {
+    topN: 20,
+    minRated: 3,
+    includeUSA: true,
+    includeEnglish: false,
+    includeDrama: false,
+    includeComedy: true,
+  });
+  assert.match(text, /USA: yes/);
+  assert.match(text, /English: no/);
+  assert.match(text, /Drama: no/);
+  assert.match(text, /Comedy: yes/);
+});
+
+test("genre PNG send order puts watches before rating before decade before watch year", () => {
+  const genreOnly = [
+    "watches_by_genre.png",
+    "average_rating_by_genre.png",
+    "worst_average_rating_by_genre.png",
+    "genre_by_release_decade.png",
+    "genre_counts_by_viewing_year.png",
+  ];
+  assert.deepEqual(GENRE_PNGS.slice(0, genreOnly.length), genreOnly);
+  assert.ok(GENRE_PNGS.indexOf("watches_by_genre.png") < GENRE_PNGS.indexOf("average_rating_by_genre.png"));
+  assert.ok(
+    GENRE_PNGS.indexOf("average_rating_by_genre.png") < GENRE_PNGS.indexOf("genre_by_release_decade.png"),
+  );
+  assert.ok(
+    GENRE_PNGS.indexOf("genre_by_release_decade.png") < GENRE_PNGS.indexOf("genre_counts_by_viewing_year.png"),
+  );
 });
 
 test("buildLetterboxdDispatch", () => {
@@ -275,6 +331,8 @@ test("buildLetterboxdDispatch", () => {
       min_rated: "3",
       include_usa: "true",
       include_english: "true",
+      include_drama: "true",
+      include_comedy: "true",
       date_from: "",
       date_to: "",
       include_undated: "false",

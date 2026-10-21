@@ -1,8 +1,9 @@
-"""Chart options for /letterboxd: top size, rating gate, USA/English, watch window.
+"""Chart options for /letterboxd: top size, rating gate, USA/English/Drama/Comedy, watch window.
 
 Wizard defaults (also the GitHub Actions defaults):
   top_n=20 (allowed 1–100), min_rated=3 (allowed 1–50),
-  include USA, include English, full diary span, undated films only on the full span.
+  include USA, include English, include Drama, include Comedy,
+  full diary span, undated films only on the full span.
 
 The wizard rejects anything outside 1–100 (a typo like 9999 never dispatches).
 This module clamps a manual workflow_dispatch into the same bounds. Chart
@@ -35,6 +36,14 @@ _ENGLISH_NAMES = {
     "eng",
     "english",
     "английский",
+}
+
+_DRAMA_NAMES = {
+    "drama",
+}
+
+_COMEDY_NAMES = {
+    "comedy",
 }
 
 
@@ -85,6 +94,14 @@ def is_english_language(code) -> bool:
     return _norm_name(code) in _ENGLISH_NAMES
 
 
+def is_drama_genre(name) -> bool:
+    return _norm_name(name) in _DRAMA_NAMES
+
+
+def is_comedy_genre(name) -> bool:
+    return _norm_name(name) in _COMEDY_NAMES
+
+
 def format_count_avg_label(avg, rated, min_rated: int) -> str:
     """Avg annotation for a quantitative bar: the mean only.
 
@@ -117,6 +134,8 @@ class ChartOptions:
     min_rated: int = MIN_RATED_DEFAULT
     include_usa: bool = True
     include_english: bool = True
+    include_drama: bool = True
+    include_comedy: bool = True
     date_from: str | None = None
     date_to: str | None = None
     include_undated: bool = False
@@ -152,6 +171,8 @@ def read_chart_options(env: dict | None = None) -> ChartOptions:
         min_rated=clamp_min_rated(src.get("LETTERBOXD_MIN_RATED")),
         include_usa=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_USA"), True),
         include_english=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_ENGLISH"), True),
+        include_drama=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_DRAMA"), True),
+        include_comedy=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_COMEDY"), True),
         date_from=date_from,
         date_to=date_to,
         include_undated=include_undated,

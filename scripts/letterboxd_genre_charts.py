@@ -42,6 +42,8 @@ from letterboxd_export import (  # noqa: E402
     ratings_for_catalog,
 )
 from letterboxd_options import (  # noqa: E402
+    is_comedy_genre,
+    is_drama_genre,
     is_english_language,
     is_usa_country,
     rated_gate_phrase,
@@ -681,7 +683,15 @@ def chart_watches_by_country(diary, cache, path: Path, top_n: int = TOP_N_DEFAUL
     )
 
 
-def _filter_entity_names(field, names, *, include_usa=True, include_english=True):
+def _filter_entity_names(
+    field,
+    names,
+    *,
+    include_usa=True,
+    include_english=True,
+    include_drama=True,
+    include_comedy=True,
+):
     kept = []
     for name in names or []:
         if not name:
@@ -690,8 +700,21 @@ def _filter_entity_names(field, names, *, include_usa=True, include_english=True
             continue
         if field == "languages" and not include_english and is_english_language(name):
             continue
+        if field == "genres" and not include_drama and is_drama_genre(name):
+            continue
+        if field == "genres" and not include_comedy and is_comedy_genre(name):
+            continue
         kept.append(name)
     return kept
+
+
+def _filter_genre_names(names, *, include_drama=True, include_comedy=True):
+    return _filter_entity_names(
+        "genres",
+        names,
+        include_drama=include_drama,
+        include_comedy=include_comedy,
+    )
 
 
 def chart_deep_count_tops(
@@ -704,6 +727,8 @@ def chart_deep_count_tops(
     avg_maps=None,
     include_usa=True,
     include_english=True,
+    include_drama=True,
+    include_comedy=True,
 ) -> dict:
     """Watch-year stacked count charts for TMDB deep entities.
 
@@ -727,7 +752,12 @@ def chart_deep_count_tops(
             else:
                 raw = list(meta.get(field) or [])
             return _filter_entity_names(
-                field, raw, include_usa=include_usa, include_english=include_english
+                field,
+                raw,
+                include_usa=include_usa,
+                include_english=include_english,
+                include_drama=include_drama,
+                include_comedy=include_comedy,
             )
 
         return _fn
@@ -789,11 +819,20 @@ def chart_deep_count_tops(
 
         if field == "genres":
             # Diary Genre list (TMDB) — same stacked count family as countries/actors.
-            def genre_names(row, _cache=cache):
+            def genre_names(
+                row,
+                _cache=cache,
+                _include_drama=include_drama,
+                _include_comedy=include_comedy,
+            ):
                 gl = row.get("Genre list")
                 if isinstance(gl, (list, tuple)) and gl:
-                    return [str(g) for g in gl if g]
-                return list(_cache_meta_for_row(row, _cache).get("genres") or [])
+                    raw = [str(g) for g in gl if g]
+                else:
+                    raw = list(_cache_meta_for_row(row, _cache).get("genres") or [])
+                return _filter_genre_names(
+                    raw, include_drama=_include_drama, include_comedy=_include_comedy
+                )
 
             names_for_row = genre_names
         else:
@@ -992,7 +1031,13 @@ def main():
     years = sorted(diary["Watched Date"].dt.year.dropna().astype(int).unique())
 
     # 1) Stacked yearly counts — diary only (need watch year).
-    all_genres_diary = [g for genres in diary["Genre list"] for g in genres]
+    all_genres_diary = [
+        g
+        for genres in diary["Genre list"]
+        for g in _filter_genre_names(
+            genres, include_drama=opts.include_drama, include_comedy=opts.include_comedy
+        )
+    ]
     top_genres = [g for g, _ in Counter(all_genres_diary).most_common(12)]
     yearly = {}
     for y in years:
@@ -1030,9 +1075,14 @@ def main():
     for _, row in catalog.iterrows():
         meta = cache.get(f"{row['Name']}|||{int(row['Year']) if pd.notna(row['Year']) else ''}", {})
         ry = meta.get("tmdb_release_year")
-        if ry and meta.get("genres"):
+        genres = _filter_genre_names(
+            meta.get("genres") or [],
+            include_drama=opts.include_drama,
+            include_comedy=opts.include_comedy,
+        )
+        if ry and genres:
             decade = (int(ry) // 10) * 10
-            for genre in meta["genres"]:
+            for genre in genres:
                 release_decades[(decade, genre)] = release_decades.get((decade, genre), 0) + 1
     decade_df = pd.DataFrame(
         [{"Decade": d, "Genre": g, "Views": n} for (d, g), n in release_decades.items()]
@@ -1124,6 +1174,8 @@ def main():
         avg_maps=avg_maps,
         include_usa=opts.include_usa,
         include_english=opts.include_english,
+        include_drama=opts.include_drama,
+        include_comedy=opts.include_comedy,
     )
     rating_paths = {
         "average_rating_by_country": "average_rating_by_country.png",
@@ -1171,6 +1223,8 @@ def main():
         "top_n": int(opts.top_n),
         "include_usa": bool(opts.include_usa),
         "include_english": bool(opts.include_english),
+        "include_drama": bool(opts.include_drama),
+        "include_comedy": bool(opts.include_comedy),
         "date_from": opts.date_from or "",
         "date_to": opts.date_to or "",
         "include_undated": bool(opts.include_undated and opts.has_window),
