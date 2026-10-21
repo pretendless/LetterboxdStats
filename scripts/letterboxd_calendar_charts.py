@@ -37,7 +37,9 @@ import pandas as pd  # noqa: E402
 
 from letterboxd_export import (  # noqa: E402
     film_name_year_key,
+    liked_film_keys,
     load_export,
+    load_liked_films,
     ratings_for_catalog,
 )
 from letterboxd_options import (  # noqa: E402
@@ -66,6 +68,11 @@ from letterboxd_top_charts import (  # noqa: E402
     chart_release_years_by_rating,
     color_bars_by_rating,
     count_avg_text_style,
+    count_liked_among_keys,
+    draw_watch_year_most_liked_panel,
+    film_title_with_liked_heart,
+    format_liked_tip,
+    rank_most_liked,
 )
 from letterboxd_ratings import (  # noqa: E402
     MIN_RATED_FOR_TOP,
@@ -140,6 +147,7 @@ def build_diary_summary(
     *,
     top_n: int = TOP_N_DEFAULT,
     min_rated: int = MIN_RATED_FOR_TOP,
+    liked_keys: set[str] | frozenset | None = None,
 ) -> dict:
     """Compact stats for the Telegram HTML report (no TMDB).
 
@@ -150,6 +158,7 @@ def build_diary_summary(
     df = diary
     cat = catalog if catalog is not None else diary
     only = watched_only if watched_only is not None else df.iloc[0:0].copy()
+    liked = set(liked_keys or ())
     if film_ratings is None:
         from letterboxd_export import merged_film_ratings
 
@@ -259,6 +268,11 @@ def build_diary_summary(
                 avg=("Rating", "mean"),
                 rated=("_film_key", "nunique"),
             )
+            keys_by_year = (
+                latest_release.groupby("release_year")["_film_key"]
+                .apply(lambda s: set(str(k) for k in s.tolist()))
+                .to_dict()
+            )
             for year, row in rated_by_year.iterrows():
                 rated_n = int(row["rated"])
                 if not passes_rated_threshold(rated_n, min_rated=min_rated):
@@ -269,6 +283,9 @@ def build_diary_summary(
                         "avg": round(float(row["avg"]), 2),
                         "films": int(film_counts.get(year, 0)),
                         "rated": rated_n,
+                        "liked_count": count_liked_among_keys(
+                            keys_by_year.get(year) or (), liked
+                        ),
                     }
                 )
             top_rated_release_years.sort(key=lambda r: (-r["avg"], -r["rated"], -r["year"]))
@@ -384,21 +401,65 @@ def _center_tip_pair(fig, ax, pending, gap: float = 4.0) -> None:
         shift(right, rb, start + lb.width + gap)
 
 
+def _place_liked_tip_above_separate(
+    fig, ax, xs, base_ys, liked_counts, *, fontsize=7, y_gap=None
+) -> None:
+    """Vertical columns: ``♥ N`` on its own tip line above the count+avg row."""
+    if not xs:
+        return
+    n = len(xs)
+    counts = list(liked_counts or [])
+    if len(counts) < n:
+        counts = counts + [0] * (n - len(counts))
+    gap = float(y_gap) if y_gap is not None else 0.0
+    if gap <= 0:
+        # Small data-space offset derived from axis span when caller omits y_gap.
+        y0, y1 = ax.get_ylim()
+        gap = max((y1 - y0) * 0.028, 0.15)
+    for xi, y, liked_n in zip(xs, base_ys, counts):
+        tip = format_liked_tip(liked_n)
+        if not tip:
+            continue
+        ax.text(
+            xi,
+            float(y) + gap,
+            tip,
+            ha="center",
+            va="bottom",
+            fontsize=fontsize,
+            color=FG,
+            fontweight="bold",
+            clip_on=False,
+        )
+
+
 def _place_count_avg_above_totals(
-    fig, ax, totals, avg_labels, *, y_pad, fontsize=7, percent_count=False
+    fig,
+    ax,
+    totals,
+    avg_labels,
+    *,
+    y_pad,
+    fontsize=7,
+    percent_count=False,
+    liked_counts=None,
 ) -> None:
     """Count + mean centered above each stacked column total.
 
     Pass ``avg_labels=None`` for a single tip per column (default: count).
     Pass ``percent_count=True`` for Letterboxd rating distribution: bold
     ``NN.NN%`` plus ``(count)`` (the bin is already the x-axis).
+    When ``liked_counts`` is set, ``♥ N`` (N > 0) sits on a separate line above
+    the primary tip row (vertical column layout).
     """
     if avg_labels is None:
         if percent_count:
             pcts = percent_shares(totals)
             pending = []
+            tip_ys = []
             for xi, total, pct in zip(range(len(totals)), totals, pcts):
                 y = float(total) + y_pad
+                tip_ys.append(y)
                 pct_artist = ax.text(
                     xi,
                     y,
@@ -423,11 +484,17 @@ def _place_count_avg_above_totals(
                 )
                 pending.append((pct_artist, count_artist, y))
             _center_tip_pair(fig, ax, pending)
+            _place_liked_tip_above_separate(
+                fig, ax, list(range(len(totals))), tip_ys, liked_counts, fontsize=fontsize
+            )
             return
+        tip_ys = []
         for xi, total in zip(range(len(totals)), totals):
+            y = float(total) + y_pad
+            tip_ys.append(y)
             ax.text(
                 xi,
-                float(total) + y_pad,
+                y,
                 str(int(total)),
                 ha="center",
                 va="bottom",
@@ -436,10 +503,15 @@ def _place_count_avg_above_totals(
                 fontweight="normal",
                 clip_on=False,
             )
+        _place_liked_tip_above_separate(
+            fig, ax, list(range(len(totals))), tip_ys, liked_counts, fontsize=fontsize
+        )
         return
     pending = []
+    tip_ys = []
     for xi, total, label in zip(range(len(totals)), totals, avg_labels):
         y = float(total) + y_pad
+        tip_ys.append(y)
         count = ax.text(
             xi,
             y,
@@ -466,6 +538,9 @@ def _place_count_avg_above_totals(
         )
         pending.append((count, avg, y))
     _center_tip_pair(fig, ax, pending)
+    _place_liked_tip_above_separate(
+        fig, ax, list(range(len(totals))), tip_ys, liked_counts, fontsize=fontsize
+    )
 
 
 def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Watch year"):
@@ -485,22 +560,38 @@ def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Wat
         leg.get_title().set_color(FG)
 
 
-def chart_weekday_month(df: pd.DataFrame, path: Path) -> None:
+def chart_weekday_month(
+    df: pd.DataFrame,
+    path: Path,
+    *,
+    liked_keys=None,
+    top_n: int = TOP_N_DEFAULT,
+) -> None:
     df = df.copy()
     df["watch_year"] = df["Watched Date"].dt.year.astype(int)
     df["weekday"] = df["Watched Date"].dt.weekday
     df["month"] = df["Watched Date"].dt.month
+    df["_film_key"] = film_name_year_key(df)
+    liked = set(liked_keys or ())
 
     years = sorted(df["watch_year"].unique().tolist())
     colors = year_colors(years)
+    palette = {int(y): colors[y] for y in years}
 
     week = np.zeros((len(years), 7), dtype=float)
     month = np.zeros((len(years), 12), dtype=float)
     year_index = {y: i for i, y in enumerate(years)}
+    week_keys = {i: set() for i in range(7)}
+    month_keys = {i: set() for i in range(12)}
     for _, row in df.iterrows():
         yi = year_index[int(row["watch_year"])]
-        week[yi, int(row["weekday"])] += 1
-        month[yi, int(row["month"]) - 1] += 1
+        wd = int(row["weekday"])
+        mo = int(row["month"]) - 1
+        week[yi, wd] += 1
+        month[yi, mo] += 1
+        fk = str(row["_film_key"])
+        week_keys[wd].add(fk)
+        month_keys[mo].add(fk)
 
     week_avgs = ["—"] * 7
     month_avgs = ["—"] * 12
@@ -512,7 +603,15 @@ def chart_weekday_month(df: pd.DataFrame, path: Path) -> None:
             for mo, group in rated.groupby("month"):
                 month_avgs[int(mo) - 1] = f"{float(group['Rating'].mean()):.2f}"
 
-    fig, axes = plt.subplots(2, 1, figsize=(14, 10), sharey=False)
+    week_liked = [count_liked_among_keys(week_keys[i], liked) for i in range(7)]
+    month_liked = [count_liked_among_keys(month_keys[i], liked) for i in range(12)]
+    most_liked = rank_most_liked(
+        {WEEKDAYS[i]: week_liked[i] for i in range(7)}
+        | {MONTHS[i]: month_liked[i] for i in range(12)},
+        top_n,
+    )
+
+    fig, axes = plt.subplots(2, 1, figsize=(15 if most_liked else 14, 10), sharey=False)
     fig.suptitle(
         "Watches by weekday and month, split by year",
         fontsize=14,
@@ -522,20 +621,33 @@ def chart_weekday_month(df: pd.DataFrame, path: Path) -> None:
     week_totals = stacked_counts(axes[0], WEEKDAYS, years, week, colors, "Watch entries")
     axes[0].set_title("Watches by weekday — stacked by year")
     week_max = float(week_totals.max()) if len(week_totals) else 1.0
-    axes[0].set_ylim(0, week_max * 1.18 if week_max else 1.0)
+    axes[0].set_ylim(0, week_max * 1.22 if week_max else 1.0)
 
     month_totals = stacked_counts(axes[1], MONTHS, years, month, colors, "Watch entries")
     axes[1].set_title("Watches by month — stacked by year")
     month_max = float(month_totals.max()) if len(month_totals) else 1.0
-    axes[1].set_ylim(0, month_max * 1.18 if month_max else 1.0)
+    axes[1].set_ylim(0, month_max * 1.22 if month_max else 1.0)
 
-    add_watch_year_legend(fig, years, colors, title="Watch year")
-    fig.tight_layout(rect=[0, 0, 0.9, 0.96])
-    _place_count_avg_above_totals(
-        fig, axes[0], week_totals, week_avgs, y_pad=week_max * 0.02
+    right_frac = 0.78 if most_liked else 0.88
+    fig.tight_layout(rect=[0, 0, right_frac, 0.96])
+    draw_watch_year_most_liked_panel(
+        fig, axes[0], years, palette, most_liked, fontsize=8, title_fontsize=9
     )
     _place_count_avg_above_totals(
-        fig, axes[1], month_totals, month_avgs, y_pad=month_max * 0.02
+        fig,
+        axes[0],
+        week_totals,
+        week_avgs,
+        y_pad=week_max * 0.02,
+        liked_counts=week_liked,
+    )
+    _place_count_avg_above_totals(
+        fig,
+        axes[1],
+        month_totals,
+        month_avgs,
+        y_pad=month_max * 0.02,
+        liked_counts=month_liked,
     )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
@@ -650,12 +762,21 @@ def _avg_labels_for_watch_counts(df: pd.DataFrame, index, grain: str) -> list[st
     return labels
 
 
-def _place_count_avg_above_bars(fig, ax, bars, values, avg_labels, *, y_pad, fontsize, rotation) -> None:
-    """Count in regular white, mean beside it, pair centered on the bar."""
+def _place_count_avg_above_bars(
+    fig, ax, bars, values, avg_labels, *, y_pad, fontsize, rotation, liked_counts=None
+) -> None:
+    """Count in regular white, mean beside it, pair centered on the bar.
+
+    Vertical columns: optional ``♥ N`` on a separate tip line above that pair.
+    """
     specs = []
+    tip_xs = []
+    tip_ys = []
     for bar, value, label in zip(bars, values, avg_labels):
         y = float(bar.get_height()) + y_pad
         x = float(bar.get_x() + bar.get_width() / 2)
+        tip_xs.append(x)
+        tip_ys.append(y)
         count = ax.text(
             x,
             y,
@@ -700,6 +821,38 @@ def _place_count_avg_above_bars(fig, ax, bars, values, avg_labels, *, y_pad, fon
 
         shift(count, cb, start)
         shift(avg, ab, start + cb.width + gap)
+    _place_liked_tip_above_separate(
+        fig, ax, tip_xs, tip_ys, liked_counts, fontsize=fontsize
+    )
+
+
+def _liked_counts_by_watch_grain(
+    df: pd.DataFrame, index, grain: str, liked_keys
+) -> list[int]:
+    """Unique liked Name+Year films per watch-time bucket (same grain as count tips)."""
+    liked = set(liked_keys or ())
+    if not liked or df is None or getattr(df, "empty", True):
+        return [0] * len(index)
+    work = df.copy()
+    if "Watched Date" not in work.columns:
+        return [0] * len(index)
+    work = work[work["Watched Date"].notna()].copy()
+    if work.empty:
+        return [0] * len(index)
+    work["_film_key"] = film_name_year_key(work)
+    if grain == "year":
+        work["_bucket"] = work["Watched Date"].dt.year
+    elif grain == "month":
+        work["_bucket"] = work["Watched Date"].dt.to_period("M")
+    else:
+        work["_bucket"] = work["Watched Date"].dt.normalize()
+    out = []
+    for key in index:
+        bucket_key = _watch_bucket_key(key, grain)
+        subset = work[work["_bucket"].map(lambda v, g=grain: _watch_bucket_key(v, g)) == bucket_key]
+        keys = set(subset["_film_key"].astype(str).tolist()) if not subset.empty else set()
+        out.append(count_liked_among_keys(keys, liked))
+    return out
 
 
 def chart_views_by_year(
@@ -709,6 +862,7 @@ def chart_views_by_year(
     grain: str = "year",
     span_start=None,
     span_end=None,
+    liked_keys=None,
 ) -> None:
     dates = df["Watched Date"].dropna()
     if dates.empty:
@@ -754,7 +908,7 @@ def chart_views_by_year(
     # The mean sits beside the count, so the pair needs a smaller face than a lone number.
     if rotation == 0 and n > 12:
         fontsize = min(fontsize, 7)
-    ax.set_ylim(0, ymax * (1.18 if rotation == 0 else 1.28))
+    ax.set_ylim(0, ymax * (1.22 if rotation == 0 else 1.34))
     fig.tight_layout()
     _place_count_avg_above_bars(
         fig,
@@ -765,6 +919,7 @@ def chart_views_by_year(
         y_pad=ymax * 0.015,
         fontsize=fontsize,
         rotation=rotation,
+        liked_counts=_liked_counts_by_watch_grain(df, counts.index, grain, liked_keys),
     )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
@@ -801,14 +956,23 @@ def round_rating(value) -> float | None:
     return rounded
 
 
-def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
+def chart_decade_rating(
+    df: pd.DataFrame,
+    path: Path,
+    *,
+    liked_keys=None,
+    top_n: int = TOP_N_DEFAULT,
+) -> None:
     df = df.copy()
     df["watch_year"] = df["Watched Date"].dt.year.astype(int)
     df["decade"] = df["Year"].map(release_decade_label)
     df["rating_bin"] = df["Rating"].map(round_rating)
+    df["_film_key"] = film_name_year_key(df)
+    liked = set(liked_keys or ())
 
     years = sorted(df["watch_year"].unique().tolist())
     colors = year_colors(years)
+    palette = {int(y): colors[y] for y in years}
     year_index = {y: i for i, y in enumerate(years)}
 
     decades = sorted(
@@ -821,23 +985,34 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
 
     decade_matrix = np.zeros((len(years), len(decades)), dtype=float)
     decade_index = {d: i for i, d in enumerate(decades)}
+    decade_keys = {d: set() for d in decades}
     for _, row in df.iterrows():
         decade = row["decade"]
         if decade not in decade_index:
             continue
         yi = year_index[int(row["watch_year"])]
         decade_matrix[yi, decade_index[decade]] += 1
+        decade_keys[decade].add(str(row["_film_key"]))
 
     rating_matrix = np.zeros((len(years), len(RATING_BINS)), dtype=float)
     rating_index = {r: i for i, r in enumerate(RATING_BINS)}
+    rating_keys = {r: set() for r in RATING_BINS}
     for _, row in df.iterrows():
         rating = row["rating_bin"]
         if rating not in rating_index:
             continue
         yi = year_index[int(row["watch_year"])]
         rating_matrix[yi, rating_index[rating]] += 1
+        rating_keys[rating].add(str(row["_film_key"]))
 
-    fig, axes = plt.subplots(2, 1, figsize=(14, 10), sharey=False)
+    decade_liked = [count_liked_among_keys(decade_keys[d], liked) for d in decades]
+    rating_liked = [count_liked_among_keys(rating_keys[r], liked) for r in RATING_BINS]
+    most_liked = rank_most_liked(
+        {d: decade_liked[i] for i, d in enumerate(decades)},
+        top_n,
+    )
+
+    fig, axes = plt.subplots(2, 1, figsize=(15 if most_liked else 14, 10), sharey=False)
     fig.suptitle("Letterboxd extra stats", fontsize=14, y=0.98)
 
     decade_totals = stacked_counts(
@@ -858,7 +1033,7 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
                 if label in means.index:
                     decade_avgs[i] = f"{float(means.loc[label]):.2f}"
     decade_max = float(decade_totals.max()) if len(decade_totals) else 1.0
-    axes[0].set_ylim(0, decade_max * 1.18 if decade_max else 1.0)
+    axes[0].set_ylim(0, decade_max * 1.22 if decade_max else 1.0)
 
     rating_labels = [f"{r:g}" for r in RATING_BINS]
     rating_totals = stacked_counts(
@@ -873,12 +1048,20 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
     axes[1].set_xlabel("Letterboxd rating")
     # Tip = bold NN.NN% share + (count); not the star rating (bin is x-axis).
     rating_max = float(rating_totals.max()) if len(rating_totals) else 1.0
-    axes[1].set_ylim(0, rating_max * 1.18 if rating_max else 1.0)
+    axes[1].set_ylim(0, rating_max * 1.22 if rating_max else 1.0)
 
-    add_watch_year_legend(fig, years, colors, title="Watch year")
-    fig.tight_layout(rect=[0, 0, 0.9, 0.96])
+    right_frac = 0.78 if most_liked else 0.88
+    fig.tight_layout(rect=[0, 0, right_frac, 0.96])
+    draw_watch_year_most_liked_panel(
+        fig, axes[0], years, palette, most_liked, fontsize=8, title_fontsize=9
+    )
     _place_count_avg_above_totals(
-        fig, axes[0], decade_totals, decade_avgs, y_pad=decade_max * 0.02
+        fig,
+        axes[0],
+        decade_totals,
+        decade_avgs,
+        y_pad=decade_max * 0.02,
+        liked_counts=decade_liked,
     )
     _place_count_avg_above_totals(
         fig,
@@ -887,6 +1070,7 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
         None,
         y_pad=rating_max * 0.02,
         percent_count=True,
+        liked_counts=rating_liked,
     )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
@@ -1279,6 +1463,7 @@ def chart_top_rewatches(
     *,
     film_ratings: pd.DataFrame | None = None,
     exclude_keywords: tuple[str, ...] | list[str] | None = None,
+    liked_keys: set[str] | frozenset | None = None,
 ) -> bool:
     """Horizontal stacked bars of rewatched films, colored by watch year.
 
@@ -1287,8 +1472,12 @@ def chart_top_rewatches(
     ``merged_film_ratings``. ``film_ratings`` is accepted for call-site
     compatibility and ignored for the tip. No multi-film rated threshold; a
     dash only when no rated diary row exists for that film.
+
+    Liked films (Name+Year in likes/films.csv) append ``♥`` after the visible
+    title on the y-label. Tip row is count + average only (no liked-count tip).
     """
     del film_ratings  # unique-film merge must not feed this chart's tip
+    liked = set(liked_keys or ())
     names = df["Name"].fillna("").astype(str).str.strip()
     years_release = df["Year"] if "Year" in df.columns else pd.Series(dtype=float)
     key = names + "|||" + years_release.map(lambda y: str(int(y)) if pd.notna(y) else "")
@@ -1304,7 +1493,7 @@ def chart_top_rewatches(
     )
     keywords = tuple(exclude_keywords or ())
     multi = grouped[grouped["count"] >= 2].sort_values("count", ascending=False)
-    kept_rows = []
+    eligible = []
     for key_id, row in multi.iterrows():
         year_val = row["Year"]
         year_s = f" ({int(year_val)})" if pd.notna(year_val) else ""
@@ -1314,11 +1503,15 @@ def chart_top_rewatches(
             title, keywords
         ):
             continue
-        kept_rows.append((key_id, row, label))
-        if len(kept_rows) >= limit:
-            break
+        eligible.append((key_id, row, label))
+    kept_rows = eligible[:limit]
     if not kept_rows:
         return False
+    # Most liked: rank all eligible rewatch films by liked count (0/1), top ``limit``.
+    liked_by_label = {
+        label: (1 if str(key_id) in liked else 0) for key_id, _row, label in eligible
+    }
+    most_liked = rank_most_liked(liked_by_label, limit)
     # Chart draws bottom→top; reverse so the most-watched sits at the top.
     kept_rows = list(reversed(kept_rows))
 
@@ -1326,17 +1519,19 @@ def chart_top_rewatches(
     all_years = sorted(df["Watched Date"].dt.year.dropna().astype(int).unique().tolist())
     years = sorted(work.loc[work["_key"].isin(keys), "watch_year"].unique().tolist())
     colors = year_colors(years, palette_years=all_years)
+    palette = {int(y): colors[y] for y in years}
 
     labels = []
-    for _key_id, row, label in kept_rows:
+    for key_id, row, label in kept_rows:
         title = str(row["Name"])
+        year_val = row["Year"]
+        year_s = f" ({int(year_val)})" if pd.notna(year_val) else ""
         if len(title) > 42:
-            year_val = row["Year"]
-            year_s = f" ({int(year_val)})" if pd.notna(year_val) else ""
             title = title[:40] + "…"
-            labels.append(f"{title}{year_s}")
+            shown = f"{title}{year_s}"
         else:
-            labels.append(label)
+            shown = label
+        labels.append(film_title_with_liked_heart(shown, liked=str(key_id) in liked))
 
     # Tip mean = all rated diary rows for the film (not latest / merged unique).
     rating_lookup = diary_row_rating_means(work)
@@ -1350,7 +1545,8 @@ def chart_top_rewatches(
     avg_labels = [format_single_rating_label(rating_lookup.get(key_id)) for key_id in keys]
 
     # Row pitch stays ~0.42 in so a longer rewatch list gets a taller figure.
-    fig, ax = plt.subplots(figsize=(11, max(4, len(labels) * 0.42)))
+    fig_w = 12.4 if most_liked else 11.4
+    fig, ax = plt.subplots(figsize=(fig_w, max(4, len(labels) * 0.42)))
     y = np.arange(len(labels))
     left = np.zeros(len(labels))
     for yi, year in enumerate(years):
@@ -1380,8 +1576,11 @@ def chart_top_rewatches(
                 clip_on=False,
             )
         )
-    add_watch_year_legend(fig, years, colors, title="Watch year")
-    fig.tight_layout(rect=[0, 0, 0.88, 1])
+    right_frac = 0.74 if most_liked else 0.78
+    fig.tight_layout(rect=[0, 0, right_frac, 1])
+    draw_watch_year_most_liked_panel(
+        fig, ax, years, palette, most_liked, fontsize=8, title_fontsize=9
+    )
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     for artist, label in zip(count_artists, avg_labels):
@@ -1426,18 +1625,30 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
+        liked_keys = liked_film_keys(load_liked_films(zip_path))
         # Date-sensitive charts: diary only (need Watched Date).
         span_start, span_end = resolve_watch_bounds(diary, opts.date_from, opts.date_to)
         grain = watch_time_grain(span_start, span_end)
-        chart_weekday_month(diary, Path("views_by_weekday_month.png"))
+        chart_weekday_month(
+            diary,
+            Path("views_by_weekday_month.png"),
+            liked_keys=liked_keys,
+            top_n=opts.top_n,
+        )
         chart_views_by_year(
             diary,
             Path("views_by_year.png"),
             grain=grain,
             span_start=span_start,
             span_end=span_end,
+            liked_keys=liked_keys,
         )
-        chart_decade_rating(diary, Path("extra_stats_decade_rating.png"))
+        chart_decade_rating(
+            diary,
+            Path("extra_stats_decade_rating.png"),
+            liked_keys=liked_keys,
+            top_n=opts.top_n,
+        )
         made_rating = chart_average_rating_by_year(
             diary, Path("average_rating_by_year.png"), film_ratings=film_ratings, grain=grain
         )
@@ -1462,6 +1673,7 @@ def main(argv: list[str] | None = None) -> int:
             limit=opts.top_n,
             film_ratings=film_ratings,
             exclude_keywords=opts.exclude_keywords,
+            liked_keys=liked_keys,
         )
         summary = build_diary_summary(
             diary,
@@ -1470,6 +1682,7 @@ def main(argv: list[str] | None = None) -> int:
             film_ratings=film_ratings,
             top_n=opts.top_n,
             min_rated=opts.min_rated,
+            liked_keys=liked_keys,
         )
         summary["date_from"] = opts.date_from or ""
         summary["date_to"] = opts.date_to or ""
@@ -1485,6 +1698,7 @@ def main(argv: list[str] | None = None) -> int:
             avg_by_name=year_avgs,
             min_rated=opts.min_rated,
             exclude_keywords=opts.exclude_keywords,
+            liked_keys=liked_keys,
         )
         made_release_rating = chart_release_years_by_rating(
             summary.get("top_rated_release_years") or [],

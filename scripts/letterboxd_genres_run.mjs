@@ -296,9 +296,12 @@ export const SEARCH_MATCH_FIELDS = [
 ];
 
 /**
- * Format one film row under a match-site section: `1. Name (Year): 5, —, 3.5`.
+ * Format one film row under a match-site section:
+ * `1. Name (Year) ♥: 5, —, 3.5` when liked, else without ♥.
+ * Heart is U+2665 BLACK HEART SUIT only (never U+2764). After year, before colon.
  * Colon separates title from ratings; em dash `—` is only for empty slots.
  * Ratings: one value per watch (diary oldest→newest, or one watched-only slot).
+ * Liked = Name+Year in likes/films.csv (diary has no Like column).
  */
 function formatSearchFilmLine(film, index) {
   const name = escapeHtml(film && film.name != null ? film.name : "?");
@@ -310,7 +313,8 @@ function formatSearchFilmLine(film, index) {
   const ratingText = ratings.length
     ? ratings.map((slot) => escapeHtml(slot == null || slot === "" ? "—" : slot)).join(", ")
     : "";
-  const base = `${index}. ${name} (${escapeHtml(year)})`;
+  const heart = film && film.liked ? " \u2665" : "";
+  const base = `${index}. ${name} (${escapeHtml(year)})${heart}`;
   return ratingText ? `${base}: ${ratingText}` : base;
 }
 
@@ -320,7 +324,7 @@ function formatSearchFilmLine(film, index) {
  * Structure: title + unique film count, then a bold section per match site
  * (genre → … → year). Under each header, numbered films that matched that
  * field; a film that hits multiple fields is repeated under each. Empty
- * sections are omitted. Line: `1. Name (Year): 5, —, 3.5`.
+ * sections are omitted. Line: `1. Name (Year) ♥: 5, —, 3.5` when liked.
  * Empty list → one short notice.
  */
 export function buildSearchKeywordMessages(keyword, films) {
