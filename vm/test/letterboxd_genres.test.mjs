@@ -142,6 +142,11 @@ test("top size is any integer from 1 to 100", () => {
   const fifty = advanceLetterboxdWizard(state, { kind: "callback", step: "top_n", value: 50 });
   assert.equal(fifty.state.topN, 50);
   assert.equal(parseLetterboxdCallback("lb:n:50").value, 50);
+  assert.equal(parseLetterboxdCallback("lb:m:1").value, 1);
+  assert.equal(parseLetterboxdCallback("lb:m:3").value, 3);
+  assert.equal(parseLetterboxdCallback("lb:m:4").value, 4);
+  assert.equal(parseLetterboxdCallback("lb:m:5").value, 5);
+  assert.equal(parseLetterboxdCallback("lb:m:10"), null);
   const bad = advanceLetterboxdWizard(state, { kind: "text", text: "9999" });
   assert.equal(bad.state.step, "top_n");
   assert.equal(bad.dispatch, undefined);
@@ -194,7 +199,7 @@ test("wizard prompts are html, with a default line and examples", () => {
   );
   assert.equal(top.state.topN, 20);
   assert.equal(top.state.step, "min_rated");
-  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "✅ Default (3)");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "✅ Default (4)");
   const minText = top.messages[0].text;
   assert.match(minText, /<b>Threshold<\/b>/);
   assert.match(minText, /unique rated films/);
@@ -204,8 +209,14 @@ test("wizard prompts are html, with a default line and examples", () => {
   assert.match(minText, /only in watched/);
   assert.doesNotMatch(minText, /Watch-count charts ignore this threshold/);
   assert.doesNotMatch(minText, /minimum ratings/i);
-  assert.match(minText, /For example: 3, 5, 10/);
-  assert.match(minText, /Default: 3/);
+  assert.match(minText, /For example: 1, 3, 5/);
+  assert.match(minText, /Default: 4/);
+  assert.deepEqual(
+    top.messages[0].reply_markup.inline_keyboard[0].map((button) => button.text),
+    ["1", "3", "5"],
+  );
+  assert.equal(top.messages[0].reply_markup.inline_keyboard[0][0].callback_data, "lb:m:1");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].callback_data, "lb:m:4");
   const year = advanceLetterboxdWizard(
     range.state,
     { kind: "callback", step: "range_start", year: 2024 },
@@ -366,7 +377,12 @@ test("every wizard keyboard has a one-tap default button alone on the bottom row
   assert.equal(lastRow(mode).length, 1);
   assert.equal(last(letterboxdTopKeyboard()), "✅ Default (20)");
   assert.equal(lastRow(letterboxdTopKeyboard()).length, 1);
-  assert.equal(last(letterboxdMinKeyboard()), "✅ Default (3)");
+  assert.deepEqual(
+    letterboxdMinKeyboard().inline_keyboard[0].map((button) => button.text),
+    ["1", "3", "5"],
+  );
+  assert.equal(last(letterboxdMinKeyboard()), "✅ Default (4)");
+  assert.equal(letterboxdMinKeyboard().inline_keyboard.at(-1)[0].callback_data, "lb:m:4");
   assert.equal(lastRow(letterboxdMinKeyboard()).length, 1);
   assert.equal(last(letterboxdYesNoKeyboard("lb:rew", "no")), "Default: no");
   assert.equal(last(letterboxdYesNoKeyboard("lb:excl", "no")), "Default: no");
@@ -586,7 +602,7 @@ test("buildLetterboxdDispatch", () => {
       chat_id: "7",
       file_id: "BQACAgIAAxkBAAI1234567890",
       top_n: "20",
-      min_rated: "3",
+      min_rated: "4",
       include_rewatch_in_averages: "false",
       include_usa: "true",
       include_english: "true",

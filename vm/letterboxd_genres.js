@@ -97,7 +97,7 @@ export const genresJobKey = letterboxdJobKey;
 export const LETTERBOXD_TOP_N_DEFAULT = 20;
 export const LETTERBOXD_TOP_N_MIN = 1;
 export const LETTERBOXD_TOP_N_MAX = 100;
-export const LETTERBOXD_MIN_RATED_DEFAULT = 3;
+export const LETTERBOXD_MIN_RATED_DEFAULT = 4;
 export const LETTERBOXD_MIN_RATED_MIN = 1;
 export const LETTERBOXD_MIN_RATED_MAX = 50;
 export const LETTERBOXD_EXCLUDE_KEYWORDS_MAX = 20;
@@ -670,9 +670,9 @@ export function letterboxdTopKeyboard() {
 
 export function letterboxdMinKeyboard() {
   return withDefaultButton(
-    [[button("3", "lb:m:3"), button("5", "lb:m:5"), button("10", "lb:m:10")]],
-    "✅ Default (3)",
-    "lb:m:3",
+    [[button("1", "lb:m:1"), button("3", "lb:m:3"), button("5", "lb:m:5")]],
+    "✅ Default (4)",
+    "lb:m:4",
   );
 }
 
@@ -795,9 +795,9 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: wizardPrompt(
         "Threshold",
-        "Average-rating tops include a row only when it has this many unique rated films or more: directors, actors, genres, countries, and the rest. At 3, a director with two rated films is left out. Director, actor, and studio watch-count charts use the same threshold: a row needs that many catalog hits or more (each diary view plus one for a film that is only in watched, with no diary date). Buttons, or a number from 1 to 50.",
-        "3, 5, 10",
-        "3",
+        "Average-rating tops include a row only when it has this many unique rated films or more: directors, actors, genres, countries, and the rest. At 4, a director with two rated films is left out. Director, actor, and studio watch-count charts use the same threshold: a row needs that many catalog hits or more (each diary view plus one for a film that is only in watched, with no diary date). Buttons, or a number from 1 to 50.",
+        "1, 3, 5",
+        "4",
       ),
       reply_markup: letterboxdMinKeyboard(),
     };
@@ -962,7 +962,7 @@ export function parseLetterboxdCallback(data) {
   if (raw === "lb:paste") return { step: "mode", choice: "paste" };
   let match = raw.match(/^lb:n:(10|20|30|50)$/);
   if (match) return { step: "top_n", value: Number(match[1]) };
-  match = raw.match(/^lb:m:(3|5|10)$/);
+  match = raw.match(/^lb:m:(1|3|4|5)$/);
   if (match) return { step: "min_rated", value: Number(match[1]) };
   if (raw === "lb:rew:1" || raw === "lb:rew:0") return { step: "rewatch_avg", value: raw.endsWith("1") };
   if (raw === "lb:excl:1" || raw === "lb:excl:0") return { step: "exclusions", value: raw.endsWith("1") };
@@ -1076,7 +1076,7 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
   }
   if (step === "min_rated") {
     const value = kind === "callback" ? input.value : parseBounded(input.text, LETTERBOXD_MIN_RATED_MIN, LETTERBOXD_MIN_RATED_MAX);
-    if (value == null) return retry(state, "Need a number from 1 to 50. Buttons: 3, 5, 10. The report has not started.");
+    if (value == null) return retry(state, "Need a number from 1 to 50. Buttons: 1, 3, 5. The report has not started.");
     return go({ ...state, minRated: value }, "rewatch_avg", now);
   }
   if (step === "rewatch_avg") {

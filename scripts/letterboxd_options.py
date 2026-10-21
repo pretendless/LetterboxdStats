@@ -1,7 +1,7 @@
 """Chart options for /letterboxd: top size, rating gate, exclusions, search, watch window.
 
 Wizard defaults (also the GitHub Actions defaults):
-  top_n=20 (allowed 1–100), min_rated=3 (allowed 1–50),
+  top_n=20 (allowed 1–100), min_rated=4 (allowed 1–50),
   include_rewatch_in_averages=False (unique-film means),
   include USA, include English, include Drama, include Comedy,
   no custom keyword exclusions, no search keywords,
@@ -36,7 +36,7 @@ TOP_N_MAX = 100
 TOP_N_DEFAULT = 20
 MIN_RATED_MIN = 1
 MIN_RATED_MAX = 50
-MIN_RATED_DEFAULT = 3
+MIN_RATED_DEFAULT = 4
 EXCLUDE_KEYWORDS_MAX = 20
 EXCLUDE_KEYWORD_MAX_LEN = 40
 SEARCH_KEYWORDS_MAX = EXCLUDE_KEYWORDS_MAX

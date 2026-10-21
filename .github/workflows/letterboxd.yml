@@ -26,7 +26,7 @@ on:
       min_rated:
         description: Rating-count threshold for average tops (1–50)
         required: false
-        default: "3"
+        default: "4"
         type: string
       include_rewatch_in_averages:
         description: Count each rated diary row (incl. rewatches) in average charts (true/false; default false = one rating per film)
