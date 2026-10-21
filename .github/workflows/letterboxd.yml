@@ -48,6 +48,11 @@ on:
         required: false
         default: "true"
         type: string
+      exclude_keywords:
+        description: Comma-separated keywords to drop from watch-count tops (label substring match)
+        required: false
+        default: ""
+        type: string
       date_from:
         description: Inclusive watch-date start YYYY-MM-DD (empty = full span)
         required: false
@@ -91,6 +96,7 @@ jobs:
           LETTERBOXD_INCLUDE_ENGLISH: ${{ inputs.include_english }}
           LETTERBOXD_INCLUDE_DRAMA: ${{ inputs.include_drama }}
           LETTERBOXD_INCLUDE_COMEDY: ${{ inputs.include_comedy }}
+          LETTERBOXD_EXCLUDE_KEYWORDS: ${{ inputs.exclude_keywords }}
           LETTERBOXD_DATE_FROM: ${{ inputs.date_from }}
           LETTERBOXD_DATE_TO: ${{ inputs.date_to }}
           LETTERBOXD_INCLUDE_UNDATED: ${{ inputs.include_undated }}

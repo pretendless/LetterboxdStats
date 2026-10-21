@@ -13,6 +13,7 @@ import {
   letterboxdModePrompt,
   letterboxdPeriodKeyboard,
   letterboxdTopKeyboard,
+  letterboxdKeywordsKeyboard,
   letterboxdUndatedKeyboard,
   letterboxdYesNoKeyboard,
   parseLetterboxdCallback,
@@ -218,28 +219,49 @@ test("wizard prompts are html, with a default line and examples", () => {
 
 test("binary steps keep the default button and drop the repeated lines", () => {
   const fileId = "BQACAgIAAxkBAAI1234567890";
-  const usa = advanceLetterboxdWizard(
+  const exclusions = advanceLetterboxdWizard(
     { step: "min_rated", fileId },
     { kind: "callback", step: "min_rated", value: 3 },
+  );
+  const usa = advanceLetterboxdWizard(
+    exclusions.state,
+    { kind: "callback", step: "exclusions", value: true },
   );
   const english = advanceLetterboxdWizard(usa.state, { kind: "callback", step: "usa", value: true });
   const drama = advanceLetterboxdWizard(english.state, { kind: "callback", step: "english", value: true });
   const comedy = advanceLetterboxdWizard(drama.state, { kind: "callback", step: "drama", value: true });
-  const period = advanceLetterboxdWizard(comedy.state, { kind: "callback", step: "comedy", value: true });
+  const keywords = advanceLetterboxdWizard(comedy.state, { kind: "callback", step: "comedy", value: true });
+  const period = advanceLetterboxdWizard(
+    keywords.state,
+    { kind: "callback", step: "keywords", choice: "done" },
+  );
+  const skip = advanceLetterboxdWizard(
+    { step: "exclusions", fileId, minRated: 3 },
+    { kind: "callback", step: "exclusions", value: false },
+  );
   const undated = advanceLetterboxdWizard(
     { step: "range_start", fileId, dateFrom: "2024-01-01", dateTo: "2024-12-31" },
     { kind: "callback", step: "range_start", year: 2024 },
   );
-  for (const message of [usa, english, drama, comedy, period, undated]) {
+  for (const message of [exclusions, usa, english, drama, comedy, period, skip, undated]) {
     assert.doesNotMatch(message.messages[0].text, /For example:/);
     assert.doesNotMatch(message.messages[0].text, /Default:/);
   }
+  assert.match(exclusions.messages[0].text, /<b>Remove some rows from the watch-count tops\?<\/b>/);
   assert.match(usa.messages[0].text, /<b>Show USA in the country top\?<\/b>/);
   assert.match(english.messages[0].text, /<b>Show English in the language top\?<\/b>/);
   assert.match(drama.messages[0].text, /<b>Show Drama in the genre tops\?<\/b>/);
   assert.match(comedy.messages[0].text, /<b>Show Comedy in the genre tops\?<\/b>/);
+  assert.match(keywords.messages[0].text, /<b>Exclude keywords from watch-count tops\?<\/b>/);
   assert.match(period.messages[0].text, /<b>Full period or a custom range\?<\/b>/);
+  assert.equal(skip.state.step, "period");
+  assert.equal(skip.state.includeUSA, true);
+  assert.equal(skip.state.includeEnglish, true);
+  assert.equal(skip.state.includeDrama, true);
+  assert.equal(skip.state.includeComedy, true);
+  assert.deepEqual(skip.state.excludeKeywords, []);
   assert.match(undated.messages[0].text, /<b>Add films with no diary date\?<\/b>/);
+  assert.equal(exclusions.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
   assert.equal(usa.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
   assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
   assert.equal(drama.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
@@ -247,10 +269,27 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(period.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: full period");
   assert.equal(undated.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
   assert.match(period.messages[0].text, /Full period runs from the first watch/);
+  assert.equal(parseLetterboxdCallback("lb:excl:0").step, "exclusions");
+  assert.equal(parseLetterboxdCallback("lb:excl:0").value, false);
   assert.equal(parseLetterboxdCallback("lb:drama:0").step, "drama");
   assert.equal(parseLetterboxdCallback("lb:drama:0").value, false);
   assert.equal(parseLetterboxdCallback("lb:com:1").step, "comedy");
   assert.equal(parseLetterboxdCallback("lb:com:1").value, true);
+  assert.equal(parseLetterboxdCallback("lb:kw:done").step, "keywords");
+});
+
+test("keyword step accumulates words until Done", () => {
+  const fileId = "BQACAgIAAxkBAAI1234567890";
+  const start = { step: "keywords", fileId, excludeKeywords: [] };
+  const first = advanceLetterboxdWizard(start, { kind: "text", text: "Elijah Wood" });
+  assert.equal(first.state.step, "keywords");
+  assert.deepEqual(first.state.excludeKeywords, ["Elijah Wood"]);
+  assert.match(first.messages[0].text, /Already added \(1\/20\): Elijah Wood/);
+  const second = advanceLetterboxdWizard(first.state, { kind: "text", text: "2001" });
+  assert.deepEqual(second.state.excludeKeywords, ["Elijah Wood", "2001"]);
+  const done = advanceLetterboxdWizard(second.state, { kind: "callback", step: "keywords", choice: "done" });
+  assert.equal(done.state.step, "period");
+  assert.deepEqual(done.state.excludeKeywords, ["Elijah Wood", "2001"]);
 });
 
 test("every wizard keyboard has a one-tap default button", () => {
@@ -258,10 +297,13 @@ test("every wizard keyboard has a one-tap default button", () => {
   assert.equal(letterboxdModeKeyboard().inline_keyboard[0][0].text, "✅ Default");
   assert.equal(last(letterboxdTopKeyboard()), "✅ Default (20)");
   assert.equal(last(letterboxdMinKeyboard()), "✅ Default (3)");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:excl", "no")), "Default: no");
   assert.equal(last(letterboxdYesNoKeyboard("lb:usa")), "Default: yes");
   assert.equal(last(letterboxdYesNoKeyboard("lb:en")), "Default: yes");
   assert.equal(last(letterboxdYesNoKeyboard("lb:drama")), "Default: yes");
   assert.equal(last(letterboxdYesNoKeyboard("lb:com")), "Default: yes");
+  assert.equal(last(letterboxdKeywordsKeyboard(false)), "Default: none");
+  assert.equal(letterboxdKeywordsKeyboard(true).inline_keyboard[0][0].text, "Done");
   assert.equal(last(letterboxdPeriodKeyboard()), "Default: full period");
   assert.equal(last(letterboxdUndatedKeyboard()), "Default: no");
   assert.equal(last(letterboxdYesNoKeyboard("lb:und", "нет")), "Default: no");
@@ -275,7 +317,7 @@ test("isZipDocument and file_id", () => {
   assert.equal(normalizeTelegramFileId("../x"), "");
 });
 
-test("ack summary lists USA English Drama Comedy", () => {
+test("ack summary lists USA English Drama Comedy and keywords", () => {
   const text = letterboxdAckText("lb-1", {
     topN: 20,
     minRated: 3,
@@ -283,11 +325,13 @@ test("ack summary lists USA English Drama Comedy", () => {
     includeEnglish: false,
     includeDrama: false,
     includeComedy: true,
+    excludeKeywords: ["Wood", "2001"],
   });
   assert.match(text, /USA: yes/);
   assert.match(text, /English: no/);
   assert.match(text, /Drama: no/);
   assert.match(text, /Comedy: yes/);
+  assert.match(text, /Keyword exclusions: "Wood", "2001"/);
 });
 
 test("genre PNG send order puts watches before rating before decade before watch year", () => {
@@ -333,6 +377,7 @@ test("buildLetterboxdDispatch", () => {
       include_english: "true",
       include_drama: "true",
       include_comedy: "true",
+      exclude_keywords: "",
       date_from: "",
       date_to: "",
       include_undated: "false",

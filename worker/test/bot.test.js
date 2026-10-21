@@ -232,10 +232,13 @@ test("custom range 2021-06.2022 dispatches 2021-01-01 through 2022-06-30", async
   await say("настроить");
   await say("20");
   await say("3");
-  await say("да");
-  await say("нет");
-  await say("да");
-  await say("нет");
+  await say("да"); // exclusions gate
+  await say("да"); // USA
+  await say("нет"); // English
+  await say("да"); // Drama
+  await say("нет"); // Comedy
+  await say("Wood");
+  await say("done");
   await say("свой диапазон");
   await say("2021-06.2022");
   assert.match(sent.at(-1).text, /no diary date/i);
@@ -247,6 +250,7 @@ test("custom range 2021-06.2022 dispatches 2021-01-01 through 2022-06-30", async
   assert.equal(dispatch.body.inputs.include_english, "false");
   assert.equal(dispatch.body.inputs.include_drama, "true");
   assert.equal(dispatch.body.inputs.include_comedy, "false");
+  assert.equal(dispatch.body.inputs.exclude_keywords, "Wood");
   assert.equal(dispatch.body.inputs.date_from, "2021-01-01");
   assert.equal(dispatch.body.inputs.date_to, "2022-06-30");
   assert.equal(dispatch.body.inputs.include_undated, "false");

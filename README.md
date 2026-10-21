@@ -56,15 +56,36 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 | Command | What it does |
 | --- | --- |
-| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, whether USA, English, Drama, and Comedy stay in those tops, the watch period, and films with no diary date. |
+| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom keywords), the watch period, and films with no diary date. |
 | `/start letterboxd` | The same wizard. This is what `https://t.me/lebxdbot?start=letterboxd` opens. |
 | `/stop` | Clears the wizard. If a chart run is already in GitHub Actions, it stops that run. |
 
 Dates are month before year. `2021-06.2022` means 2021-01-01 through 2022-06-30. A year is that whole year. A month is `06-2012` or `June 2012`. A day is `15-06-2012` or `15.06.2012`.
 
+## Customize which rows appear
+
+On **Customize**, after top size and the rating-count threshold, the wizard asks whether to remove some rows from the **watch-count** tops.
+
+| Choice | What happens |
+| --- | --- |
+| **No** (default) | Keep every row. Same as including USA, English, Drama, and Comedy, and adding no keywords. |
+| **Yes** | Ask the toggles below, then optional custom keywords, then the watch period. |
+
+Built-in toggles (only on the **Yes** branch):
+
+- **USA** — drop the United States from the country watch top
+- **English** — drop English from the language watch top
+- **Drama** / **Comedy** — drop those genres from the genre watch charts
+
+Custom keywords come next. Send one word or phrase per message (actor, director, studio, genre, language, country, or **release year** such as `2001`). Matching is case-insensitive against the **row name on the chart**. Tap **Done** when finished. Keywords do **not** change the watch-year axis or the date-range step.
+
+These exclusions apply only to **count / watches** tops (genres, countries, directors, actors, languages, studios, release years by watches, rewatches, and the stacked genre charts). **Average-rating** tops (higher / lower) stay unchanged.
+
+Bar and column charts label each bar with the **count** and the **average rating** (a dash when the average is below the threshold or missing). Line charts such as Viewing pace by month do not use that end-label pair.
+
 ## Charts
 
-The report is a set of PNG charts in the chat: calendar (watches, pace, weekdays), extra stats, and TMDB tops for genres, countries of origin, directors, actors, original language, and studios. A rating bar ends with a bold colored average and a regular parenthetical count. A name stays inside its bar and is shortened with an ellipsis only when it does not fit. A bar too short for 15 characters shows the first 15 characters and an ellipsis, running past the end of the bar.
+The report is a set of PNG charts in the chat: calendar (watches, pace, weekdays), extra stats, and TMDB tops for genres, countries of origin, directors, actors, original language, and studios. On a bar chart the tip shows the count and a bold colored average (or a dash); on a rating bar the tip also keeps the rated-film count in parentheses. A name stays inside its bar and is shortened with an ellipsis only when it does not fit. A bar too short for 15 characters shows the first 15 characters and an ellipsis, running past the end of the bar.
 
 Every chart uses one palette. The anchors are the three logo circles, measured from the non-overlapping interior of each circle: blue `#3FB7EB` at 0.15, green `#03E53E` at 0.35, and orange `#FC7A02` at 0.8. The blend is a straight line in OKLab between five knots: deep purple `#5922BF` at 0, those three logo colors, and deep burgundy `#890E3A` at 1. The uneven spacing keeps the scale from looking uniform. A rating uses the whole range in reverse: 5 maps to 0 (deep purple) and 0.5 maps to 1 (deep burgundy). An ordered series (watch years, ranked genres), earliest or lowest first, is logo green for one value, logo blue and orange for two, and the three logo colors for three. Four or more values use the even bin midpoints `(i + 0.5) / N`, across the whole palette, with no bend toward the logo colors. Four values are 0.125, 0.375, 0.625, and 0.875. Seven values are 0.5/7, 1.5/7, 2.5/7, 3.5/7, 4.5/7, 5.5/7, and 6.5/7.
 
@@ -80,7 +101,7 @@ Description (what Telegram shows on an unused/empty chat, and “What can this b
 
 > Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export.
 >
-> /start, then the ZIP. Next, keep the usual chart set or choose your own: top size from 1 to 100, a rating-count threshold for average tops, USA, English, and a watch period. /stop leaves the questions. A chart run that has already started stops too.
+> /start, then the ZIP. Next, keep the usual chart set or choose your own: top size from 1 to 100, a rating-count threshold for average tops, optional exclusions from count tops, and a watch period. /stop leaves the questions. A chart run that has already started stops too.
 >
 > Author:
 > https://www.last.fm/user/pretendless

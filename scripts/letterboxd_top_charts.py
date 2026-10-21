@@ -20,6 +20,7 @@ import pandas as pd
 from letterboxd_options import (
     TOP_N_DEFAULT,
     format_count_avg_label,
+    label_matches_exclude_keywords,
     rated_gate_phrase,
 )
 from letterboxd_palette import (
@@ -229,8 +230,13 @@ def chart_stacked_count_hbar(
     # Compact rows — plot fills most of the canvas (not a tall sparse strip).
     # Fixed row pitch and point size. A top of 100 is a tall figure, not smaller type.
     fig_h = max(4.0, n * 0.40)
-    # Extra width when each bar also carries a mean (count stays at the tip).
-    fig_w = 11.4 if avg_labels else 10.5
+    # Every count bar carries count + mean (dash when unknown / below gate).
+    means = list(avg_labels) if avg_labels is not None else ["—"] * n
+    if len(means) < n:
+        means = means + ["—"] * (n - len(means))
+    elif len(means) > n:
+        means = means[:n]
+    fig_w = 11.4
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     y = np.arange(n)
     left_stack = np.zeros(n)
@@ -253,8 +259,8 @@ def chart_stacked_count_hbar(
     ax.xaxis.label.set_fontsize(10)
     ax.set_title(title, fontsize=12, pad=6, color=FG)
     xmax = float(left_stack.max()) if len(left_stack) else 1.0
-    # Room past the bar for the white count and, when present, «4.25» / «—».
-    ax.set_xlim(0, xmax * (1.36 if avg_labels else 1.12))
+    # Room past the bar for the white count and «4.25» / «—».
+    ax.set_xlim(0, xmax * 1.36)
     count_artists = []
     for yi, total in enumerate(left_stack):
         artist = ax.text(
@@ -295,28 +301,27 @@ def chart_stacked_count_hbar(
         fig.tight_layout(rect=[0.0, 0.025, 1.0, 1.0])
     else:
         fig.tight_layout()
-    if avg_labels:
-        # Count stays at the bar tip; mean sits just to its right (no overlap).
-        fig.canvas.draw()
-        renderer = fig.canvas.get_renderer()
-        for artist, label in zip(count_artists, avg_labels):
-            if not label:
-                continue
-            bbox = artist.get_window_extent(renderer=renderer)
-            x_data, _y = ax.transData.inverted().transform((bbox.x1 + 10, bbox.y1))
-            style = count_avg_text_style(label)
-            ax.text(
-                x_data,
-                artist.get_position()[1],
-                label,
-                va="center",
-                ha="left",
-                fontsize=8,
-                color=style["color"],
-                fontweight=style["fontweight"],
-                path_effects=style["path_effects"],
-                clip_on=False,
-            )
+    # Count stays at the bar tip; mean sits just to its right (no overlap).
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    for artist, label in zip(count_artists, means):
+        if not label:
+            continue
+        bbox = artist.get_window_extent(renderer=renderer)
+        x_data, _y = ax.transData.inverted().transform((bbox.x1 + 10, bbox.y1))
+        style = count_avg_text_style(label)
+        ax.text(
+            x_data,
+            artist.get_position()[1],
+            label,
+            va="center",
+            ha="left",
+            fontsize=8,
+            color=style["color"],
+            fontweight=style["fontweight"],
+            path_effects=style["path_effects"],
+            clip_on=False,
+        )
     save_dark_figure(fig, path, dpi=160, pad_inches=0.05)
     plt.close(fig)
     return True
@@ -451,10 +456,10 @@ def chart_rating_vbar(
         x = bar.get_x() + bar.get_width() / 2
         label = f"{avg:.2f}"
         style = count_avg_text_style(label)
-        y = avg + (0.28 if rated is not None else 0.08)
+        rated_n = int(rated) if rated is not None else 0
         ax.text(
             x,
-            y,
+            avg + 0.28,
             label,
             ha="center",
             va="bottom",
@@ -463,17 +468,16 @@ def chart_rating_vbar(
             fontweight=style["fontweight"],
             path_effects=style["path_effects"],
         )
-        if rated is not None:
-            ax.text(
-                x,
-                avg + 0.06,
-                f"({rated})",
-                ha="center",
-                va="bottom",
-                fontsize=7,
-                color=FG,
-                fontweight="normal",
-            )
+        ax.text(
+            x,
+            avg + 0.06,
+            f"({rated_n})",
+            ha="center",
+            va="bottom",
+            fontsize=7,
+            color=FG,
+            fontweight="normal",
+        )
     _rating_colorbar(fig, ax)
     if footer:
         fig.text(0.01, 0.01, footer, fontsize=7, color=FG)
@@ -662,25 +666,23 @@ def chart_rating_hbar(
             clip_on=False,
         )
         pending.append((mean_artist, rated))
-    if any(rated is not None for _, rated in pending):
-        fig.canvas.draw()
-        renderer = fig.canvas.get_renderer()
-        for artist, rated in pending:
-            if rated is None:
-                continue
-            bbox = artist.get_window_extent(renderer=renderer)
-            x_data, _y = ax.transData.inverted().transform((bbox.x1 + 8, bbox.y0))
-            ax.text(
-                x_data,
-                artist.get_position()[1],
-                f"({rated})",
-                ha="left",
-                va="center",
-                fontsize=9,
-                color=FG,
-                fontweight="normal",
-                clip_on=False,
-            )
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    for artist, rated in pending:
+        rated_n = int(rated) if rated is not None else 0
+        bbox = artist.get_window_extent(renderer=renderer)
+        x_data, _y = ax.transData.inverted().transform((bbox.x1 + 8, bbox.y0))
+        ax.text(
+            x_data,
+            artist.get_position()[1],
+            f"({rated_n})",
+            ha="left",
+            va="center",
+            fontsize=9,
+            color=FG,
+            fontweight="normal",
+            clip_on=False,
+        )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
     return True
@@ -698,6 +700,7 @@ def chart_diary_entity_stacked(
     footer: str | None = None,
     avg_by_name: dict | None = None,
     min_rated: int = MIN_RATED_FOR_TOP,
+    exclude_keywords: tuple[str, ...] | list[str] | None = None,
 ) -> bool:
     """Top entities by diary watch hits; stack segments by watch year."""
     work = diary.copy()
@@ -720,7 +723,15 @@ def chart_diary_entity_stacked(
         for n in names:
             totals[n] += 1
 
-    candidates = [(n, c) for n, c in totals.most_common() if c >= min_count]
+    keywords = tuple(exclude_keywords or ())
+    candidates = []
+    for n, c in totals.most_common():
+        if c < min_count:
+            continue
+        display = label_fn(n) if label_fn else n
+        if label_matches_exclude_keywords(display, keywords):
+            continue
+        candidates.append((n, c))
     if not candidates:
         return False
     top = [n for n, _ in candidates[:top_n]]
@@ -738,18 +749,15 @@ def chart_diary_entity_stacked(
             matrix[year_index[wy], name_index[n]] += 1
 
     labels = []
-    avg_labels = None
-    if avg_by_name is not None:
-        avg_labels = []
+    avg_labels = []
     for n in top:
         raw = label_fn(n) if label_fn else n
         labels.append(_short_label(raw, limit=40))
-        if avg_labels is not None:
-            pair = avg_by_name.get(n)
-            if pair is None:
-                avg_labels.append(format_count_avg_label(None, 0, min_rated))
-            else:
-                avg_labels.append(format_count_avg_label(pair[0], pair[1], min_rated))
+        pair = (avg_by_name or {}).get(n)
+        if pair is None:
+            avg_labels.append(format_count_avg_label(None, 0, min_rated))
+        else:
+            avg_labels.append(format_count_avg_label(pair[0], pair[1], min_rated))
     return chart_stacked_count_hbar(
         labels,
         all_years,
@@ -769,6 +777,7 @@ def chart_release_years_by_count(
     *,
     avg_by_name: dict | None = None,
     min_rated: int = MIN_RATED_FOR_TOP,
+    exclude_keywords: tuple[str, ...] | list[str] | None = None,
 ) -> bool:
     """Release-year count top stacked by watch year (diary only)."""
 
@@ -790,6 +799,7 @@ def chart_release_years_by_count(
         min_count=1,
         avg_by_name=avg_by_name,
         min_rated=min_rated,
+        exclude_keywords=exclude_keywords,
     )
 
 

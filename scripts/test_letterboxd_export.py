@@ -31,10 +31,13 @@ from letterboxd_export import (
 from letterboxd_genre_charts import _filter_entity_names, _filter_genre_names
 from letterboxd_options import (
     format_count_avg_label,
+    format_single_rating_label,
     is_comedy_genre,
     is_drama_genre,
     is_english_language,
     is_usa_country,
+    label_matches_exclude_keywords,
+    parse_exclude_keywords,
 )
 
 
@@ -333,6 +336,14 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert _filter_genre_names(["Drama", "Action"], include_drama=False) == ["Action"]
     assert _filter_genre_names(["Comedy", "Horror"], include_comedy=False) == ["Horror"]
     assert _filter_genre_names(["Drama", "Comedy"]) == ["Drama", "Comedy"]
+    assert parse_exclude_keywords("Wood, 2001") == ("Wood", "2001")
+    assert parse_exclude_keywords('["Elijah Wood", "2001"]') == ("Elijah Wood", "2001")
+    assert parse_exclude_keywords("wood, Wood, WOOD") == ("wood",)
+    assert label_matches_exclude_keywords("Elijah Wood", ("wood",))
+    assert label_matches_exclude_keywords("2001", ("2001",))
+    assert not label_matches_exclude_keywords("Peter Jackson", ("wood",))
+    assert format_single_rating_label(4.5) == "4.50"
+    assert format_single_rating_label(None) == "—"
 
 
 def main() -> int:
