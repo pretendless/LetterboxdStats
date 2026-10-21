@@ -17,7 +17,8 @@ exactly.
 
 Ordered series (earliest or lowest first) use the logo knots for one, two,
 and three values. Four or more use even bin midpoints and do not snap to the
-logo. See ``categorical_positions``.
+logo. See ``categorical_positions``. Watch-year stacks paint **No date**
+(``UNDATED_WATCH_YEAR``) white — outside that ordered series.
 """
 
 from __future__ import annotations
@@ -266,9 +267,14 @@ def categorical_colors(n: int, cmap=None) -> list[tuple]:
 
 # Sentinel stack segment for catalog rows with no Watched Date (watched-only).
 # Real Letterboxd watch years are four-digit; 0 never collides. Ordered last in
-# the palette / legend so dated years stay earliest→latest.
+# the legend so dated years stay earliest→latest. Painted white — not a sample
+# on the purple→burgundy year colormap (see ``UNDATED_WATCH_YEAR_RGBA``).
 UNDATED_WATCH_YEAR = 0
 UNDATED_WATCH_YEAR_LABEL = "No date"
+# Pure white stack / legend fill. Not from ``palette_color``.
+UNDATED_WATCH_YEAR_RGBA = (1.0, 1.0, 1.0, 1.0)
+# Thin swatch rim so white stays visible on the black chart surface.
+UNDATED_LEGEND_EDGE = LEGEND_EDGE
 
 
 def watch_year_legend_label(year: int) -> str:
@@ -282,21 +288,32 @@ def watch_year_legend_label(year: int) -> str:
     return str(y)
 
 
+def is_undated_watch_year(year) -> bool:
+    """True when ``year`` is the No date stack sentinel."""
+    try:
+        return int(year) == UNDATED_WATCH_YEAR
+    except (TypeError, ValueError):
+        return False
+
+
 def watch_year_palette(all_watch_years) -> dict[int, tuple]:
     """Map each watch year to the shared palette, earliest first.
 
-    ``UNDATED_WATCH_YEAR`` (watched-only / no diary date) is ordered last so
-    dated years keep the usual earliest→latest scale.
+    Dated years alone drive ``categorical_positions`` / ``categorical_colors``.
+    ``UNDATED_WATCH_YEAR`` (watched-only / no diary date) is ordered last in
+    the returned mapping for legend order, but always white — it does not take
+    a slot on the purple→burgundy year scale.
     """
     raw = {int(y) for y in (all_watch_years or []) if y is not None}
     has_undated = UNDATED_WATCH_YEAR in raw
     years = sorted(y for y in raw if y != UNDATED_WATCH_YEAR)
+    out: dict[int, tuple] = {}
+    if years:
+        colors = categorical_colors(len(years))
+        out = {year: colors[i] for i, year in enumerate(years)}
     if has_undated:
-        years.append(UNDATED_WATCH_YEAR)
-    if not years:
-        return {}
-    colors = categorical_colors(len(years))
-    return {year: colors[i] for i, year in enumerate(years)}
+        out[UNDATED_WATCH_YEAR] = UNDATED_WATCH_YEAR_RGBA
+    return out
 
 
 def color_for_year(palette: dict[int, tuple], year: int, fallback=None):

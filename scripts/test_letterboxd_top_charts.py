@@ -35,6 +35,7 @@ from letterboxd_top_charts import (
     count_avg_text_style,
     count_liked_among_keys,
     display_lang,
+    draw_watch_year_most_liked_panel,
     film_title_with_liked_heart,
     format_liked_tip,
     normalize_most_liked_sections,
@@ -45,6 +46,33 @@ from letterboxd_top_charts import (
 def test_display_lang():
     assert display_lang("en") == "English"
     assert display_lang("XX") == "xx"
+
+
+def test_no_date_legend_swatch_is_white_with_edge():
+    """Watch-year legend paints No date white with a thin rim on black."""
+    import matplotlib.pyplot as plt
+    from letterboxd_palette import UNDATED_LEGEND_EDGE, UNDATED_WATCH_YEAR, UNDATED_WATCH_YEAR_RGBA
+
+    years = [2020, UNDATED_WATCH_YEAR]
+    palette = watch_year_palette(years)
+    assert palette[UNDATED_WATCH_YEAR] == UNDATED_WATCH_YEAR_RGBA
+    fig, ax = plt.subplots(figsize=(4, 2))
+    try:
+        draw_watch_year_most_liked_panel(fig, ax, years, palette, most_liked=None)
+        leg = ax.get_legend()
+        assert leg is not None
+        labels = [t.get_text() for t in leg.get_texts()]
+        assert labels[-1] == "No date"
+        undated_handle = leg.legend_handles[-1]
+        assert undated_handle.get_markerfacecolor() == UNDATED_WATCH_YEAR_RGBA
+        edge = undated_handle.get_markeredgecolor()
+        # Matplotlib may return rgba tuple or hex for the rim.
+        import matplotlib.colors as mcolors
+
+        assert mcolors.to_hex(edge) == mcolors.to_hex(UNDATED_LEGEND_EDGE)
+        assert float(undated_handle.get_markeredgewidth()) > 0
+    finally:
+        plt.close(fig)
 
 
 def test_liked_heart_helpers_use_black_heart_suit():
@@ -645,6 +673,12 @@ def test_non_date_count_charts_include_watched_only(tmp_path: Path | None = None
     assert 2020 in genre_captured["years"]
     undated_i = genre_captured["years"].index(UNDATED_WATCH_YEAR)
     assert float(genre_captured["matrix"][undated_i, 0]) == 1.0
+    # No date is white and does not steal a year-colormap slot from 2020.
+    from letterboxd_palette import UNDATED_WATCH_YEAR_RGBA
+
+    genre_palette = watch_year_palette(genre_captured["years"])
+    assert genre_palette[UNDATED_WATCH_YEAR] == UNDATED_WATCH_YEAR_RGBA
+    assert np.allclose(genre_palette[2020], categorical_colors(1)[0])
 
     # Both release years appear; watched-only 2018 is a full catalog hit.
     assert set(release_captured["labels"]) == {"2015", "2018"}
@@ -1188,6 +1222,7 @@ def test_rating_hbar_worst_skips_short_slate(tmp_path: Path | None = None):
 if __name__ == "__main__":
     test_display_lang()
     test_liked_heart_helpers_use_black_heart_suit()
+    test_no_date_legend_swatch_is_white_with_edge()
     test_top_n_default_about_20()
     test_ranked_hbar_grows_taller_with_n()
     test_categorical_palette_samples_quartile_ranks()

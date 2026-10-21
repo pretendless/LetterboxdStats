@@ -207,13 +207,31 @@ def test_discrete_ranks_use_logo_knots_then_even_midpoints():
     assert palette_rgb_from(palette[2021]) != LOGO_GREEN_RGB
     assert palette_rgb_from(palette[2023]) != LOGO_ORANGE_RGB
 
-    from letterboxd_palette import UNDATED_WATCH_YEAR, watch_year_legend_label
+    from letterboxd_palette import (
+        UNDATED_LEGEND_EDGE,
+        UNDATED_WATCH_YEAR,
+        UNDATED_WATCH_YEAR_RGBA,
+        is_undated_watch_year,
+        watch_year_legend_label,
+    )
 
     with_undated = watch_year_palette([2020, UNDATED_WATCH_YEAR, 2021])
     ordered = [2020, 2021, UNDATED_WATCH_YEAR]
     assert list(with_undated.keys()) == ordered
-    # Undated is last in the ordered series (third of three → logo orange).
-    assert [with_undated[y] for y in ordered] == categorical_colors(3)
+    # Dated years alone set the year colormap; No date is white, not a slot.
+    assert [with_undated[y] for y in (2020, 2021)] == categorical_colors(2)
+    assert with_undated[UNDATED_WATCH_YEAR] == UNDATED_WATCH_YEAR_RGBA
+    assert with_undated[UNDATED_WATCH_YEAR] == (1.0, 1.0, 1.0, 1.0)
+    # Two dated years stay logo blue + orange even when No date is present.
+    assert with_undated[2020] == categorical_colors(2)[0]
+    assert with_undated[2021] == categorical_colors(2)[1]
+    only_undated = watch_year_palette([UNDATED_WATCH_YEAR])
+    assert list(only_undated.keys()) == [UNDATED_WATCH_YEAR]
+    assert only_undated[UNDATED_WATCH_YEAR] == UNDATED_WATCH_YEAR_RGBA
+    assert is_undated_watch_year(UNDATED_WATCH_YEAR)
+    assert is_undated_watch_year(0)
+    assert not is_undated_watch_year(2020)
+    assert UNDATED_LEGEND_EDGE  # thin rim constant for white swatches on black
     assert watch_year_legend_label(UNDATED_WATCH_YEAR) == "No date"
     assert watch_year_legend_label(2020) == "2020"
 
