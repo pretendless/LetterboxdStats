@@ -527,6 +527,131 @@ def test_watches_by_genre_stacked_count(tmp_path: Path | None = None):
     assert path.is_file() and path.stat().st_size > 0
 
 
+def test_non_date_count_charts_include_watched_only(tmp_path: Path | None = None):
+    """Watched-only catalog rows raise non-date quantitative count tips.
+
+    Unit: catalog hits (diary rows + one watched-only film). A film only in
+    watched.csv (no diary date) must increase Films by release decade and
+    genre / release-year count tops via the No date segment.
+    """
+    import letterboxd_calendar_charts as cal
+    import letterboxd_top_charts as charts
+    from letterboxd_export import film_name_year_key
+    from letterboxd_palette import UNDATED_WATCH_YEAR, UNDATED_WATCH_YEAR_LABEL
+    from letterboxd_top_charts import chart_diary_entity_stacked, chart_release_years_by_count
+
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-count-undated")
+    out.mkdir(parents=True, exist_ok=True)
+
+    diary = pd.DataFrame(
+        [
+            {
+                "Name": "Diary Film",
+                "Year": 2015,
+                "Rating": 4.0,
+                "Watched Date": "2020-05-01",
+                "Genre list": ["Drama"],
+            }
+        ]
+    )
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+    watched_only = pd.DataFrame(
+        [
+            {
+                "Name": "Watched Only",
+                "Year": 2018,
+                "Rating": 3.0,
+                "Genre list": ["Drama"],
+            }
+        ]
+    )
+    catalog = pd.concat([diary, watched_only], ignore_index=True, sort=False)
+    film_ratings = pd.DataFrame(
+        [
+            {"Name": "Diary Film", "Year": 2015, "Rating": 4.0},
+            {"Name": "Watched Only", "Year": 2018, "Rating": 3.0},
+        ]
+    )
+    film_ratings["_film_key"] = film_name_year_key(film_ratings)
+
+    decade_captured: dict = {}
+    real_decade_save = cal.save_dark_figure
+
+    def grab_decade(fig, dest, **kwargs):
+        decade_captured["texts"] = [t.get_text() for t in fig.axes[0].texts]
+        real_decade_save(fig, dest, **kwargs)
+
+    cal.save_dark_figure = grab_decade
+    try:
+        cal.chart_decade_rating(
+            diary,
+            out / "extra_stats_decade_rating.png",
+            catalog=catalog,
+            film_ratings=film_ratings,
+            top_n=5,
+        )
+    finally:
+        cal.save_dark_figure = real_decade_save
+
+    assert "2" in decade_captured["texts"]
+    assert "3.50" in decade_captured["texts"]
+
+    genre_captured: dict = {}
+    release_captured: dict = {}
+    real_hbar = charts.chart_stacked_count_hbar
+
+    def grab_hbar(labels, years, matrix, palette, path, **kwargs):
+        payload = {
+            "labels": list(labels),
+            "years": list(years),
+            "matrix": np.asarray(matrix),
+            "totals": np.asarray(matrix).sum(axis=0).tolist(),
+        }
+        stem = Path(path).stem
+        if stem == "watches_by_genre":
+            genre_captured.update(payload)
+        elif stem == "watches_by_release_year":
+            release_captured.update(payload)
+        return True
+
+    charts.chart_stacked_count_hbar = grab_hbar
+    try:
+        assert (
+            chart_diary_entity_stacked(
+                diary,
+                out / "watches_by_genre.png",
+                names_for_row=lambda row: list(row.get("Genre list") or []),
+                title="Genres — color is watch year",
+                top_n=5,
+                catalog=catalog,
+            )
+            is True
+        )
+        assert (
+            chart_release_years_by_count(
+                diary,
+                out / "watches_by_release_year.png",
+                top_n=5,
+                catalog=catalog,
+            )
+            is True
+        )
+    finally:
+        charts.chart_stacked_count_hbar = real_hbar
+
+    assert genre_captured["labels"] == ["Drama"]
+    assert genre_captured["totals"] == [2.0]
+    assert UNDATED_WATCH_YEAR in genre_captured["years"]
+    assert 2020 in genre_captured["years"]
+    undated_i = genre_captured["years"].index(UNDATED_WATCH_YEAR)
+    assert float(genre_captured["matrix"][undated_i, 0]) == 1.0
+
+    # Both release years appear; watched-only 2018 is a full catalog hit.
+    assert set(release_captured["labels"]) == {"2015", "2018"}
+    assert sum(release_captured["totals"]) == 2.0
+    assert UNDATED_WATCH_YEAR_LABEL == "No date"
+
+
 def _rgba(color):
     import matplotlib.colors as mcolors
 
@@ -1078,6 +1203,7 @@ if __name__ == "__main__":
     test_ellipsis_reaches_the_bar_tip_when_more_than_fifteen_fit()
     test_rating_hbar_worst_skips_short_slate()
     test_watches_by_genre_stacked_count()
+    test_non_date_count_charts_include_watched_only()
     test_count_avg_text_style_colors_mean_only()
     test_count_bars_drop_n_and_style_mean()
     test_release_year_count_label_omits_n()

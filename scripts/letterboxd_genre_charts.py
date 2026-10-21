@@ -942,9 +942,11 @@ def write_search_keyword_lists(path: Path, lists) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def chart_watches_by_country(diary, cache, path: Path, top_n: int = TOP_N_DEFAULT) -> bool:
+def chart_watches_by_country(
+    diary, cache, path: Path, top_n: int = TOP_N_DEFAULT, *, catalog=None
+) -> bool:
     """Stacked horizontal bars: top countries by watches, color = watch year."""
-    footer = "Source: Letterboxd diary + TMDB metadata"
+    footer = "Source: Letterboxd diary/watched + TMDB metadata"
 
     def names_for_row(row):
         return list(_cache_meta_for_row(row, cache).get("countries") or [])
@@ -957,6 +959,7 @@ def chart_watches_by_country(diary, cache, path: Path, top_n: int = TOP_N_DEFAUL
         top_n=top_n,
         min_count=1,
         footer=footer,
+        catalog=catalog,
     )
 
 
@@ -999,6 +1002,7 @@ def chart_deep_count_tops(
     cache,
     paths: dict,
     *,
+    catalog=None,
     top_n=TOP_N_DEFAULT,
     min_rated=MIN_RATED_FOR_TOP,
     avg_maps=None,
@@ -1011,11 +1015,13 @@ def chart_deep_count_tops(
 ) -> dict:
     """Watch-year stacked count charts for TMDB deep entities.
 
-    Director, actor, and studio bars need diary hits ≥ min_rated (wizard
-    threshold T). Genres, countries, and languages stay at one hit. The
-    colored mean still needs unique rated films ≥ T.
+    Counts use catalog hits (diary rows + one watched-only film), matching
+    ``genre_summary`` JSON lists. Undated catalog rows stack under ``No date``.
+    Director, actor, and studio bars need hits ≥ min_rated (wizard threshold T).
+    Genres, countries, and languages stay at one hit. The colored mean still
+    needs unique rated films ≥ T.
     """
-    footer = "Source: Letterboxd diary + TMDB metadata"
+    footer = "Source: Letterboxd diary/watched + TMDB metadata"
     made = {}
     maps = avg_maps or {}
     watch_min = int(min_rated)
@@ -1131,6 +1137,7 @@ def chart_deep_count_tops(
             min_rated=min_rated,
             exclude_keywords=exclude_keywords,
             liked_keys=liked_keys,
+            catalog=catalog,
         )
     return made
 
@@ -1569,7 +1576,7 @@ def main():
         include_english=opts.include_english,
         liked_keys=liked_keys,
     )
-    # Count tops: diary watches stacked by watch year (same spirit as countries).
+    # Count tops: catalog hits stacked by watch year (No date = watched-only).
     count_paths = {
         "watches_by_genre": "watches_by_genre.png",
         "watches_by_country": "watches_by_country.png",
@@ -1584,6 +1591,7 @@ def main():
         diary,
         cache,
         count_paths,
+        catalog=catalog,
         top_n=opts.top_n,
         min_rated=opts.min_rated,
         avg_maps=avg_maps,

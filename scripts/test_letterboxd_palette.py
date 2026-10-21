@@ -207,6 +207,16 @@ def test_discrete_ranks_use_logo_knots_then_even_midpoints():
     assert palette_rgb_from(palette[2021]) != LOGO_GREEN_RGB
     assert palette_rgb_from(palette[2023]) != LOGO_ORANGE_RGB
 
+    from letterboxd_palette import UNDATED_WATCH_YEAR, watch_year_legend_label
+
+    with_undated = watch_year_palette([2020, UNDATED_WATCH_YEAR, 2021])
+    ordered = [2020, 2021, UNDATED_WATCH_YEAR]
+    assert list(with_undated.keys()) == ordered
+    # Undated is last in the ordered series (third of three → logo orange).
+    assert [with_undated[y] for y in ordered] == categorical_colors(3)
+    assert watch_year_legend_label(UNDATED_WATCH_YEAR) == "No date"
+    assert watch_year_legend_label(2020) == "2020"
+
 
 def test_rating_scale_uses_full_range_and_same_anchors():
     assert palette_rgb_from(rating_color(RATING_VMIN)) == palette_rgb(1.0)

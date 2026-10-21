@@ -795,7 +795,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: wizardPrompt(
         "Threshold",
-        "Average-rating tops include a row only when it has this many unique rated films or more: directors, actors, genres, countries, and the rest. At 3, a director with two rated films is left out. Director, actor, and studio watch-count charts use the same threshold: a row needs that many diary hits or more. Buttons, or a number from 1 to 50.",
+        "Average-rating tops include a row only when it has this many unique rated films or more: directors, actors, genres, countries, and the rest. At 3, a director with two rated films is left out. Director, actor, and studio watch-count charts use the same threshold: a row needs that many catalog hits or more (each diary view plus one for a film that is only in watched, with no diary date). Buttons, or a number from 1 to 50.",
         "3, 5, 10",
         "3",
       ),
