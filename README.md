@@ -56,13 +56,15 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 | Command | What it does |
 | --- | --- |
-| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, whether rewatches count in averages, optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. |
+| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, whether rewatches count in averages, optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. Paste settings reuses a previous `Tops: … Period:` summary from an earlier run. |
 | `/start letterboxd` | The same wizard. This is what `https://t.me/lebxdbot?start=letterboxd` opens. |
 | `/stop` | Clears the wizard. If a chart run is already in GitHub Actions, it stops that run. |
 
 Dates are month before year. `2021-06.2022` means 2021-01-01 through 2022-06-30. A year is that whole year. A month is `06-2012` or `June 2012`. A day is `15-06-2012` or `15.06.2012`.
 
 ## Customize averages and which rows appear
+
+After the ZIP, the mode step offers **Default**, **Customize**, and **Paste settings**. Paste settings asks for a previous settings paragraph (the line that starts with `Tops:` and ends with `Period:`; when the period is a date range it may also include `No diary date:`). Extra text around that paragraph is fine. A bad paste stays on that step and asks again.
 
 On **Customize**, after top size and the rating-count threshold, the wizard asks whether **previous / rewatch diary views** should count in average ratings.
 
