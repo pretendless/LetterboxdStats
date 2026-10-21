@@ -55,6 +55,7 @@ from letterboxd_palette import (  # noqa: E402
     LOGO_BLUE_T,
     LOGO_ORANGE_T,
     MARKER_EDGE,
+    UNDATED_WATCH_YEAR,
     apply_dark_chart_theme,
     palette_color,
     save_dark_figure,
@@ -978,57 +979,137 @@ def chart_decade_rating(
     df: pd.DataFrame,
     path: Path,
     *,
+    catalog: pd.DataFrame | None = None,
+    film_ratings: pd.DataFrame | None = None,
     liked_keys=None,
     top_n: int = TOP_N_DEFAULT,
 ) -> None:
-    df = df.copy()
-    df["watch_year"] = df["Watched Date"].dt.year.astype(int)
-    df["decade"] = df["Year"].map(release_decade_label)
-    df["rating_bin"] = df["Rating"].map(round_rating)
-    df["_film_key"] = film_name_year_key(df)
+    """Extra stats: release-decade catalog counts + diary rating distribution.
+
+    Top panel unit: catalog hits (every diary row + one watched-only film per
+    Name+Year). Dated rows stack by watch year; undated catalog rows use the
+    ``No date`` segment. Tip mean and ♥ use catalog-scoped ratings / likes.
+
+    Bottom panel stays diary-dated rated entries stacked by watch year (needs a
+    real watch date for the stack color).
+    """
+    diary = df.copy()
+    cat = (catalog if catalog is not None else diary).copy()
     liked = set(liked_keys or ())
 
-    years = sorted(df["watch_year"].unique().tolist())
-    colors = year_colors(years)
-    palette = {int(y): colors[y] for y in years}
-    year_index = {y: i for i, y in enumerate(years)}
+    # --- Top: Films by release decade (catalog hits) ---
+    cat["decade"] = cat["Year"].map(release_decade_label) if "Year" in cat.columns else None
+    cat["_film_key"] = film_name_year_key(cat)
+    if "Watched Date" in cat.columns:
+        cat["_watch_year"] = cat["Watched Date"].dt.year
+    else:
+        cat["_watch_year"] = np.nan
+
+    decade_pairs: list[tuple[int, str, str]] = []
+    for _, row in cat.iterrows():
+        decade = row.get("decade")
+        if decade is None or (isinstance(decade, float) and np.isnan(decade)) or pd.isna(decade):
+            continue
+        decade = str(decade)
+        if pd.notna(row.get("_watch_year")):
+            try:
+                year_key = int(row["_watch_year"])
+            except (TypeError, ValueError):
+                year_key = UNDATED_WATCH_YEAR
+        else:
+            year_key = UNDATED_WATCH_YEAR
+        decade_pairs.append((year_key, decade, str(row["_film_key"])))
 
     decades = sorted(
-        {d for d in df["decade"].dropna().unique().tolist()},
+        {d for _y, d, _k in decade_pairs},
         key=lambda label: int(str(label).rstrip("s")),
     )
     if not decades:
         # Still emit a chart so the bot always gets this PNG when diary parses.
         decades = ["2020s"]
 
-    decade_matrix = np.zeros((len(years), len(decades)), dtype=float)
+    dated_years = sorted({y for y, _d, _k in decade_pairs if y != UNDATED_WATCH_YEAR})
+    has_undated = any(y == UNDATED_WATCH_YEAR for y, _d, _k in decade_pairs)
+    decade_years = dated_years + ([UNDATED_WATCH_YEAR] if has_undated else [])
+    if not decade_years:
+        decade_years = dated_years or (
+            sorted(diary["Watched Date"].dt.year.dropna().astype(int).unique().tolist())
+            if "Watched Date" in diary.columns and not diary.empty
+            else [UNDATED_WATCH_YEAR]
+        )
+        if not decade_years:
+            decade_years = [UNDATED_WATCH_YEAR]
+
+    decade_colors = year_colors(decade_years)
+    decade_palette = {int(y): decade_colors[y] for y in decade_years}
+    decade_year_index = {y: i for i, y in enumerate(decade_years)}
+    decade_matrix = np.zeros((len(decade_years), len(decades)), dtype=float)
     decade_index = {d: i for i, d in enumerate(decades)}
     decade_keys = {d: set() for d in decades}
-    for _, row in df.iterrows():
-        decade = row["decade"]
-        if decade not in decade_index:
+    for year_key, decade, film_key in decade_pairs:
+        if decade not in decade_index or year_key not in decade_year_index:
             continue
-        yi = year_index[int(row["watch_year"])]
-        decade_matrix[yi, decade_index[decade]] += 1
-        decade_keys[decade].add(str(row["_film_key"]))
-
-    rating_matrix = np.zeros((len(years), len(RATING_BINS)), dtype=float)
-    rating_index = {r: i for i, r in enumerate(RATING_BINS)}
-    rating_keys = {r: set() for r in RATING_BINS}
-    for _, row in df.iterrows():
-        rating = row["rating_bin"]
-        if rating not in rating_index:
-            continue
-        yi = year_index[int(row["watch_year"])]
-        rating_matrix[yi, rating_index[rating]] += 1
-        rating_keys[rating].add(str(row["_film_key"]))
+        decade_matrix[decade_year_index[year_key], decade_index[decade]] += 1
+        decade_keys[decade].add(film_key)
 
     decade_liked = [count_liked_among_keys(decade_keys[d], liked) for d in decades]
-    rating_liked = [count_liked_among_keys(rating_keys[r], liked) for r in RATING_BINS]
     most_liked = rank_most_liked(
         {d: decade_liked[i] for i, d in enumerate(decades)},
         top_n,
     )
+
+    # Tip mean: catalog ratings (same membership spirit as average-by-decade).
+    decade_avgs = ["—"] * len(decades)
+    if film_ratings is None:
+        from letterboxd_export import merged_film_ratings
+
+        film_ratings = merged_film_ratings(None, diary)
+    rated_cat = ratings_for_catalog(cat, film_ratings)
+    if not rated_cat.empty and "Year" in rated_cat.columns:
+        rated_work = rated_cat[rated_cat["Year"].notna() & rated_cat["Rating"].notna()].copy()
+        if not rated_work.empty:
+            rated_work["decade"] = rated_work["Year"].map(release_decade_label)
+            rated_work = rated_work[rated_work["decade"].notna()]
+            if not rated_work.empty:
+                means = rated_work.groupby("decade")["Rating"].mean()
+                for i, label in enumerate(decades):
+                    if label in means.index:
+                        decade_avgs[i] = f"{float(means.loc[label]):.2f}"
+
+    # --- Bottom: Rating distribution (diary-dated only) ---
+    diary = diary.copy()
+    diary["watch_year"] = diary["Watched Date"].dt.year
+    diary = diary[diary["watch_year"].notna()].copy()
+    if not diary.empty:
+        diary["watch_year"] = diary["watch_year"].astype(int)
+    if not diary.empty and "Rating" in diary.columns:
+        diary["rating_bin"] = diary["Rating"].map(round_rating)
+        diary["_film_key"] = film_name_year_key(diary)
+    elif not diary.empty:
+        diary["rating_bin"] = np.nan
+        diary["_film_key"] = film_name_year_key(diary)
+
+    rating_years = sorted(diary["watch_year"].unique().tolist()) if not diary.empty else []
+    if not rating_years:
+        # Keep a drawable bottom axis when diary has no dated ratings.
+        rating_years = [y for y in decade_years if y != UNDATED_WATCH_YEAR] or list(decade_years)
+    rating_colors_map = year_colors(rating_years)
+    rating_year_index = {y: i for i, y in enumerate(rating_years)}
+
+    rating_matrix = np.zeros((len(rating_years), len(RATING_BINS)), dtype=float)
+    rating_index = {r: i for i, r in enumerate(RATING_BINS)}
+    rating_keys = {r: set() for r in RATING_BINS}
+    for _, row in diary.iterrows():
+        rating = row.get("rating_bin")
+        if rating not in rating_index:
+            continue
+        wy = int(row["watch_year"])
+        if wy not in rating_year_index:
+            continue
+        rating_matrix[rating_year_index[wy], rating_index[rating]] += 1
+        rating_keys[rating].add(str(row["_film_key"]))
+
+    rating_liked = [count_liked_among_keys(rating_keys[r], liked) for r in RATING_BINS]
 
     fig, axes = plt.subplots(2, 1, figsize=(15 if most_liked else 14, 10), sharey=False)
     fig.suptitle("Letterboxd extra stats", fontsize=14, y=0.98)
@@ -1036,20 +1117,12 @@ def chart_decade_rating(
     decade_totals = stacked_counts(
         axes[0],
         decades,
-        years,
+        decade_years,
         decade_matrix,
-        colors,
-        "Watch entries",
+        decade_colors,
+        "Catalog hits",
     )
     axes[0].set_title("Films by release decade — color is watch year")
-    decade_avgs = ["—"] * len(decades)
-    if "Rating" in df.columns:
-        rated = df[df["Rating"].notna() & df["decade"].notna()].copy()
-        if not rated.empty:
-            means = rated.groupby("decade")["Rating"].mean()
-            for i, label in enumerate(decades):
-                if label in means.index:
-                    decade_avgs[i] = f"{float(means.loc[label]):.2f}"
     decade_max = float(decade_totals.max()) if len(decade_totals) else 1.0
     axes[0].set_ylim(0, decade_max * 1.22 if decade_max else 1.0)
 
@@ -1057,9 +1130,9 @@ def chart_decade_rating(
     rating_totals = stacked_counts(
         axes[1],
         rating_labels,
-        years,
+        rating_years,
         rating_matrix,
-        colors,
+        rating_colors_map,
         "Rated entries",
     )
     axes[1].set_title("Rating distribution — color is watch year")
@@ -1071,7 +1144,7 @@ def chart_decade_rating(
     right_frac = 0.78 if most_liked else 0.88
     fig.tight_layout(rect=[0, 0, right_frac, 0.96])
     draw_watch_year_most_liked_panel(
-        fig, axes[0], years, palette, most_liked, fontsize=8, title_fontsize=9
+        fig, axes[0], decade_years, decade_palette, most_liked, fontsize=8, title_fontsize=9
     )
     _place_count_avg_above_totals(
         fig,
@@ -1664,6 +1737,8 @@ def main(argv: list[str] | None = None) -> int:
         chart_decade_rating(
             diary,
             Path("extra_stats_decade_rating.png"),
+            catalog=catalog,
+            film_ratings=film_ratings,
             liked_keys=liked_keys,
             top_n=opts.top_n,
         )
@@ -1713,6 +1788,7 @@ def main(argv: list[str] | None = None) -> int:
             diary,
             Path("watches_by_release_year.png"),
             top_n=opts.top_n,
+            catalog=catalog,
             avg_by_name=year_avgs,
             min_rated=opts.min_rated,
             exclude_keywords=opts.exclude_keywords,

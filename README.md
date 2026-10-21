@@ -42,7 +42,7 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 ![Two stacked bar charts: films by release decade, and how ratings are distributed](docs/images/extra-stats-decade-rating.png)
 
-*Release decade and the rating distribution. Color is the watch year.*
+*Release decade (catalog hits, including watched-only under No date) and the rating distribution (diary-dated). Color is the watch year.*
 
 ![Horizontal bars of watches by genre, stacked by watch year](docs/images/watches-by-genre.png)
 
@@ -73,7 +73,7 @@ On **Customize**, after top size and the rating-count threshold, the wizard asks
 | **No** (default) | One rating per unique film (Name+Year): latest diary rating, else `ratings.csv`. Rewatches do not inflate averages; they clutter the statistics. |
 | **Yes** | Each **rated diary row** contributes to qualitative means (including rewatches). Same spirit as the tip mean on **Most often in the diary**, applied to Average rating by …, higher/lower rating tops, colored averages on count bars, decade/year averages, and the diary summary mean. |
 
-The rating-count **threshold** still needs that many **unique rated films** (Name+Year), not rated diary rows. Count / watch bar **lengths** stay diary-hit counts; only how the **mean** is computed changes when Yes.
+The rating-count **threshold** still needs that many **unique rated films** (Name+Year), not rated diary rows. On count / watch bars whose category is **not** a watch date (release decade or year, genre, director, actor, studio, country, language), bar **lengths** are **catalog hits**: every diary row plus one for each watched-only film in the period-scoped catalog. Undated catalog rows stack under **No date**. Charts that need a watch date (watch year, weekday, month, viewing pace, rating distribution by watch year, most often in the diary / rewatches) stay diary-dated only. Only how the **mean** is computed changes when Yes.
 
 **Most often in the diary** always uses all rated diary rows for its tip mean — this setting does not change that. **Search-keyword** film lists always list every view’s rating slot; the toggle does not change those lists. Watch-time average charts that already mean over each rated diary row in its watch bucket stay as they are.
 

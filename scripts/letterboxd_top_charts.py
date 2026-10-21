@@ -30,12 +30,14 @@ from letterboxd_palette import (
     HALO,
     ON_BAR,
     RATING_COLORBAR_LABEL,
+    UNDATED_WATCH_YEAR,
     rating_color,
     rating_colormap,
     rating_colors,
     rating_norm,
     save_dark_figure,
     style_axes,
+    watch_year_legend_label,
     watch_year_palette,
 )
 from letterboxd_ratings import MIN_RATED_FOR_TOP
@@ -328,7 +330,7 @@ def draw_watch_year_most_liked_panel(
                 markerfacecolor=palette[y],
                 markeredgecolor="none",
                 markersize=7,
-                label=str(y),
+                label=watch_year_legend_label(y),
             )
             for y in year_list
             if y in palette
@@ -1030,20 +1032,22 @@ def chart_diary_entity_stacked(
     min_rated: int = MIN_RATED_FOR_TOP,
     exclude_keywords: tuple[str, ...] | list[str] | None = None,
     liked_keys: set[str] | frozenset | None = None,
+    catalog: pd.DataFrame | None = None,
 ) -> bool:
-    """Top entities by diary watch hits; stack segments by watch year.
+    """Top entities by catalog hits; stack segments by watch year.
 
-    When ``liked_keys`` is set, each tip may show ``♥ N`` (inline after count+avg)
-    for unique Name+Year films in that row that appear in likes/films.csv.
+    Unit rule (same as ``genre_summary`` count lists): every diary row plus one
+    row per watched-only film in the period-scoped catalog. Dated rows fill
+    their watch-year segment; rows with no Watched Date fill ``No date``.
+
+    When ``catalog`` is omitted, counts stay diary-dated only (legacy callers /
+    tests). When ``liked_keys`` is set, each tip may show ``♥ N`` (inline after
+    count+avg) for unique Name+Year films in that row in likes/films.csv.
     """
-    work = diary.copy()
-    if "Watched Date" not in work.columns:
+    frame = catalog if catalog is not None else diary
+    if frame is None or getattr(frame, "empty", True):
         return False
-    work["watch_year"] = work["Watched Date"].dt.year
-    work = work[work["watch_year"].notna()].copy()
-    if work.empty:
-        return False
-    work["watch_year"] = work["watch_year"].astype(int)
+    work = frame.copy()
     work["_film_key"] = film_name_year_key(work)
     liked = set(liked_keys or ())
 
@@ -1054,12 +1058,21 @@ def chart_diary_entity_stacked(
         names = [n for n in (names_for_row(row) or []) if n]
         if not names:
             continue
-        wy = int(row["watch_year"])
+        if "Watched Date" in work.columns and pd.notna(row.get("Watched Date")):
+            try:
+                year_key = int(pd.Timestamp(row["Watched Date"]).year)
+            except (TypeError, ValueError):
+                year_key = UNDATED_WATCH_YEAR
+        else:
+            year_key = UNDATED_WATCH_YEAR
         film_key = str(row["_film_key"])
-        pairs.append((wy, names))
+        pairs.append((year_key, names))
         for n in names:
             totals[n] += 1
             entity_keys.setdefault(n, set()).add(film_key)
+
+    if not totals:
+        return False
 
     keywords = tuple(exclude_keywords or ())
     candidates = []
@@ -1075,7 +1088,11 @@ def chart_diary_entity_stacked(
     top = [n for n, _ in candidates[:top_n]]
     # Bottom-to-top: least among top-N at bottom.
     top = list(reversed(top))
-    all_years = sorted(work["watch_year"].unique().tolist())
+    dated_years = sorted({y for y, _ in pairs if y != UNDATED_WATCH_YEAR})
+    has_undated = any(y == UNDATED_WATCH_YEAR for y, _ in pairs)
+    all_years = dated_years + ([UNDATED_WATCH_YEAR] if has_undated else [])
+    if not all_years:
+        return False
     palette = watch_year_palette(all_years)
     year_index = {y: i for i, y in enumerate(all_years)}
     name_index = {n: i for i, n in enumerate(top)}
@@ -1124,12 +1141,13 @@ def chart_release_years_by_count(
     path: Path,
     top_n: int = TOP_N_DEFAULT,
     *,
+    catalog: pd.DataFrame | None = None,
     avg_by_name: dict | None = None,
     min_rated: int = MIN_RATED_FOR_TOP,
     exclude_keywords: tuple[str, ...] | list[str] | None = None,
     liked_keys: set[str] | frozenset | None = None,
 ) -> bool:
-    """Release-year count top stacked by watch year (diary only)."""
+    """Release-year count top stacked by watch year (catalog hits)."""
 
     def names_for_row(row):
         year = row.get("Year")
@@ -1151,6 +1169,7 @@ def chart_release_years_by_count(
         min_rated=min_rated,
         exclude_keywords=exclude_keywords,
         liked_keys=liked_keys,
+        catalog=catalog,
     )
 
 

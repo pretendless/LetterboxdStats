@@ -95,6 +95,10 @@ Four or more values sample the full 0–1 palette. There is no quadratic bend an
 
 Wizard / Actions / `ChartOptions.include_rewatch_in_averages` (env `LETTERBOXD_INCLUDE_REWATCH_IN_AVERAGES`). Default **false**: `merged_film_ratings` (one Name+Year). **true**: each rated diary row contributes via `ratings_for_averages` / `diary_rated_views_plus_gaps`. Threshold gates and `(n)` unique-film counts stay on unique rated films. Most often in the diary and search-keyword lists ignore this flag. Do not edit the vendored `tg2tm/` wizard for this.
 
+## Non-date quantitative count charts
+
+Unit for bar lengths when the category is release metadata or person/genre/studio/language/country (not watch time): **catalog hits** = every diary row + one row per watched-only film already in the period-scoped catalog (`include_undated` still gates whether watched-only enter that catalog). Dated rows stack by watch year; undated rows use the `No date` segment (`UNDATED_WATCH_YEAR` in `letterboxd_palette.py`). Same unit as `genre_summary` count lists. Do **not** invent watch years for watched-only on watch-year / weekday / month / pace / rating-distribution-by-watch-year / most-often-in-diary charts.
+
 ## Rating-bar labels
 
 In `chart_rating_hbar` (`scripts/letterboxd_top_charts.py`), `SHORT_BAR_NAME_CHARS` is 15.

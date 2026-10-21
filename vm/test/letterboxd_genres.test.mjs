@@ -200,7 +200,8 @@ test("wizard prompts are html, with a default line and examples", () => {
   assert.match(minText, /unique rated films/);
   assert.match(minText, /a director with two rated films is left out/);
   assert.match(minText, /Director, actor, and studio watch-count charts/);
-  assert.match(minText, /diary hits/);
+  assert.match(minText, /catalog hits/);
+  assert.match(minText, /only in watched/);
   assert.doesNotMatch(minText, /Watch-count charts ignore this threshold/);
   assert.doesNotMatch(minText, /minimum ratings/i);
   assert.match(minText, /For example: 3, 5, 10/);

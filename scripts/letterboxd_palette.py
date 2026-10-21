@@ -264,9 +264,35 @@ def categorical_colors(n: int, cmap=None) -> list[tuple]:
     return [tuple(float(c) for c in cmap(t)) for t in positions]
 
 
+# Sentinel stack segment for catalog rows with no Watched Date (watched-only).
+# Real Letterboxd watch years are four-digit; 0 never collides. Ordered last in
+# the palette / legend so dated years stay earliest→latest.
+UNDATED_WATCH_YEAR = 0
+UNDATED_WATCH_YEAR_LABEL = "No date"
+
+
+def watch_year_legend_label(year: int) -> str:
+    """Legend text for a watch-year (or undated) stack segment."""
+    try:
+        y = int(year)
+    except (TypeError, ValueError):
+        return str(year)
+    if y == UNDATED_WATCH_YEAR:
+        return UNDATED_WATCH_YEAR_LABEL
+    return str(y)
+
+
 def watch_year_palette(all_watch_years) -> dict[int, tuple]:
-    """Map each watch year to the shared palette, earliest first."""
-    years = sorted({int(y) for y in (all_watch_years or []) if y is not None})
+    """Map each watch year to the shared palette, earliest first.
+
+    ``UNDATED_WATCH_YEAR`` (watched-only / no diary date) is ordered last so
+    dated years keep the usual earliest→latest scale.
+    """
+    raw = {int(y) for y in (all_watch_years or []) if y is not None}
+    has_undated = UNDATED_WATCH_YEAR in raw
+    years = sorted(y for y in raw if y != UNDATED_WATCH_YEAR)
+    if has_undated:
+        years.append(UNDATED_WATCH_YEAR)
     if not years:
         return {}
     colors = categorical_colors(len(years))
