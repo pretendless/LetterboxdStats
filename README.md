@@ -12,45 +12,45 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 *The wizard asks one question at a time. Tap a button or type a reply.*
 
-![Bar chart of film watches per year, each bar labelled with its count and a bold colored average rating](docs/images/watches-by-year.png)
+![Bar chart of film watches per year; tips show ♥ / ❝ counts, then count and a bold colored average](docs/images/watches-by-year.png)
 
-*Watches per year, with the count and the bold colored average rating above each bar. These five years run blue-violet, teal, green, yellow, and red.*
+*Watches per year. Above each bar: `♥ N ❝ M` when likes or reviews fall in that year, then the white count and the bold colored average. Five years use the even palette midpoints (not the three logo knots alone).*
 
-![Weekday and month bar charts stacked by watch year](docs/images/weekday-month-by-year.png)
+![Weekday and month bar charts stacked by watch year, with Most liked and Most reviewed side lists](docs/images/weekday-month-by-year.png)
 
-*When you watch: weekdays and months, stacked by watch year in the same year colors.*
+*When you watch: weekdays and months, stacked by watch year. Tips are the same count + average pair, with `♥` / `❝` on a line above. The right column is Watch year, then **Most liked weekdays** / **Most liked months**, then **Most reviewed** for each.*
 
 ![Horizontal bars of the best-rated release years with averages and rated-film counts](docs/images/release-years-higher-rating.png)
 
-*Release years with the highest average rating, among years with at least 4 rated films. Bar color follows the rating scale on the left.*
+*Release years with the highest average rating, among years with at least 4 rated films. Bar color follows the rating scale on the left; the tip is the bold colored mean and `(n)` unique rated films.*
 
-![Directors with the lowest average rating; short bars show the first 15 letters of the name with an ellipsis](docs/images/directors-lower-rating.png)
+![Directors with the lowest average rating; short bars overflow fifteen letters; ♥ / ❝ counts sit in the name](docs/images/directors-lower-rating.png)
 
-*Directors with the lowest average rating. A bar too short for 15 letters shows the first 15 and an ellipsis.*
+*Directors with the lowest average rating (at least 4 rated films). A bar too short for 15 letters shows the first 15 and an ellipsis. Liked / reviewed counts appear as `♥ N` / `❝ M` beside the name when N or M is above zero.*
 
-![Twenty directors from a 4.80 average down to 1.00, on one smooth scale from purple to burgundy](docs/images/directors-higher-rating-20.png)
+![Twenty directors from a 4.80 average down to 1.00, with ♥ / ❝ counts and a smooth purple-to-burgundy scale](docs/images/directors-higher-rating-20.png)
 
-*A top 20 across the rating scale: one smooth blend from purple at 4.80, through logo blue, green, and orange, to burgundy at 1.00. The three shortest bars show 15 letters and an ellipsis past the bar, with the same gap before the rating as after a normal bar.*
+*A top 20 across the rating scale (at least 4 rated films): one smooth blend from purple at 4.80, through logo blue, green, and orange, to burgundy at 1.00. Short bars overflow fifteen letters; `♥ N` / `❝ M` sit in the label when present.*
 
-![Line chart of average rating by month, with a colored dot on each month](docs/images/average-rating-by-month.png)
+![Line chart of average rating by month, with a colored dot, mean above, and (n) below](docs/images/average-rating-by-month.png)
 
-*Average rating over the watch months: a line, and a dot colored on the rating scale.*
+*Average rating over the watch months: a line, a dot colored on the rating scale, the mean above the marker, and `(n)` rated diary rows below it.*
 
 ![Line chart of films watched per month, with dots and a dashed mean](docs/images/viewing-pace.png)
 
-*Viewing pace by month. The dashed line is the mean.*
+*Viewing pace by month. The dashed line is the mean. Pace charts stay unlabeled (no count/avg tip).*
 
-![Two stacked bar charts: films by release decade, and how ratings are distributed](docs/images/extra-stats-decade-rating.png)
+![Two stacked bar charts: films by release decade, and rating distribution with No date](docs/images/extra-stats-decade-rating.png)
 
-*Release decade (catalog hits) and rating distribution (dated diary ratings plus undated rated catalog under No date). Color is the watch year.*
+*Release decade (catalog hits) and rating distribution (dated diary ratings plus undated rated catalog under **No date**). Watch years color the stacks; **No date** is the logo charcoal gradient (top→bottom on these columns). Decade tips show `♥` / `❝`, count, and average; rating tips are bold `NN.NN%` plus `(count)`. **Most liked** and **Most reviewed** sit under the Watch year legend.*
 
-![Horizontal bars of watches by genre, stacked by watch year](docs/images/watches-by-genre.png)
+![Horizontal bars of watches by genre, stacked by watch year, with No date and Most liked / Most reviewed](docs/images/watches-by-genre.png)
 
-*Watches by genre, stacked by watch year.*
+*Watches by genre (catalog hits), stacked by watch year, with undated rows in the **No date** charcoal segment (left→right on horizontal bars). Tips are count + average + inline `♥ N` / `❝ M`. The side panel lists **Most liked** and **Most reviewed** under Watch year.*
 
-![Horizontal bars of films that appear more than once, stacked by watch year](docs/images/top-rewatches.png)
+![Horizontal bars of films that appear more than once, with ♥ / ❝ on titles](docs/images/top-rewatches.png)
 
-*Films logged more than once, stacked by watch year. The tip average is the mean of every rated diary row for that film (rewatches included), not the usual unique-film rating.*
+*Films logged more than once, stacked by watch year. Titles append `♥` / `❝` when liked or reviewed. The tip is count + average (mean of every rated diary row for that film, rewatches included). **Most liked** / **Most reviewed** sit under the Watch year legend.*
 
 ## Commands
 
