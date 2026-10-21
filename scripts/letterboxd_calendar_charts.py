@@ -327,13 +327,12 @@ def stacked_counts(ax, categories: list[str], years: list[int], matrix: np.ndarr
     return bottom
 
 
-def integer_percent_shares(counts) -> list[int]:
-    """Whole-percent shares that sum to 100 (largest-remainder method).
+def percent_shares(counts) -> list[float]:
+    """Percent of total for each count, rounded to two decimal places.
 
-    Each value is ``floor(100 * count / total)``; the leftover percentage points
-    (``100 - sum(floors)``) go one each to the buckets with the largest
-    fractional remainders (ties broken by earlier index). Empty totals yield
-    all zeros. Used for Letterboxd rating distribution tip labels.
+    Uses accurate ``100 * count / total`` with ordinary rounding. Displayed
+    labels need not sum to exactly 100.00. Empty totals yield all zeros.
+    Used for Letterboxd rating distribution tip labels.
     """
     values = [float(c) for c in counts]
     n = len(values)
@@ -341,40 +340,77 @@ def integer_percent_shares(counts) -> list[int]:
     if n == 0:
         return []
     if total <= 0:
-        return [0] * n
-    exact = [100.0 * v / total for v in values]
-    floors = [int(x) for x in exact]
-    leftover = 100 - sum(floors)
-    order = sorted(
-        range(n),
-        key=lambda i: (-(exact[i] - floors[i]), i),
-    )
-    out = floors[:]
-    for i in order[:leftover]:
-        out[i] += 1
-    return out
+        return [0.0] * n
+    return [round(100.0 * v / total, 2) for v in values]
+
+
+def _center_tip_pair(fig, ax, pending, gap: float = 4.0) -> None:
+    """Horizontally center (left, right) text pairs that share a data y."""
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    for left, right, y in pending:
+        lb = left.get_window_extent(renderer=renderer)
+        rb = right.get_window_extent(renderer=renderer)
+        total_w = lb.width + gap + rb.width
+        anchor = ax.transData.transform(left.get_position())
+        start = anchor[0] - total_w / 2
+
+        def shift(artist, bbox, target_x0, y_data=y):
+            origin = ax.transData.transform(artist.get_position())
+            moved = ax.transData.inverted().transform(
+                (origin[0] + (target_x0 - bbox.x0), origin[1])
+            )
+            artist.set_position((moved[0], y_data))
+
+        shift(left, lb, start)
+        shift(right, rb, start + lb.width + gap)
 
 
 def _place_count_avg_above_totals(
-    fig, ax, totals, avg_labels, *, y_pad, fontsize=7, tip_labels=None
+    fig, ax, totals, avg_labels, *, y_pad, fontsize=7, percent_count=False
 ) -> None:
     """Count + mean centered above each stacked column total.
 
-    Pass ``avg_labels=None`` for a single tip label per column (default: count).
-    Pass ``tip_labels`` to override that tip text (Letterboxd rating distribution:
-    percent of all rated entries on the chart; the bin is already the x-axis).
+    Pass ``avg_labels=None`` for a single tip per column (default: count).
+    Pass ``percent_count=True`` for Letterboxd rating distribution: bold
+    ``NN.NN%`` plus ``(count)`` (the bin is already the x-axis).
     """
     if avg_labels is None:
-        labels = (
-            list(tip_labels)
-            if tip_labels is not None
-            else [str(int(total)) for total in totals]
-        )
-        for xi, total, text in zip(range(len(totals)), totals, labels):
+        if percent_count:
+            pcts = percent_shares(totals)
+            pending = []
+            for xi, total, pct in zip(range(len(totals)), totals, pcts):
+                y = float(total) + y_pad
+                pct_artist = ax.text(
+                    xi,
+                    y,
+                    f"{pct:.2f}%",
+                    ha="left",
+                    va="bottom",
+                    fontsize=fontsize,
+                    color=FG,
+                    fontweight="bold",
+                    clip_on=False,
+                )
+                count_artist = ax.text(
+                    xi,
+                    y,
+                    f"({int(total)})",
+                    ha="left",
+                    va="bottom",
+                    fontsize=fontsize,
+                    color=FG,
+                    fontweight="normal",
+                    clip_on=False,
+                )
+                pending.append((pct_artist, count_artist, y))
+            _center_tip_pair(fig, ax, pending)
+            return
+        for xi, total in zip(range(len(totals)), totals):
             ax.text(
                 xi,
                 float(total) + y_pad,
-                text,
+                str(int(total)),
                 ha="center",
                 va="bottom",
                 fontsize=fontsize,
@@ -411,23 +447,7 @@ def _place_count_avg_above_totals(
             clip_on=False,
         )
         pending.append((count, avg, y))
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    gap = 4.0
-    for count, avg, y in pending:
-        cb = count.get_window_extent(renderer=renderer)
-        ab = avg.get_window_extent(renderer=renderer)
-        total_w = cb.width + gap + ab.width
-        anchor = ax.transData.transform(count.get_position())
-        start = anchor[0] - total_w / 2
-
-        def shift(artist, bbox, target_x0, y_data=y):
-            origin = ax.transData.transform(artist.get_position())
-            moved = ax.transData.inverted().transform((origin[0] + (target_x0 - bbox.x0), origin[1]))
-            artist.set_position((moved[0], y_data))
-
-        shift(count, cb, start)
-        shift(avg, ab, start + cb.width + gap)
+    _center_tip_pair(fig, ax, pending)
 
 
 def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Watch year"):
@@ -833,9 +853,7 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
     )
     axes[1].set_title("Rating distribution — color is watch year")
     axes[1].set_xlabel("Letterboxd rating")
-    # Tip = share of all rated entries on this chart (not the bin / not count).
-    # Whole percents via largest remainder so labeled values sum to 100%.
-    rating_pct_labels = [f"{p}%" for p in integer_percent_shares(rating_totals)]
+    # Tip = bold NN.NN% share + (count); not the star rating (bin is x-axis).
     rating_max = float(rating_totals.max()) if len(rating_totals) else 1.0
     axes[1].set_ylim(0, rating_max * 1.18 if rating_max else 1.0)
 
@@ -850,7 +868,7 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
         rating_totals,
         None,
         y_pad=rating_max * 0.02,
-        tip_labels=rating_pct_labels,
+        percent_count=True,
     )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
@@ -868,7 +886,8 @@ def _chart_average_rating_line(
 ) -> bool:
     """Line + markers: points colored on the shared rating palette.
 
-    Each point is labelled with the mean and the rated-film count in parentheses.
+    Mean sits above the marker; rated-film count ``(n)`` sits below. Splitting
+    them vertically keeps adjacent years from colliding horizontally.
     """
     if not labels or not values:
         return False
@@ -898,17 +917,15 @@ def _chart_average_rating_line(
     fontsize, rotation = _dense_label_layout(len(labels))
     if rotation:
         ax.set_ylim(0, 5.6)
-    # Bold colored mean + rated-film count in parentheses (same pair as rating bars).
-    pending = []
+    # Bold colored mean above the point; regular ``(n)`` below — not side by side.
     for xi, value, count in zip(x, values, counts):
         text = f"{value:.2f}"
         style = count_avg_text_style(text)
-        y = float(value) + 0.12
-        mean_artist = ax.text(
+        ax.text(
             xi,
-            y,
+            float(value) + 0.12,
             text,
-            ha="left",
+            ha="center",
             va="bottom",
             fontsize=fontsize,
             rotation=rotation,
@@ -917,36 +934,18 @@ def _chart_average_rating_line(
             path_effects=style["path_effects"],
             clip_on=False,
         )
-        count_artist = ax.text(
+        ax.text(
             xi,
-            y,
+            float(value) - 0.12,
             f"({int(count)})",
-            ha="left",
-            va="bottom",
+            ha="center",
+            va="top",
             fontsize=fontsize,
             rotation=rotation,
             color=FG,
             fontweight="normal",
             clip_on=False,
         )
-        pending.append((mean_artist, count_artist, y))
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    gap = 4.0
-    for mean_artist, count_artist, y in pending:
-        mb = mean_artist.get_window_extent(renderer=renderer)
-        cb = count_artist.get_window_extent(renderer=renderer)
-        total_w = mb.width + gap + cb.width
-        anchor = ax.transData.transform(mean_artist.get_position())
-        start = anchor[0] - total_w / 2
-
-        def shift(artist, bbox, target_x0, y_data=y):
-            origin = ax.transData.transform(artist.get_position())
-            moved = ax.transData.inverted().transform((origin[0] + (target_x0 - bbox.x0), origin[1]))
-            artist.set_position((moved[0], y_data))
-
-        shift(mean_artist, mb, start)
-        shift(count_artist, cb, start + mb.width + gap)
     add_rating_colorbar(fig, ax)
     fig.tight_layout()
     save_dark_figure(fig, path, dpi=160)
@@ -1224,6 +1223,34 @@ def chart_average_rating_by_release_decade(
     )
 
 
+def diary_row_rating_means(df: pd.DataFrame) -> dict[str, float]:
+    """Mean Rating over every diary row that has one, keyed by Name+Year.
+
+    Unlike ``merged_film_ratings`` / latest-per-film, rewatches and prior views
+    each contribute. Unrated rows are skipped for the mean (they still count
+    toward diary frequency elsewhere). Only the Most often in the diary chart
+    uses this; other charts keep unique-film rating semantics.
+    """
+    if df is None or df.empty or "Rating" not in df.columns:
+        return {}
+    names = df["Name"].fillna("").astype(str).str.strip()
+    work = df.loc[names != "", ["Name", "Year", "Rating"]].copy()
+    if work.empty:
+        return {}
+    work = work[work["Rating"].notna()]
+    if work.empty:
+        return {}
+    work["_key"] = film_name_year_key(work)
+    means = work.groupby("_key", dropna=False)["Rating"].mean()
+    out: dict[str, float] = {}
+    for key_id, value in means.items():
+        try:
+            out[str(key_id)] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def chart_top_rewatches(
     df: pd.DataFrame,
     path: Path,
@@ -1232,7 +1259,15 @@ def chart_top_rewatches(
     film_ratings: pd.DataFrame | None = None,
     exclude_keywords: tuple[str, ...] | list[str] | None = None,
 ) -> bool:
-    """Horizontal stacked bars of rewatched films, colored by watch year."""
+    """Horizontal stacked bars of rewatched films, colored by watch year.
+
+    Bar length is diary-row frequency. The average tip is the mean Rating over
+    all diary rows for that film that have a rating (rewatches included) — not
+    ``merged_film_ratings``. ``film_ratings`` is accepted for call-site
+    compatibility and ignored for the tip. No multi-film rated threshold; a
+    dash only when no rated diary row exists for that film.
+    """
+    del film_ratings  # unique-film merge must not feed this chart's tip
     names = df["Name"].fillna("").astype(str).str.strip()
     years_release = df["Year"] if "Year" in df.columns else pd.Series(dtype=float)
     key = names + "|||" + years_release.map(lambda y: str(int(y)) if pd.notna(y) else "")
@@ -1282,25 +1317,8 @@ def chart_top_rewatches(
         else:
             labels.append(label)
 
-    rating_lookup: dict[str, float] = {}
-    if film_ratings is not None and not film_ratings.empty:
-        catalog_keys = work.drop_duplicates(subset=["_key"])
-        rated = ratings_for_catalog(catalog_keys, film_ratings)
-        if rated is not None and not rated.empty:
-            rated = rated.copy()
-            rated["_key"] = film_name_year_key(rated)
-            for _, row in rated.iterrows():
-                try:
-                    rating_lookup[str(row["_key"])] = float(row["Rating"])
-                except (TypeError, ValueError):
-                    continue
-    elif "Rating" in work.columns:
-        rated_rows = work[work["Rating"].notna()].sort_values("Watched Date", kind="mergesort")
-        for _, row in rated_rows.iterrows():
-            try:
-                rating_lookup[str(row["_key"])] = float(row["Rating"])
-            except (TypeError, ValueError):
-                continue
+    # Tip mean = all rated diary rows for the film (not latest / merged unique).
+    rating_lookup = diary_row_rating_means(work)
 
     matrix = np.zeros((len(years), len(keys)), dtype=float)
     year_index = {y: i for i, y in enumerate(years)}
