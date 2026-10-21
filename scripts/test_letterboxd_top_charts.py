@@ -640,16 +640,67 @@ def test_watch_time_charts_label_every_position(tmp_path: Path | None = None):
         assert _rgba(text.get_color()) == _rgba(rating_color(value))
         assert text.get_path_effects()
 
-    means = _texts_on_save(
+    labels_avg = _texts_on_save(
         lambda cal: cal.chart_average_rating_by_year(diary, out / "average_rating_by_year.png")
     )
+    means = [t for t in labels_avg if not t.get_text().startswith("(")]
+    rated_counts = [t for t in labels_avg if t.get_text().startswith("(")]
     assert len(means) == 22
+    assert len(rated_counts) == 22
+    assert {t.get_text() for t in rated_counts} == {f"({i + 1})" for i in range(22)}
     for text in means:
         value = float(text.get_text())
         assert "n=" not in text.get_text()
         assert text.get_fontweight() == "bold"
         assert _rgba(text.get_color()) == _rgba(rating_color(value))
         assert text.get_path_effects()
+    for text in rated_counts:
+        assert text.get_fontweight() == "normal"
+        assert _rgba(text.get_color()) == _rgba(FG)
+
+
+def test_letterboxd_rating_distribution_omits_rating_label(
+    tmp_path: Path | None = None,
+):
+    """extra_stats Rating distribution: count only — bin value is not an end label."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-rating-dist")
+    out.mkdir(parents=True, exist_ok=True)
+    diary = pd.DataFrame(
+        [
+            {"Name": "A", "Year": 1995, "Rating": 4.0, "Watched Date": "2020-01-02"},
+            {"Name": "B", "Year": 1996, "Rating": 4.0, "Watched Date": "2020-06-01"},
+            {"Name": "C", "Year": 2005, "Rating": 5.0, "Watched Date": "2021-03-01"},
+            {"Name": "D", "Year": 2015, "Rating": 3.0, "Watched Date": "2021-04-01"},
+        ]
+    )
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+
+    import letterboxd_calendar_charts as cal
+
+    captured: dict = {}
+    real_save = cal.save_dark_figure
+
+    def grab(fig, dest, **kwargs):
+        captured["rating_texts"] = [t.get_text() for t in fig.axes[1].texts]
+        captured["decade_texts"] = [t.get_text() for t in fig.axes[0].texts]
+        real_save(fig, dest, **kwargs)
+
+    cal.save_dark_figure = grab
+    try:
+        cal.chart_decade_rating(diary, out / "extra_stats_decade_rating.png")
+    finally:
+        cal.save_dark_figure = real_save
+
+    rating_texts = captured["rating_texts"]
+    assert rating_texts
+    assert all(t.isdigit() for t in rating_texts)
+    assert "4.00" not in rating_texts
+    assert "5.00" not in rating_texts
+    assert "3.00" not in rating_texts
+    # Decade panel still carries count + mean.
+    decade_texts = captured["decade_texts"]
+    assert any(t.isdigit() for t in decade_texts)
+    assert any("." in t or t == "—" for t in decade_texts)
 
 
 def test_views_count_bars_show_avg_or_dash(tmp_path: Path | None = None):
@@ -774,6 +825,7 @@ if __name__ == "__main__":
     test_count_bars_drop_n_and_style_mean()
     test_release_year_count_label_omits_n()
     test_watch_time_charts_label_every_position()
+    test_letterboxd_rating_distribution_omits_rating_label()
     test_views_count_bars_show_avg_or_dash()
     test_stacked_count_hbar_long_names()
     print("ok")
