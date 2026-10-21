@@ -82,11 +82,6 @@ Description (what Telegram shows on an unused/empty chat, and “What can this b
 >
 > /start, then the ZIP. Next, keep the usual chart set or choose your own: top size from 1 to 100, a rating-count threshold for average tops, USA, English, and a watch period. /stop leaves the questions. A chart run that has already started stops too.
 >
-> Example:
-> /start
-> ZIP file
-> defaults
->
 > Author:
 > https://www.last.fm/user/pretendless
 > https://vk.com/prtds

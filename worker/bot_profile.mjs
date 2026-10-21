@@ -14,11 +14,6 @@ export const DESCRIPTION =
   "top size from 1 to 100, a rating-count threshold for average tops, USA, English, and a watch period. " +
   "/stop leaves the questions. A chart run that has already started stops too.\n" +
   "\n" +
-  "Example:\n" +
-  "/start\n" +
-  "ZIP file\n" +
-  "defaults\n" +
-  "\n" +
   "Author:\n" +
   "https://www.last.fm/user/pretendless\n" +
   "https://vk.com/prtds\n" +
