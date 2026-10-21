@@ -648,12 +648,11 @@ function withDefaultButton(rows, label, data) {
 }
 
 export function letterboxdModeKeyboard() {
-  return {
-    inline_keyboard: [
-      [button("✅ Default", "lb:def"), button("Customize", "lb:cus")],
-      [button("Paste settings", "lb:paste")],
-    ],
-  };
+  return withDefaultButton(
+    [[button("Customize", "lb:cus"), button("Paste settings", "lb:paste")]],
+    "✅ Default",
+    "lb:def",
+  );
 }
 
 export function letterboxdTopKeyboard() {

@@ -159,10 +159,13 @@ test("wizard prompts are html, with a default line and examples", () => {
   assert.match(mode.text, /Buttons below, or reply with text/);
   assert.doesNotMatch(mode.text, /For example:/);
   assert.doesNotMatch(mode.text, /Default: default/);
-  assert.equal(mode.reply_markup.inline_keyboard[0][0].callback_data, "lb:def");
-  assert.equal(mode.reply_markup.inline_keyboard[0][1].callback_data, "lb:cus");
-  assert.equal(mode.reply_markup.inline_keyboard[1][0].callback_data, "lb:paste");
-  assert.equal(mode.reply_markup.inline_keyboard[1][0].text, "Paste settings");
+  assert.equal(mode.reply_markup.inline_keyboard[0][0].callback_data, "lb:cus");
+  assert.equal(mode.reply_markup.inline_keyboard[0][0].text, "Customize");
+  assert.equal(mode.reply_markup.inline_keyboard[0][1].callback_data, "lb:paste");
+  assert.equal(mode.reply_markup.inline_keyboard[0][1].text, "Paste settings");
+  assert.equal(mode.reply_markup.inline_keyboard[1][0].callback_data, "lb:def");
+  assert.equal(mode.reply_markup.inline_keyboard[1][0].text, "✅ Default");
+  assert.equal(mode.reply_markup.inline_keyboard[1].length, 1);
   const now = new Date("2026-10-20T00:00:00Z");
   const range = advanceLetterboxdWizard(
     { step: "period", fileId: "BQACAgIAAxkBAAI1234567890" },
@@ -352,12 +355,18 @@ test("search keyword step accumulates words until Done", () => {
   assert.deepEqual(skip.state.searchKeywords, []);
 });
 
-test("every wizard keyboard has a one-tap default button", () => {
-  const last = (keyboard) => keyboard.inline_keyboard.at(-1)[0].text;
-  assert.equal(letterboxdModeKeyboard().inline_keyboard[0][0].text, "✅ Default");
-  assert.equal(letterboxdModeKeyboard().inline_keyboard[1][0].text, "Paste settings");
+test("every wizard keyboard has a one-tap default button alone on the bottom row", () => {
+  const lastRow = (keyboard) => keyboard.inline_keyboard.at(-1);
+  const last = (keyboard) => lastRow(keyboard)[0].text;
+  const mode = letterboxdModeKeyboard();
+  assert.equal(mode.inline_keyboard[0][0].text, "Customize");
+  assert.equal(mode.inline_keyboard[0][1].text, "Paste settings");
+  assert.equal(last(mode), "✅ Default");
+  assert.equal(lastRow(mode).length, 1);
   assert.equal(last(letterboxdTopKeyboard()), "✅ Default (20)");
+  assert.equal(lastRow(letterboxdTopKeyboard()).length, 1);
   assert.equal(last(letterboxdMinKeyboard()), "✅ Default (3)");
+  assert.equal(lastRow(letterboxdMinKeyboard()).length, 1);
   assert.equal(last(letterboxdYesNoKeyboard("lb:rew", "no")), "Default: no");
   assert.equal(last(letterboxdYesNoKeyboard("lb:excl", "no")), "Default: no");
   assert.equal(last(letterboxdYesNoKeyboard("lb:usa")), "Default: yes");
@@ -365,11 +374,13 @@ test("every wizard keyboard has a one-tap default button", () => {
   assert.equal(last(letterboxdYesNoKeyboard("lb:drama")), "Default: yes");
   assert.equal(last(letterboxdYesNoKeyboard("lb:com")), "Default: yes");
   assert.equal(last(letterboxdKeywordsKeyboard(false)), "Default: none");
+  assert.equal(lastRow(letterboxdKeywordsKeyboard(false)).length, 1);
   assert.equal(letterboxdKeywordsKeyboard(true).inline_keyboard[0][0].text, "Done");
   assert.equal(last(letterboxdYesNoKeyboard("lb:search", "no")), "Default: no");
   assert.equal(last(letterboxdSearchKeywordsKeyboard(false)), "Default: none");
   assert.equal(letterboxdSearchKeywordsKeyboard(true).inline_keyboard[0][0].text, "Done");
   assert.equal(last(letterboxdPeriodKeyboard()), "Default: full period");
+  assert.equal(lastRow(letterboxdPeriodKeyboard()).length, 1);
   assert.equal(last(letterboxdUndatedKeyboard()), "Default: no");
   assert.equal(last(letterboxdYesNoKeyboard("lb:und", "нет")), "Default: no");
 });
