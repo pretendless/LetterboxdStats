@@ -2,21 +2,29 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from letterboxd_palette import (
+    END_BURGUNDY_HEX,
+    END_BURGUNDY_RGB,
+    END_PURPLE_HEX,
+    END_PURPLE_RGB,
     LOGO_BLUE_HEX,
     LOGO_BLUE_RGB,
+    LOGO_BLUE_T,
     LOGO_GREEN_HEX,
     LOGO_GREEN_RGB,
+    LOGO_GREEN_T,
     LOGO_ORANGE_HEX,
     LOGO_ORANGE_RGB,
+    LOGO_ORANGE_T,
+    PALETTE_KNOTS,
     RATING_VMAX,
     RATING_VMIN,
-    bend_rank,
     categorical_colors,
     categorical_positions,
-    OUTER_CHORD_STEPS,
     oklab_to_srgb,
     palette_color,
     palette_hex,
@@ -40,18 +48,23 @@ def test_logo_anchor_constants_are_the_measured_bytes():
     assert LOGO_BLUE_HEX == "#3FB7EB"
     assert LOGO_GREEN_HEX == "#03E53E"
     assert LOGO_ORANGE_HEX == "#FC7A02"
-    assert palette_hex(0.25) == "#3FB7EB"
-    assert palette_hex(0.50) == "#03E53E"
-    assert palette_hex(0.75) == "#FC7A02"
-    assert palette_rgb(0.25) == LOGO_BLUE_RGB
-    assert palette_rgb(0.5) == LOGO_GREEN_RGB
-    assert palette_rgb(0.75) == LOGO_ORANGE_RGB
-    assert palette_rgb(0.25) == palette_rgb(1 / 4)
+    assert (LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T) == (0.2, 0.4, 0.7)
+    assert PALETTE_KNOTS == (0.0, 0.2, 0.4, 0.7, 1.0)
+    assert palette_hex(0.2) == "#3FB7EB"
+    assert palette_hex(0.4) == "#03E53E"
+    assert palette_hex(0.7) == "#FC7A02"
+    assert palette_rgb(0.2) == LOGO_BLUE_RGB
+    assert palette_rgb(0.4) == LOGO_GREEN_RGB
+    assert palette_rgb(0.7) == LOGO_ORANGE_RGB
+    # Blue and orange are not at the old quarter marks, and green is not the midpoint.
+    assert palette_rgb(0.25) != LOGO_BLUE_RGB
+    assert palette_rgb(0.5) != LOGO_GREEN_RGB
+    assert palette_rgb(0.75) != LOGO_ORANGE_RGB
     # Colorbars go through the same function, not a binned lookup.
     cmap = rating_colormap()
-    assert palette_rgb_from(cmap(0.25)) == LOGO_BLUE_RGB
-    assert palette_rgb_from(cmap(0.5)) == LOGO_GREEN_RGB
-    assert palette_rgb_from(cmap(0.75)) == LOGO_ORANGE_RGB
+    assert palette_rgb_from(cmap(0.2)) == LOGO_BLUE_RGB
+    assert palette_rgb_from(cmap(0.4)) == LOGO_GREEN_RGB
+    assert palette_rgb_from(cmap(0.7)) == LOGO_ORANGE_RGB
 
 
 def palette_rgb_from(rgba) -> tuple[int, int, int]:
@@ -62,24 +75,17 @@ def _lab(rgb: tuple[int, int, int]):
     return srgb_to_oklab(*(c / 255.0 for c in rgb))
 
 
-def _chord(anchor, green, steps: float):
-    return tuple(anchor[i] + steps * (anchor[i] - green[i]) for i in range(3))
+def _lch(rgb: tuple[int, int, int]):
+    lightness, a, b = _lab(rgb)
+    return lightness, math.hypot(a, b), math.degrees(math.atan2(b, a)) % 360.0
 
 
-def test_oklab_segments_hit_anchors_and_extrapolated_ends():
+def test_oklab_segments_hit_anchors_and_deep_ends():
     """Five knots, straight OKLab lines between them. No holds or bends."""
-    blue = _lab(LOGO_BLUE_RGB)
-    green = _lab(LOGO_GREEN_RGB)
-    orange = _lab(LOGO_ORANGE_RGB)
-    assert OUTER_CHORD_STEPS == 3.0
-    end0 = _chord(blue, green, OUTER_CHORD_STEPS)
-    end1 = _chord(orange, green, OUTER_CHORD_STEPS)
-    assert palette_rgb(0.0) == _quantize(oklab_to_srgb(*end0)) == (119, 41, 255)
-    assert palette_rgb(1.0) == _quantize(oklab_to_srgb(*end1)) == (169, 0, 72)
-    one_low = _quantize(oklab_to_srgb(*_chord(blue, green, 1.0)))
-    one_high = _quantize(oklab_to_srgb(*_chord(orange, green, 1.0)))
-    assert one_low == (125, 133, 255) and palette_hex(0.0) == "#7729FF"
-    assert one_high == (255, 14, 77) and palette_hex(1.0) == "#A90048"
+    assert END_PURPLE_RGB == (89, 34, 191) and END_PURPLE_HEX == "#5922BF"
+    assert END_BURGUNDY_RGB == (137, 14, 58) and END_BURGUNDY_HEX == "#890E3A"
+    assert palette_rgb(0.0) == END_PURPLE_RGB and palette_hex(0.0) == "#5922BF"
+    assert palette_rgb(1.0) == END_BURGUNDY_RGB and palette_hex(1.0) == "#890E3A"
     # The ends are not held flat: a step in from either end already moves.
     assert palette_rgb(0.049) != palette_rgb(0.0)
     assert palette_rgb(0.95) != palette_rgb(1.0)
@@ -89,10 +95,18 @@ def test_oklab_segments_hit_anchors_and_extrapolated_ends():
     assert low[2] > low[0] > low[1]
     assert low[0] - low[1] > 40
     assert high[0] > high[2] > high[1]
-    assert high[1] == 0
-    assert _contrast_on_black(high) < _contrast_on_black(one_high)
-    assert _contrast_on_black(low) >= 2.5
-    assert _contrast_on_black(high) >= 2.5
+    # Deeper than the previous ends (#7729FF, #A90048) and every logo color,
+    # with purple and burgundy hues and enough chroma not to read as black.
+    low_l, low_c, low_h = _lch(low)
+    high_l, high_c, high_h = _lch(high)
+    assert low_l < _lch((119, 41, 255))[0] - 0.08
+    assert high_l < _lch((169, 0, 72))[0] - 0.05
+    for anchor in (LOGO_BLUE_RGB, LOGO_GREEN_RGB, LOGO_ORANGE_RGB):
+        assert max(low_l, high_l) < _lch(anchor)[0] - 0.25
+    assert 280.0 <= low_h <= 300.0 and low_c > 0.2
+    assert 0.0 <= high_h <= 15.0 and high_c > 0.14
+    assert _contrast_on_black(low) >= 2.2
+    assert _contrast_on_black(high) >= 2.15
     assert _contrast_on_black(LOGO_BLUE_RGB) >= 4.5
     assert _contrast_on_black(LOGO_GREEN_RGB) >= 4.5
     assert _contrast_on_black(LOGO_ORANGE_RGB) >= 4.5
@@ -100,7 +114,7 @@ def test_oklab_segments_hit_anchors_and_extrapolated_ends():
 
 def test_piecewise_linear_oklab_has_no_lightness_jump():
     """Each segment is the straight OKLab chord, including at the knots."""
-    knots = (0.0, 0.25, 0.5, 0.75, 1.0)
+    knots = PALETTE_KNOTS
     for t0, t1 in zip(knots, knots[1:]):
         lab0 = _lab(palette_rgb(t0))
         lab1 = _lab(palette_rgb(t1))
@@ -141,80 +155,76 @@ def _contrast_on_black(rgb: tuple[int, int, int]) -> float:
     return (y + 0.05) / 0.05
 
 
-def test_discrete_ranks_n1_n2_n3_n7_and_a_larger_n():
-    for knot in (0.0, 0.25, 0.5, 0.75, 1.0):
-        assert bend_rank(knot) == knot
-    assert categorical_positions(1) == [0.5]
-    assert categorical_colors(1)[0] == palette_color(0.5)
+def test_discrete_ranks_use_logo_knots_then_even_midpoints():
+    """One, two, and three values are the logo knots. Four or more are midpoints."""
+    assert categorical_positions(1) == [0.4]
+    assert categorical_colors(1)[0] == palette_color(0.4)
     assert palette_rgb(categorical_positions(1)[0]) == LOGO_GREEN_RGB
 
-    assert categorical_positions(2) == [0.25, 0.75]
+    assert categorical_positions(2) == [0.2, 0.7]
     two = categorical_colors(2)
     assert palette_rgb_from(two[0]) == LOGO_BLUE_RGB
     assert palette_rgb_from(two[1]) == LOGO_ORANGE_RGB
-    # Not the plain rank formula, which would miss the logo.
-    assert categorical_positions(2) != [1 / 3, 2 / 3]
+    # Not the even-midpoint formula, which would miss the logo.
+    assert categorical_positions(2) != [0.25, 0.75]
 
-    assert categorical_positions(3) == [0.25, 0.5, 0.75]
+    assert categorical_positions(3) == [0.2, 0.4, 0.7]
     three = categorical_colors(3)
     assert palette_rgb_from(three[0]) == LOGO_BLUE_RGB
     assert palette_rgb_from(three[1]) == LOGO_GREEN_RGB
     assert palette_rgb_from(three[2]) == LOGO_ORANGE_RGB
+    assert categorical_positions(3) != [0.5 / 3, 1.5 / 3, 2.5 / 3]
 
-    seven_pos = categorical_positions(7)
-    assert seven_pos == [0.0625, 0.25, 0.4375, 0.5, 0.5625, 0.75, 0.9375]
-    seven = categorical_colors(7)
-    # 1-based items 2, 4, 6 stay on the logo. Item 1 is nearer violet than
-    # the raw rank 0.125; item 7 is nearer the red end; item 3 is nearer green.
-    assert palette_rgb_from(seven[1]) == LOGO_BLUE_RGB
-    assert palette_rgb_from(seven[3]) == LOGO_GREEN_RGB
-    assert palette_rgb_from(seven[5]) == LOGO_ORANGE_RGB
-    assert seven_pos[0] == 0.0625 and seven_pos[0] < 0.125
-    assert seven_pos[2] == 0.4375 and abs(0.5 - seven_pos[2]) < abs(0.25 - seven_pos[2])
-    assert seven_pos[-1] == 0.9375 and seven_pos[-1] > 0.875
+    four = categorical_positions(4)
+    assert four == [0.125, 0.375, 0.625, 0.875]
+    assert four == [(i + 0.5) / 4 for i in range(4)]
+    assert LOGO_BLUE_T not in four and LOGO_GREEN_T not in four and LOGO_ORANGE_T not in four
 
-    # Knots of a longer series stay exact; the ends pull past the raw ranks.
-    raw_eleven = [(i + 1) / 12 for i in range(11)]
+    seven = categorical_positions(7)
+    assert seven == [(i + 0.5) / 7 for i in range(7)]
+    assert seven[0] == 0.5 / 7 and seven[3] == 0.5 and seven[-1] == 6.5 / 7
+    # No forced logo hits once the series is long enough to use midpoints.
+    logo = (LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T)
+    assert all(min(abs(t - knot) for knot in logo) > 1e-9 for t in seven)
+    assert palette_rgb_from(categorical_colors(7)[1]) != LOGO_BLUE_RGB
+    assert palette_rgb_from(categorical_colors(7)[3]) != LOGO_GREEN_RGB
+    assert palette_rgb_from(categorical_colors(7)[5]) != LOGO_ORANGE_RGB
+
     eleven = categorical_positions(11)
-    assert eleven[0] < raw_eleven[0]
-    assert eleven[-1] > raw_eleven[-1]
-    assert eleven[2] == 0.25 and eleven[5] == 0.5 and eleven[8] == 0.75
-    assert palette_rgb_from(categorical_colors(11)[2]) == LOGO_BLUE_RGB
-    assert palette_rgb_from(categorical_colors(11)[5]) == LOGO_GREEN_RGB
-    assert palette_rgb_from(categorical_colors(11)[8]) == LOGO_ORANGE_RGB
+    assert eleven == [(i + 0.5) / 11 for i in range(11)]
+    assert all(min(abs(t - knot) for knot in logo) > 1e-9 for t in eleven)
 
     years = list(range(2018, 2025))  # 7 years, ascending
     palette = watch_year_palette(years)
-    assert palette_rgb_from(palette[2019]) == LOGO_BLUE_RGB
-    assert palette_rgb_from(palette[2021]) == LOGO_GREEN_RGB
-    assert palette_rgb_from(palette[2023]) == LOGO_ORANGE_RGB
-    assert palette_rgb_from(palette[2018]) != LOGO_BLUE_RGB
-    assert categorical_positions(7)[0] == 0.0625
+    assert [palette[year] for year in years] == categorical_colors(7)
+    assert palette_rgb_from(palette[2019]) != LOGO_BLUE_RGB
+    assert palette_rgb_from(palette[2021]) != LOGO_GREEN_RGB
+    assert palette_rgb_from(palette[2023]) != LOGO_ORANGE_RGB
 
 
 def test_rating_scale_uses_full_range_and_same_anchors():
     assert palette_rgb_from(rating_color(RATING_VMIN)) == palette_rgb(0.0)
     assert palette_rgb_from(rating_color(RATING_VMAX)) == palette_rgb(1.0)
     # Logo blue is inside the rating scale, not the low end.
-    # t = 0.25 → rating = 0.5 + 0.25 * 4.5 = 1.625
-    assert palette_rgb_from(rating_color(1.625)) == LOGO_BLUE_RGB
-    assert palette_rgb_from(rating_color(2.75)) == LOGO_GREEN_RGB  # t = 0.5
-    assert palette_rgb_from(rating_color(3.875)) == LOGO_ORANGE_RGB  # t = 0.75
+    # t = 0.2 → rating = 0.5 + 0.2 * 4.5 = 1.4
+    assert palette_rgb_from(rating_color(1.4)) == LOGO_BLUE_RGB
+    assert palette_rgb_from(rating_color(2.3)) == LOGO_GREEN_RGB  # t = 0.4
+    assert palette_rgb_from(rating_color(3.65)) == LOGO_ORANGE_RGB  # t = 0.7
     assert palette_rgb_from(rating_color(RATING_VMIN)) != LOGO_BLUE_RGB
 
     # The scale is the same straight blend: 0.7 is just in from purple,
-    # 1.6 is just short of logo blue, and 4.8 is just short of burgundy.
+    # 1.38 is just short of logo blue, and 4.8 is just short of burgundy.
     assert palette_rgb_from(rating_color(0.7)) != palette_rgb(0.0)
-    assert palette_rgb_from(rating_color(1.6)) != LOGO_BLUE_RGB
+    assert palette_rgb_from(rating_color(1.38)) != LOGO_BLUE_RGB
     assert palette_rgb_from(rating_color(4.8)) != palette_rgb(1.0)
-    assert _oklab_distance(palette_rgb_from(rating_color(1.6)), LOGO_BLUE_RGB) < 0.05
+    assert _oklab_distance(palette_rgb_from(rating_color(1.38)), LOGO_BLUE_RGB) < 0.05
     assert _oklab_distance(palette_rgb_from(rating_color(4.8)), palette_rgb(1.0)) < 0.08
 
 
 if __name__ == "__main__":
     test_logo_anchor_constants_are_the_measured_bytes()
-    test_oklab_segments_hit_anchors_and_extrapolated_ends()
+    test_oklab_segments_hit_anchors_and_deep_ends()
     test_piecewise_linear_oklab_has_no_lightness_jump()
-    test_discrete_ranks_n1_n2_n3_n7_and_a_larger_n()
+    test_discrete_ranks_use_logo_knots_then_even_midpoints()
     test_rating_scale_uses_full_range_and_same_anchors()
     print("ok")

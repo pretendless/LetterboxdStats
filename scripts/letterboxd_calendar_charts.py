@@ -46,6 +46,8 @@ from letterboxd_palette import (  # noqa: E402
     FG,
     GRID,
     LOGO_BLUE_HEX,
+    LOGO_BLUE_T,
+    LOGO_ORANGE_T,
     MARKER_EDGE,
     apply_dark_chart_theme,
     palette_color,
@@ -872,7 +874,7 @@ def chart_viewing_pace(
     fig_w = max(10.0, min(16.0, n * 0.22))
     fig, ax = plt.subplots(figsize=(fig_w, 5.8))
     x = np.arange(n)
-    line_color = palette_color(0.25)
+    line_color = palette_color(LOGO_BLUE_T)
     ax.plot(
         x,
         counts,
@@ -894,7 +896,7 @@ def chart_viewing_pace(
     if avg is not None and avg > 0:
         ax.axhline(
             float(avg),
-            color=palette_color(0.75),
+            color=palette_color(LOGO_ORANGE_T),
             linestyle="--",
             linewidth=1.4,
             zorder=2,
