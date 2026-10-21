@@ -4,19 +4,20 @@ Every data color comes from ``palette_color``. The three logo circles are
 fixed anchors (median sRGB of each non-overlapping interior):
 
 - 0.2 blue ``#3FB7EB``
-- 0.5 green ``#03E53E``
+- 0.4 green ``#03E53E``
 - 0.7 orange ``#FC7A02``
 
 ``palette_color`` is piecewise-linear in OKLab ``(L, a, b)`` between five
-knots: deep purple ``#5922BF`` at 0, the three logo colors at 0.2 / 0.5 /
+knots: deep purple ``#5922BF`` at 0, the three logo colors at 0.2 / 0.4 /
 0.7, and deep burgundy ``#890E3A`` at 1. The uneven spacing gives each
 segment a different length so the scale is not uniform. There is no hold,
 hue band, or ease: each segment is the straight OKLab line, so lightness
 does not jump at a knot. The logo knots and the two ends return their bytes
 exactly.
 
-Ordered series (earliest or lowest first) bend quartile ranks with a
-piecewise quadratic so the logo knots stay put. See ``categorical_positions``.
+Ordered series (earliest or lowest first) use the logo knots for one, two,
+and three values. Four or more use even bin midpoints and do not snap to the
+logo. See ``categorical_positions``.
 """
 
 from __future__ import annotations
@@ -52,7 +53,7 @@ LOGO_ORANGE_HEX = "#FC7A02"
 
 # Palette positions of the logo knots.
 LOGO_BLUE_T = 0.2
-LOGO_GREEN_T = 0.5
+LOGO_GREEN_T = 0.4
 LOGO_ORANGE_T = 0.7
 PALETTE_KNOTS = (0.0, LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T, 1.0)
 
@@ -223,49 +224,20 @@ def palette_hex(t: float) -> str:
     return f"#{red:02X}{green:02X}{blue:02X}"
 
 
-_RANK_KNOTS = (0.0, 0.25, 0.5, 0.75, 1.0)
-
-
-def bend_rank(q: float) -> float:
-    """Map a raw rank ``q = k/(N+1)`` onto the palette.
-
-    The raw quartiles 0, 0.25, 0.5, 0.75, and 1 land exactly on the palette
-    knots 0, 0.2, 0.5, 0.7, and 1. Inside each quartile, with
-    ``u = (q − q0)/0.25`` and the palette interval ``[t0, t1]``, the curve
-    pulls toward 0, toward green, or toward 1:
-
-    - ``[0, 0.25]`` → ``[0, 0.2]``: ``t = t0 + (t1−t0) u²``
-    - ``[0.25, 0.5]`` → ``[0.2, 0.5]``: ``t = t0 + (t1−t0) (1−(1−u)²)``
-    - ``[0.5, 0.75]`` → ``[0.5, 0.7]``: ``t = t0 + (t1−t0) u²``
-    - ``[0.75, 1]`` → ``[0.7, 1]``: ``t = t0 + (t1−t0) (1−(1−u)²)``
-    """
-    position = min(1.0, max(0.0, float(q)))
-    for index, (q0, q1) in enumerate(zip(_RANK_KNOTS, _RANK_KNOTS[1:])):
-        if position == q0:
-            return PALETTE_KNOTS[index]
-        if position == q1:
-            return PALETTE_KNOTS[index + 1]
-        if position < q1:
-            u = (position - q0) / (q1 - q0)
-            shape = u * u if index % 2 == 0 else 1.0 - (1.0 - u) ** 2
-            t0, t1 = PALETTE_KNOTS[index], PALETTE_KNOTS[index + 1]
-            return t0 + (t1 - t0) * shape
-    return 1.0
-
-
 def categorical_positions(n: int) -> list[float]:
     """Positions on the shared palette for an ordered series.
 
     Lowest or earliest is first.
 
-    - N = 1 → ``[0.5]`` (logo green).
+    - N = 1 → ``[0.4]`` (logo green).
     - N = 2 → ``[0.2, 0.7]`` (logo blue, logo orange).
-    - N ≥ 3 → raw rank ``q_i = (i+1)/(N+1)``, then ``bend_rank(q_i)``.
+    - N = 3 → ``[0.2, 0.4, 0.7]`` (logo blue, green, orange).
+    - N ≥ 4 → even bin midpoints ``t_i = (i + 0.5) / N``. These cover the
+      full 0–1 palette. They are not bent, and they are not snapped to the
+      logo knots.
 
-    The bend leaves the logo anchors exact. N = 3 is blue, green, orange.
-    N = 7 is ``[0.05, 0.2, 0.425, 0.5, 0.55, 0.7, 0.925]``: items 2,
-    4, and 6 are the logo colors, item 1 sits nearer the violet end, item 3
-    nearer green, and item 7 nearer the red end.
+    N = 4 is ``[0.125, 0.375, 0.625, 0.875]``. N = 7 is
+    ``[0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5] / 7``.
     """
     count = int(n)
     if count <= 0:
@@ -274,7 +246,9 @@ def categorical_positions(n: int) -> list[float]:
         return [LOGO_GREEN_T]
     if count == 2:
         return [LOGO_BLUE_T, LOGO_ORANGE_T]
-    return [bend_rank((i + 1) / (count + 1)) for i in range(count)]
+    if count == 3:
+        return [LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T]
+    return [(i + 0.5) / count for i in range(count)]
 
 
 def categorical_colors(n: int, cmap=None) -> list[tuple]:
@@ -393,7 +367,7 @@ def rating_color(
     """Map a Letterboxd rating onto the full 0–1 palette.
 
     0.5 → t = 0 (purple) and 5 → t = 1 (burgundy). The logo anchors sit
-    inside that range at 0.2 / 0.5 / 0.7.
+    inside that range at 0.2 / 0.4 / 0.7.
     """
     return palette_color(_rating_t(avg, vmin, vmax))
 

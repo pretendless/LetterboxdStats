@@ -71,7 +71,7 @@ One palette, `palette_color` in `scripts/letterboxd_palette.py`. It is a smooth 
 
 - 0 deep purple `#5922BF` = RGB (89, 34, 191)
 - 0.2 blue `#3FB7EB` = RGB (63, 183, 235)
-- 0.5 green `#03E53E` = RGB (3, 229, 62)
+- 0.4 green `#03E53E` = RGB (3, 229, 62)
 - 0.7 orange `#FC7A02` = RGB (252, 122, 2)
 - 1 deep burgundy `#890E3A` = RGB (137, 14, 58)
 
@@ -79,19 +79,16 @@ The three middle knots are the measured logo circles (median sRGB of each non-ov
 
 Never use hue bands, hard cuts, holds, or easing.
 
-A rating maps with `t = (rating − 0.5) / 4.5` (`RATING_VMIN = 0.5`, `RATING_VMAX = 5.0`). So 1.4 is logo blue, 2.75 is green, and 3.65 is logo orange.
+A rating maps with `t = (rating − 0.5) / 4.5` (`RATING_VMIN = 0.5`, `RATING_VMAX = 5.0`). So 1.4 is logo blue, 2.3 is green, and 3.65 is logo orange.
 
-Discrete ordered series (watch years, ranked genres), earliest or lowest first, use `bend_rank` on raw rank `q = (i+1)/(N+1)`:
+Discrete ordered series (watch years, ranked genres), earliest or lowest first, use `categorical_positions`. This is the permanent rule:
 
-- N = 1 → `[0.5]`
-- N = 2 → `[0.2, 0.7]`
-- N ≥ 3 → raw quartiles 0, 0.25, 0.5, 0.75, 1 land on the knots 0, 0.2, 0.5, 0.7, 1. Inside each quartile `u = (q − q0)/0.25` and `[t0, t1]` is the matching knot interval:
-  - `[0, 0.25]`: `t = t0 + (t1−t0) u²` (pull toward 0)
-  - `[0.25, 0.5]`: `t = t0 + (t1−t0) (1−(1−u)²)` (pull toward green)
-  - `[0.5, 0.75]`: `t = t0 + (t1−t0) u²` (pull toward green)
-  - `[0.75, 1]`: `t = t0 + (t1−t0) (1−(1−u)²)` (pull toward 1)
+- N = 1 → `[0.4]`, exact logo green
+- N = 2 → `[0.2, 0.7]`, exact logo blue and orange
+- N = 3 → `[0.2, 0.4, 0.7]`, the three logo colors
+- N ≥ 4 → even bin midpoints `t_i = (i + 0.5) / N` for `i = 0 .. N−1`
 
-N = 3 is blue, green, orange. N = 7 is `[0.05, 0.2, 0.425, 0.5, 0.55, 0.7, 0.925]` (items 2, 4, and 6 are the logo colors).
+Four or more values sample the full 0–1 palette. There is no quadratic bend and no snap onto the logo knots. N = 4 is `[0.125, 0.375, 0.625, 0.875]`. N = 7 is `[0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5] / 7`.
 
 ## Rating-bar labels
 
