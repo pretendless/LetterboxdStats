@@ -24,20 +24,52 @@ from PIL import Image
 
 from letterboxd_options import TOP_N_MAX, TOP_N_MIN, clamp_top_n
 from letterboxd_top_charts import (
+    LIKED_HEART,
     TOP_N_DEFAULT,
+    category_label_with_liked_count,
     chart_rating_hbar,
     chart_rating_vbar,
     chart_release_years_by_count,
     chart_release_years_by_rating,
     chart_stacked_count_hbar,
     count_avg_text_style,
+    count_liked_among_keys,
     display_lang,
+    film_title_with_liked_heart,
+    format_liked_tip,
+    rank_most_liked,
 )
 
 
 def test_display_lang():
     assert display_lang("en") == "English"
     assert display_lang("XX") == "xx"
+
+
+def test_liked_heart_helpers_use_black_heart_suit():
+    """Film truncation, category counts, tips, and Most liked ranking."""
+    assert LIKED_HEART == "\u2665"
+    assert "\u2764" not in LIKED_HEART
+    assert film_title_with_liked_heart("Short", liked=False) == "Short"
+    assert film_title_with_liked_heart("Short", liked=True) == f"Short{LIKED_HEART}"
+    # Heart sits after the ellipsis on overflow labels.
+    truncated = "Some long titl..."
+    assert film_title_with_liked_heart(truncated, liked=True) == f"{truncated}{LIKED_HEART}"
+    assert category_label_with_liked_count("Drama", 0) == "Drama"
+    assert category_label_with_liked_count("Drama", 12) == f"Drama {LIKED_HEART} 12"
+    assert format_liked_tip(0) is None
+    assert format_liked_tip(-1) is None
+    assert format_liked_tip(3) == f"{LIKED_HEART} 3"
+    assert count_liked_among_keys({"A|||1", "B|||2"}, {"B|||2", "C|||3"}) == 1
+    ranked = rank_most_liked(
+        {"Nolan": 12, "Villeneuve": 4, "Nobody": 0, "Fincher": 12},
+        top_n=3,
+    )
+    assert ranked == [("Fincher", 12), ("Nolan", 12), ("Villeneuve", 4)]
+    assert rank_most_liked({"A": 0, "B": 0}, 5) == []
+    # Numbered Most liked line shape (panel draws rank + bold count separately).
+    name, count = ranked[0]
+    assert f"1. {name} {LIKED_HEART} {count}" == f"1. Fincher {LIKED_HEART} 12"
 
 
 def test_top_n_default_about_20():
@@ -883,6 +915,7 @@ def test_rating_hbar_worst_skips_short_slate(tmp_path: Path | None = None):
 
 if __name__ == "__main__":
     test_display_lang()
+    test_liked_heart_helpers_use_black_heart_suit()
     test_top_n_default_about_20()
     test_ranked_hbar_grows_taller_with_n()
     test_categorical_palette_samples_quartile_ranks()
