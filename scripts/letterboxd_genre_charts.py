@@ -75,9 +75,8 @@ TG_TOKEN = os.getenv("LEBXDBOT_TOKEN", "").strip()
 TG_CHAT = (os.getenv("CHAT_ID") or os.getenv("LETTERBOXD_CHAT_ID") or "").strip()
 PROGRESS_EVERY = max(1, int(os.getenv("LETTERBOXD_PROGRESS_EVERY", "25") or "25"))
 PROGRESS_MIN_SEC = max(5.0, float(os.getenv("LETTERBOXD_PROGRESS_MIN_SEC", "45") or "45"))
-# Min diary hits before a person/company appears in ranked HTML count lists.
-MIN_PERSON_COUNT = max(2, int(os.getenv("LETTERBOXD_MIN_PERSON_COUNT", "3") or "3"))
-MIN_COMPANY_COUNT = max(2, int(os.getenv("LETTERBOXD_MIN_COMPANY_COUNT", "3") or "3"))
+# Director, actor, and studio watch charts use the wizard threshold (min_rated)
+# as their hit floor.
 CAST_TOP_BILLED = max(1, int(os.getenv("LETTERBOXD_CAST_TOP", "5") or "5"))
 
 
@@ -549,19 +548,23 @@ def aggregate_person_stats(
 
         apply_meta(rating_only, row, meta)
 
+    # Catalog hits (diary rows plus one watched-only film) ≥ T for a person or
+    # studio count list. Countries and languages stay at one hit. Rating lists
+    # still require unique rated films ≥ T, not this hit count.
+    watch_min = int(min_rated)
     countries_c, countries_r, countries_w = _paired_ranks(
         countries, min_count=1, limit_count=top_n, limit_rating=top_n, min_rated=min_rated
     )
     directors_c, directors_r, directors_w = _paired_ranks(
         directors,
-        min_count=MIN_PERSON_COUNT,
+        min_count=watch_min,
         limit_count=top_n,
         limit_rating=top_n,
         min_rated=min_rated,
     )
     actors_c, actors_r, actors_w = _paired_ranks(
         actors,
-        min_count=MIN_PERSON_COUNT,
+        min_count=watch_min,
         limit_count=top_n,
         limit_rating=top_n,
         min_rated=min_rated,
@@ -571,7 +574,7 @@ def aggregate_person_stats(
     )
     companies_c, companies_r, companies_w = _paired_ranks(
         companies,
-        min_count=MIN_COMPANY_COUNT,
+        min_count=watch_min,
         limit_count=top_n,
         limit_rating=top_n,
         min_rated=min_rated,
@@ -702,10 +705,16 @@ def chart_deep_count_tops(
     include_usa=True,
     include_english=True,
 ) -> dict:
-    """Watch-year stacked count charts for TMDB deep entities."""
+    """Watch-year stacked count charts for TMDB deep entities.
+
+    Director, actor, and studio bars need diary hits ≥ min_rated (wizard
+    threshold T). Genres, countries, and languages stay at one hit. The
+    colored mean still needs unique rated films ≥ T.
+    """
     footer = "Source: Letterboxd diary + TMDB metadata"
     made = {}
     maps = avg_maps or {}
+    watch_min = int(min_rated)
 
     def names(field):
         def _fn(row):
@@ -745,7 +754,7 @@ def chart_deep_count_tops(
             "directors",
             "Directors — color is watch year",
             top_n,
-            MIN_PERSON_COUNT,
+            watch_min,
             None,
         ),
         (
@@ -753,7 +762,7 @@ def chart_deep_count_tops(
             "cast",
             "Actors (top-billed) — color is watch year",
             top_n,
-            MIN_PERSON_COUNT,
+            watch_min,
             None,
         ),
         (
@@ -769,7 +778,7 @@ def chart_deep_count_tops(
             "companies",
             "Studios — color is watch year",
             top_n,
-            MIN_COMPANY_COUNT,
+            watch_min,
             None,
         ),
     ]
@@ -1156,7 +1165,8 @@ def main():
         "companies": deep.get("companies") or [],
         "companies_by_rating": deep.get("companies_by_rating") or [],
         "companies_by_rating_worst": deep.get("companies_by_rating_worst") or [],
-        "min_person_count": int(MIN_PERSON_COUNT),
+        # Wizard threshold T for director, actor, and studio count lists.
+        "min_person_count": int(opts.min_rated),
         "min_rated_for_top": int(opts.min_rated),
         "top_n": int(opts.top_n),
         "include_usa": bool(opts.include_usa),

@@ -606,8 +606,8 @@ function promptFor(step, state, now = new Date()) {
   if (step === "min_rated") {
     return {
       text: wizardPrompt(
-        "Threshold for average-rating tops",
-        "How many rated films a row needs before it appears in average-rating tops: directors, actors, genres, countries, and the rest. A row is included only when it has that many rated films or more. At 3, a director with two rated films is left out. Watch-count charts ignore this threshold. Buttons, or a number from 1 to 50.",
+        "Threshold",
+        "Average-rating tops include a row only when it has this many unique rated films or more: directors, actors, genres, countries, and the rest. At 3, a director with two rated films is left out. Director, actor, and studio watch-count charts use the same threshold: a row needs that many diary hits or more. Buttons, or a number from 1 to 50.",
         "3, 5, 10",
         "3",
       ),
