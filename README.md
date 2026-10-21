@@ -56,7 +56,7 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 | Command | What it does |
 | --- | --- |
-| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the minimum number of rated films, whether USA and English stay in those tops, the watch period, and films with no diary date. |
+| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, whether USA and English stay in those tops, the watch period, and films with no diary date. |
 | `/start letterboxd` | The same wizard. This is what `https://t.me/lebxdbot?start=letterboxd` opens. |
 | `/stop` | Clears the wizard. If a chart run is already in GitHub Actions, it stops that run. |
 
@@ -80,7 +80,7 @@ Description (empty chat, and “What can this bot do?”):
 
 > Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export.
 >
-> /start, then the ZIP. Next, keep the usual chart set or choose your own: top size from 1 to 100, minimum rated films, USA, English, and a watch period. /stop leaves the questions. A chart run that has already started stops too.
+> /start, then the ZIP. Next, keep the usual chart set or choose your own: top size from 1 to 100, a rating-count threshold for average tops, USA, English, and a watch period. /stop leaves the questions. A chart run that has already started stops too.
 >
 > Example:
 > /start

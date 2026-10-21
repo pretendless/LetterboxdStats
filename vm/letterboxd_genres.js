@@ -211,7 +211,7 @@ export function letterboxdPromptText() {
   return (
     "Send the Letterboxd export ZIP as one document.\n\n" +
     "Letterboxd → Settings → Import & Export → Export Your Data.\n" +
-    "The archive needs diary.csv; watched.csv and ratings.csv are used in the catalog and averages. Cancel with /stop."
+    "The archive must include diary.csv. watched.csv and ratings.csv are used for the catalog and averages when present. Cancel with /stop."
   );
 }
 
@@ -241,7 +241,7 @@ export function letterboxdAckText(jobId, options) {
   return (
     "ZIP received. Building Letterboxd charts with GitHub Actions — PNGs will arrive in this chat " +
     "(calendar, extra stats, genres).\n\n" +
-    `Tops: ${opts.topN}. Minimum ratings: ${opts.minRated}. ` +
+    `Tops: ${opts.topN}. Threshold: ${opts.minRated}. ` +
     `USA: ${opts.includeUSA ? "yes" : "no"}. English: ${opts.includeEnglish ? "yes" : "no"}. ` +
     `Period: ${period}.` +
     undated +
@@ -606,8 +606,8 @@ function promptFor(step, state, now = new Date()) {
   if (step === "min_rated") {
     return {
       text: wizardPrompt(
-        "Minimum rated films",
-        "This is the threshold for average-rating tops: directors, actors, genres, countries, and the rest. A row is included only when it has that many rated films or more. At 3, a director with two rated films is left out. Watch-count charts ignore this threshold. Buttons, or a number from 1 to 50.",
+        "Threshold for average-rating tops",
+        "How many rated films a row needs before it appears in average-rating tops: directors, actors, genres, countries, and the rest. A row is included only when it has that many rated films or more. At 3, a director with two rated films is left out. Watch-count charts ignore this threshold. Buttons, or a number from 1 to 50.",
         "3, 5, 10",
         "3",
       ),

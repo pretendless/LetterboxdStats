@@ -9,7 +9,7 @@ export const DESCRIPTION =
   "Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export.\n" +
   "\n" +
   "/start, then the ZIP. Next, keep the usual chart set or choose your own: " +
-  "top size from 1 to 100, minimum rated films, USA, English, and a watch period. " +
+  "top size from 1 to 100, a rating-count threshold for average tops, USA, English, and a watch period. " +
   "/stop leaves the questions. A chart run that has already started stops too.\n" +
   "\n" +
   "Example:\n" +
