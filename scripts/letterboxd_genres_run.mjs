@@ -286,7 +286,9 @@ const TELEGRAM_TEXT_LIMIT = 4096;
 
 /**
  * Format one search-keyword film list as HTML message chunk(s).
- * Line: Name (Year) (actor, director, …). Empty list → one short notice.
+ * Line: Name (Year) (actor, …) — 5, —, 3.5
+ * Ratings: one value per watch (diary oldest→newest, or one watched-only slot).
+ * Empty list → one short notice.
  */
 export function buildSearchKeywordMessages(keyword, films) {
   const word = String(keyword || "").trim();
@@ -304,7 +306,12 @@ export function buildSearchKeywordMessages(keyword, films) {
         : "?";
     const sites = Array.isArray(film && film.matched) ? film.matched.filter(Boolean) : [];
     const where = sites.length ? sites.map((site) => escapeHtml(site)).join(", ") : "?";
-    return `${name} (${escapeHtml(year)}) (${where})`;
+    const ratings = Array.isArray(film && film.ratings) ? film.ratings : [];
+    const ratingText = ratings.length
+      ? ratings.map((slot) => escapeHtml(slot == null || slot === "" ? "—" : slot)).join(", ")
+      : "";
+    const base = `${name} (${escapeHtml(year)}) (${where})`;
+    return ratingText ? `${base} — ${ratingText}` : base;
   });
   const intro = `${header}\n${rows.length} film${rows.length === 1 ? "" : "s"}\n\n`;
   const chunks = [];

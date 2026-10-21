@@ -9,6 +9,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from letterboxd_calendar_charts import (
@@ -33,6 +34,8 @@ from letterboxd_genre_charts import (
     _filter_genre_names,
     build_search_keyword_lists,
     film_search_match_sites,
+    format_search_rating_slot,
+    watch_rating_slots_for_film,
 )
 from letterboxd_options import (
     field_values_match_keyword,
@@ -392,7 +395,60 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert len(lists[0]["films"]) == 1
     assert lists[0]["films"][0]["name"] == "The Fellowship of the Ring"
     assert lists[0]["films"][0]["matched"] == ["actor"]
+    assert lists[0]["films"][0]["ratings"] == ["—"]  # no diary / ratings.csv
     assert build_search_keyword_lists(catalog, cache, []) == []
+    assert format_search_rating_slot(5) == "5"
+    assert format_search_rating_slot(3.5) == "3.5"
+    assert format_search_rating_slot(None) == "—"
+    diary_slots = pd.DataFrame(
+        [
+            {
+                "Name": "The Fellowship of the Ring",
+                "Year": 2001,
+                "Rating": 5.0,
+                "Watched Date": pd.Timestamp("2021-09-10"),
+            },
+            {
+                "Name": "The Fellowship of the Ring",
+                "Year": 2001,
+                "Rating": np.nan,
+                "Watched Date": pd.Timestamp("2021-09-12"),
+            },
+            {
+                "Name": "The Fellowship of the Ring",
+                "Year": 2001,
+                "Rating": 3.5,
+                "Watched Date": pd.Timestamp("2022-01-01"),
+            },
+        ]
+    )
+    ratings_csv = pd.DataFrame(
+        [{"Name": "The Fellowship of the Ring", "Year": 2001, "Rating": 4.0}]
+    )
+    # Diary order oldest→newest; empty diary rating falls back to ratings.csv.
+    assert watch_rating_slots_for_film(
+        "The Fellowship of the Ring", 2001, diary_slots, {"The Fellowship of the Ring|||2001": 4.0}
+    ) == ["5", "4", "3.5"]
+    # No diary → one watched-only slot from ratings.csv.
+    assert watch_rating_slots_for_film(
+        "The Fellowship of the Ring", 2001, diary_slots.iloc[0:0], {"The Fellowship of the Ring|||2001": 4.0}
+    ) == ["4"]
+    assert watch_rating_slots_for_film("Missing", 1999, diary_slots.iloc[0:0], {}) == ["—"]
+    # Empty diary slots with no ratings.csv stay dashes (slot count = diary rows).
+    assert watch_rating_slots_for_film(
+        "The Fellowship of the Ring",
+        2001,
+        diary_slots.assign(Rating=np.nan),
+        {},
+    ) == ["—", "—", "—"]
+    with_diary = build_search_keyword_lists(
+        catalog,
+        cache,
+        ["Elijah Wood"],
+        diary=diary_slots,
+        ratings_csv=ratings_csv,
+    )
+    assert with_diary[0]["films"][0]["ratings"] == ["5", "4", "3.5"]
     opts = read_chart_options(
         {
             "LETTERBOXD_SEARCH_KEYWORDS": "Wood,2001",

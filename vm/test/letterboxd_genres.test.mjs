@@ -441,21 +441,31 @@ test("buildLetterboxdDispatch", () => {
   assert.equal(withSearch.body.inputs.search_keywords, "Elijah Wood,2001");
 });
 
-test("search keyword HTML lists name year and match sites", () => {
+test("search keyword HTML lists name year match sites and watch ratings", () => {
   const chunks = buildSearchKeywordMessages("Elijah Wood", [
-    { name: "The Lord of the Rings: The Fellowship of the Ring", year: 2001, matched: ["actor"] },
-    { name: "Eternal Sunshine of the Spotless Mind", year: 2004, matched: ["actor", "genre"] },
+    {
+      name: "The Lord of the Rings: The Fellowship of the Ring",
+      year: 2001,
+      matched: ["actor"],
+      ratings: ["5"],
+    },
+    {
+      name: "Eternal Sunshine of the Spotless Mind",
+      year: 2004,
+      matched: ["actor", "genre"],
+      ratings: ["5", "—"],
+    },
   ]);
   assert.equal(chunks.length, 1);
   assert.match(chunks[0], /<b>Search keyword: Elijah Wood<\/b>/);
   assert.match(chunks[0], /2 films/);
   assert.match(
     chunks[0],
-    /The Lord of the Rings: The Fellowship of the Ring \(2001\) \(actor\)/,
+    /The Lord of the Rings: The Fellowship of the Ring \(2001\) \(actor\) — 5/,
   );
   assert.match(
     chunks[0],
-    /Eternal Sunshine of the Spotless Mind \(2004\) \(actor, genre\)/,
+    /Eternal Sunshine of the Spotless Mind \(2004\) \(actor, genre\) — 5, —/,
   );
   assert.deepEqual(buildAllSearchKeywordMessages({ search_keywords: [] }), []);
   assert.match(
