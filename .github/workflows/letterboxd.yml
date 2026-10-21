@@ -53,6 +53,11 @@ on:
         required: false
         default: ""
         type: string
+      search_keywords:
+        description: Comma-separated search keywords — film lists after charts (metadata substring match)
+        required: false
+        default: ""
+        type: string
       date_from:
         description: Inclusive watch-date start YYYY-MM-DD (empty = full span)
         required: false
@@ -97,6 +102,7 @@ jobs:
           LETTERBOXD_INCLUDE_DRAMA: ${{ inputs.include_drama }}
           LETTERBOXD_INCLUDE_COMEDY: ${{ inputs.include_comedy }}
           LETTERBOXD_EXCLUDE_KEYWORDS: ${{ inputs.exclude_keywords }}
+          LETTERBOXD_SEARCH_KEYWORDS: ${{ inputs.search_keywords }}
           LETTERBOXD_DATE_FROM: ${{ inputs.date_from }}
           LETTERBOXD_DATE_TO: ${{ inputs.date_to }}
           LETTERBOXD_INCLUDE_UNDATED: ${{ inputs.include_undated }}

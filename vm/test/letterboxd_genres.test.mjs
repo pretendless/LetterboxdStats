@@ -14,6 +14,7 @@ import {
   letterboxdPeriodKeyboard,
   letterboxdTopKeyboard,
   letterboxdKeywordsKeyboard,
+  letterboxdSearchKeywordsKeyboard,
   letterboxdUndatedKeyboard,
   letterboxdYesNoKeyboard,
   parseLetterboxdCallback,
@@ -27,6 +28,8 @@ import {
   buildCalendarReportHtml,
   buildGenreReportHtml,
   buildGenreReportMessages,
+  buildSearchKeywordMessages,
+  buildAllSearchKeywordMessages,
   calendarCaptions,
   calendarReadyText,
   escapeHtml,
@@ -231,9 +234,13 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   const drama = advanceLetterboxdWizard(english.state, { kind: "callback", step: "english", value: true });
   const comedy = advanceLetterboxdWizard(drama.state, { kind: "callback", step: "drama", value: true });
   const keywords = advanceLetterboxdWizard(comedy.state, { kind: "callback", step: "comedy", value: true });
-  const period = advanceLetterboxdWizard(
+  const search = advanceLetterboxdWizard(
     keywords.state,
     { kind: "callback", step: "keywords", choice: "done" },
+  );
+  const period = advanceLetterboxdWizard(
+    search.state,
+    { kind: "callback", step: "search", value: false },
   );
   const skip = advanceLetterboxdWizard(
     { step: "exclusions", fileId, minRated: 3 },
@@ -243,7 +250,7 @@ test("binary steps keep the default button and drop the repeated lines", () => {
     { step: "range_start", fileId, dateFrom: "2024-01-01", dateTo: "2024-12-31" },
     { kind: "callback", step: "range_start", year: 2024 },
   );
-  for (const message of [exclusions, usa, english, drama, comedy, period, skip, undated]) {
+  for (const message of [exclusions, usa, english, drama, comedy, search, period, skip, undated]) {
     assert.doesNotMatch(message.messages[0].text, /For example:/);
     assert.doesNotMatch(message.messages[0].text, /Default:/);
   }
@@ -253,8 +260,9 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.match(drama.messages[0].text, /<b>Show Drama in the genre tops\?<\/b>/);
   assert.match(comedy.messages[0].text, /<b>Show Comedy in the genre tops\?<\/b>/);
   assert.match(keywords.messages[0].text, /<b>Exclude keywords from watch-count tops\?<\/b>/);
+  assert.match(search.messages[0].text, /<b>Add search keywords\?<\/b>/);
   assert.match(period.messages[0].text, /<b>Full period or a custom range\?<\/b>/);
-  assert.equal(skip.state.step, "period");
+  assert.equal(skip.state.step, "search");
   assert.equal(skip.state.includeUSA, true);
   assert.equal(skip.state.includeEnglish, true);
   assert.equal(skip.state.includeDrama, true);
@@ -266,6 +274,7 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
   assert.equal(drama.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
   assert.equal(comedy.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
+  assert.equal(search.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
   assert.equal(period.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: full period");
   assert.equal(undated.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
   assert.match(period.messages[0].text, /Full period runs from the first watch/);
@@ -276,6 +285,9 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(parseLetterboxdCallback("lb:com:1").step, "comedy");
   assert.equal(parseLetterboxdCallback("lb:com:1").value, true);
   assert.equal(parseLetterboxdCallback("lb:kw:done").step, "keywords");
+  assert.equal(parseLetterboxdCallback("lb:search:0").step, "search");
+  assert.equal(parseLetterboxdCallback("lb:search:0").value, false);
+  assert.equal(parseLetterboxdCallback("lb:sk:done").step, "search_keywords");
 });
 
 test("keyword step accumulates words until Done", () => {
@@ -288,8 +300,36 @@ test("keyword step accumulates words until Done", () => {
   const second = advanceLetterboxdWizard(first.state, { kind: "text", text: "2001" });
   assert.deepEqual(second.state.excludeKeywords, ["Elijah Wood", "2001"]);
   const done = advanceLetterboxdWizard(second.state, { kind: "callback", step: "keywords", choice: "done" });
-  assert.equal(done.state.step, "period");
+  assert.equal(done.state.step, "search");
   assert.deepEqual(done.state.excludeKeywords, ["Elijah Wood", "2001"]);
+});
+
+test("search keyword step accumulates words until Done", () => {
+  const fileId = "BQACAgIAAxkBAAI1234567890";
+  const gate = advanceLetterboxdWizard(
+    { step: "search", fileId, searchKeywords: [] },
+    { kind: "callback", step: "search", value: true },
+  );
+  assert.equal(gate.state.step, "search_keywords");
+  assert.match(gate.messages[0].text, /<b>Search keywords for film lists\?<\/b>/);
+  const first = advanceLetterboxdWizard(gate.state, { kind: "text", text: "Elijah Wood" });
+  assert.equal(first.state.step, "search_keywords");
+  assert.deepEqual(first.state.searchKeywords, ["Elijah Wood"]);
+  assert.match(first.messages[0].text, /Already added \(1\/20\): Elijah Wood/);
+  const second = advanceLetterboxdWizard(first.state, { kind: "text", text: "2001" });
+  assert.deepEqual(second.state.searchKeywords, ["Elijah Wood", "2001"]);
+  const done = advanceLetterboxdWizard(
+    second.state,
+    { kind: "callback", step: "search_keywords", choice: "done" },
+  );
+  assert.equal(done.state.step, "period");
+  assert.deepEqual(done.state.searchKeywords, ["Elijah Wood", "2001"]);
+  const skip = advanceLetterboxdWizard(
+    { step: "search", fileId },
+    { kind: "callback", step: "search", value: false },
+  );
+  assert.equal(skip.state.step, "period");
+  assert.deepEqual(skip.state.searchKeywords, []);
 });
 
 test("every wizard keyboard has a one-tap default button", () => {
@@ -304,6 +344,9 @@ test("every wizard keyboard has a one-tap default button", () => {
   assert.equal(last(letterboxdYesNoKeyboard("lb:com")), "Default: yes");
   assert.equal(last(letterboxdKeywordsKeyboard(false)), "Default: none");
   assert.equal(letterboxdKeywordsKeyboard(true).inline_keyboard[0][0].text, "Done");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:search", "no")), "Default: no");
+  assert.equal(last(letterboxdSearchKeywordsKeyboard(false)), "Default: none");
+  assert.equal(letterboxdSearchKeywordsKeyboard(true).inline_keyboard[0][0].text, "Done");
   assert.equal(last(letterboxdPeriodKeyboard()), "Default: full period");
   assert.equal(last(letterboxdUndatedKeyboard()), "Default: no");
   assert.equal(last(letterboxdYesNoKeyboard("lb:und", "нет")), "Default: no");
@@ -317,7 +360,7 @@ test("isZipDocument and file_id", () => {
   assert.equal(normalizeTelegramFileId("../x"), "");
 });
 
-test("ack summary lists USA English Drama Comedy and keywords", () => {
+test("ack summary lists USA English Drama Comedy exclude and search keywords", () => {
   const text = letterboxdAckText("lb-1", {
     topN: 20,
     minRated: 3,
@@ -326,12 +369,14 @@ test("ack summary lists USA English Drama Comedy and keywords", () => {
     includeDrama: false,
     includeComedy: true,
     excludeKeywords: ["Wood", "2001"],
+    searchKeywords: ["Elijah Wood"],
   });
   assert.match(text, /USA: yes/);
   assert.match(text, /English: no/);
   assert.match(text, /Drama: no/);
   assert.match(text, /Comedy: yes/);
   assert.match(text, /Keyword exclusions: "Wood", "2001"/);
+  assert.match(text, /Search keywords: "Elijah Wood"/);
 });
 
 test("genre PNG send order puts watches before rating before decade before watch year", () => {
@@ -378,11 +423,45 @@ test("buildLetterboxdDispatch", () => {
       include_drama: "true",
       include_comedy: "true",
       exclude_keywords: "",
+      search_keywords: "",
       date_from: "",
       date_to: "",
       include_undated: "false",
     },
   });
+  const withSearch = buildLetterboxdDispatch({
+    repo: "pretendless/Telegram2Telemost",
+    workflow: "letterboxd.yml",
+    ref: "main",
+    jobId: "lb-2",
+    chatId: "7",
+    fileId: "BQACAgIAAxkBAAI1234567890",
+    options: { searchKeywords: ["Elijah Wood", "2001"] },
+  });
+  assert.equal(withSearch.body.inputs.search_keywords, "Elijah Wood,2001");
+});
+
+test("search keyword HTML lists name year and match sites", () => {
+  const chunks = buildSearchKeywordMessages("Elijah Wood", [
+    { name: "The Lord of the Rings: The Fellowship of the Ring", year: 2001, matched: ["actor"] },
+    { name: "Eternal Sunshine of the Spotless Mind", year: 2004, matched: ["actor", "genre"] },
+  ]);
+  assert.equal(chunks.length, 1);
+  assert.match(chunks[0], /<b>Search keyword: Elijah Wood<\/b>/);
+  assert.match(chunks[0], /2 films/);
+  assert.match(
+    chunks[0],
+    /The Lord of the Rings: The Fellowship of the Ring \(2001\) \(actor\)/,
+  );
+  assert.match(
+    chunks[0],
+    /Eternal Sunshine of the Spotless Mind \(2004\) \(actor, genre\)/,
+  );
+  assert.deepEqual(buildAllSearchKeywordMessages({ search_keywords: [] }), []);
+  assert.match(
+    buildSearchKeywordMessages("Nobody", [])[0],
+    /No films matched in this catalog/,
+  );
 });
 
 test("mapScriptError covers diary and bearer", () => {

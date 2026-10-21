@@ -28,8 +28,14 @@ from letterboxd_export import (
     merged_film_ratings,
     scope_letterboxd_frames,
 )
-from letterboxd_genre_charts import _filter_entity_names, _filter_genre_names
+from letterboxd_genre_charts import (
+    _filter_entity_names,
+    _filter_genre_names,
+    build_search_keyword_lists,
+    film_search_match_sites,
+)
 from letterboxd_options import (
+    field_values_match_keyword,
     format_count_avg_label,
     format_single_rating_label,
     is_comedy_genre,
@@ -38,6 +44,8 @@ from letterboxd_options import (
     is_usa_country,
     label_matches_exclude_keywords,
     parse_exclude_keywords,
+    parse_search_keywords,
+    read_chart_options,
 )
 
 
@@ -342,6 +350,56 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert label_matches_exclude_keywords("Elijah Wood", ("wood",))
     assert label_matches_exclude_keywords("2001", ("2001",))
     assert not label_matches_exclude_keywords("Peter Jackson", ("wood",))
+    assert parse_search_keywords("Elijah Wood, 2001") == ("Elijah Wood", "2001")
+    assert parse_search_keywords("wood, Wood") == ("wood",)
+    assert field_values_match_keyword(["Elijah Wood", "Sean Astin"], "wood")
+    assert not field_values_match_keyword(["Peter Jackson"], "wood")
+    meta = {
+        "genres": ["Adventure", "Fantasy"],
+        "directors": ["Peter Jackson"],
+        "cast": ["Elijah Wood", "Ian McKellen"],
+        "companies": ["New Line Cinema"],
+        "countries": ["New Zealand", "United States of America"],
+        "original_language": "en",
+        "tmdb_release_year": 2001,
+    }
+    assert film_search_match_sites(meta, ["2001"], "Elijah Wood") == ["actor"]
+    assert film_search_match_sites(meta, ["2001"], "jackson") == ["director"]
+    assert film_search_match_sites(meta, ["2001"], "Fantasy") == ["genre"]
+    assert film_search_match_sites(meta, ["2001"], "English") == ["language"]
+    assert film_search_match_sites(meta, ["2001"], "2001") == ["year"]
+    assert film_search_match_sites(meta, ["2001"], "New Line") == ["studio"]
+    catalog = pd.DataFrame(
+        [
+            {"Name": "The Fellowship of the Ring", "Year": 2001},
+            {"Name": "Other Film", "Year": 1999},
+        ]
+    )
+    cache = {
+        "The Fellowship of the Ring|||2001": meta,
+        "Other Film|||1999": {
+            "genres": [],
+            "directors": [],
+            "cast": [],
+            "companies": [],
+            "countries": [],
+            "original_language": "",
+        },
+    }
+    lists = build_search_keyword_lists(catalog, cache, ["Elijah Wood"])
+    assert len(lists) == 1
+    assert lists[0]["keyword"] == "Elijah Wood"
+    assert len(lists[0]["films"]) == 1
+    assert lists[0]["films"][0]["name"] == "The Fellowship of the Ring"
+    assert lists[0]["films"][0]["matched"] == ["actor"]
+    assert build_search_keyword_lists(catalog, cache, []) == []
+    opts = read_chart_options(
+        {
+            "LETTERBOXD_SEARCH_KEYWORDS": "Wood,2001",
+            "LETTERBOXD_EXCLUDE_KEYWORDS": "",
+        }
+    )
+    assert opts.search_keywords == ("Wood", "2001")
     assert format_single_rating_label(4.5) == "4.50"
     assert format_single_rating_label(None) == "—"
 

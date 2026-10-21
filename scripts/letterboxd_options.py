@@ -1,13 +1,17 @@
-"""Chart options for /letterboxd: top size, rating gate, exclusions, watch window.
+"""Chart options for /letterboxd: top size, rating gate, exclusions, search, watch window.
 
 Wizard defaults (also the GitHub Actions defaults):
   top_n=20 (allowed 1–100), min_rated=3 (allowed 1–50),
   include USA, include English, include Drama, include Comedy,
-  no custom keyword exclusions,
+  no custom keyword exclusions, no search keywords,
   full diary span, undated films only on the full span.
 
 Optional keyword exclusions (and the nested USA/English/Drama/Comedy path)
 apply only to quantitative / count tops — never to average-rating tops.
+
+Optional search keywords are separate: after all chart PNGs, each keyword
+gets a Telegram film list where the substring matches film metadata
+(genre, director, actor, studio, country, language, release year).
 
 The wizard rejects anything outside 1–100 (a typo like 9999 never dispatches).
 This module clamps a manual workflow_dispatch into the same bounds. Chart
@@ -30,6 +34,19 @@ MIN_RATED_MAX = 50
 MIN_RATED_DEFAULT = 3
 EXCLUDE_KEYWORDS_MAX = 20
 EXCLUDE_KEYWORD_MAX_LEN = 40
+SEARCH_KEYWORDS_MAX = EXCLUDE_KEYWORDS_MAX
+SEARCH_KEYWORD_MAX_LEN = EXCLUDE_KEYWORD_MAX_LEN
+
+# Stable order for "where it matched" labels on search-keyword film lists.
+SEARCH_MATCH_FIELDS = (
+    "genre",
+    "director",
+    "actor",
+    "studio",
+    "country",
+    "language",
+    "year",
+)
 
 _USA_NAMES = {
     "united states of america",
@@ -142,8 +159,8 @@ def format_single_rating_label(avg) -> str:
     return f"{avg_f:.2f}"
 
 
-def parse_exclude_keywords(value) -> tuple[str, ...]:
-    """Parse a comma-separated string or JSON list of exclusion keywords."""
+def _parse_keyword_list(value, *, max_words: int, max_len: int) -> tuple[str, ...]:
+    """Parse a comma-separated string or JSON list of keywords with caps."""
     if value is None:
         return ()
     if isinstance(value, (list, tuple)):
@@ -169,16 +186,30 @@ def parse_exclude_keywords(value) -> tuple[str, ...]:
         word = " ".join(str(item or "").split()).strip()
         if not word:
             continue
-        if len(word) > EXCLUDE_KEYWORD_MAX_LEN:
-            word = word[:EXCLUDE_KEYWORD_MAX_LEN].rstrip()
+        if len(word) > max_len:
+            word = word[:max_len].rstrip()
         key = word.casefold()
         if key in seen:
             continue
         seen.add(key)
         out.append(word)
-        if len(out) >= EXCLUDE_KEYWORDS_MAX:
+        if len(out) >= max_words:
             break
     return tuple(out)
+
+
+def parse_exclude_keywords(value) -> tuple[str, ...]:
+    """Parse a comma-separated string or JSON list of exclusion keywords."""
+    return _parse_keyword_list(
+        value, max_words=EXCLUDE_KEYWORDS_MAX, max_len=EXCLUDE_KEYWORD_MAX_LEN
+    )
+
+
+def parse_search_keywords(value) -> tuple[str, ...]:
+    """Parse search keywords (same caps as exclusions; separate wizard step)."""
+    return _parse_keyword_list(
+        value, max_words=SEARCH_KEYWORDS_MAX, max_len=SEARCH_KEYWORD_MAX_LEN
+    )
 
 
 def label_matches_exclude_keywords(label, keywords) -> bool:
@@ -189,6 +220,18 @@ def label_matches_exclude_keywords(label, keywords) -> bool:
     for word in keywords or ():
         needle = str(word or "").strip().casefold()
         if needle and needle in text:
+            return True
+    return False
+
+
+def field_values_match_keyword(values, keyword: str) -> bool:
+    """True when keyword is a case-insensitive substring of any field value."""
+    needle = str(keyword or "").strip().casefold()
+    if not needle:
+        return False
+    for value in values or ():
+        text = str(value or "").casefold()
+        if text and needle in text:
             return True
     return False
 
@@ -206,6 +249,7 @@ class ChartOptions:
     include_drama: bool = True
     include_comedy: bool = True
     exclude_keywords: tuple[str, ...] = field(default_factory=tuple)
+    search_keywords: tuple[str, ...] = field(default_factory=tuple)
     date_from: str | None = None
     date_to: str | None = None
     include_undated: bool = False
@@ -244,6 +288,7 @@ def read_chart_options(env: dict | None = None) -> ChartOptions:
         include_drama=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_DRAMA"), True),
         include_comedy=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_COMEDY"), True),
         exclude_keywords=parse_exclude_keywords(src.get("LETTERBOXD_EXCLUDE_KEYWORDS")),
+        search_keywords=parse_search_keywords(src.get("LETTERBOXD_SEARCH_KEYWORDS")),
         date_from=date_from,
         date_to=date_to,
         include_undated=include_undated,

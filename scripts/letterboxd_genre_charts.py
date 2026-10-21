@@ -42,6 +42,8 @@ from letterboxd_export import (  # noqa: E402
     ratings_for_catalog,
 )
 from letterboxd_options import (  # noqa: E402
+    SEARCH_MATCH_FIELDS,
+    field_values_match_keyword,
     is_comedy_genre,
     is_drama_genre,
     is_english_language,
@@ -665,6 +667,114 @@ def rank_genres(
 def _cache_meta_for_row(row, cache):
     key = f"{row['Name']}|||{int(row['Year']) if pd.notna(row['Year']) else ''}"
     return cache.get(key) or {}
+
+
+def _release_year_values(row, meta) -> list[str]:
+    """Release-year strings for search matching (Letterboxd Year + TMDB year)."""
+    values: list[str] = []
+    year = row.get("Year") if hasattr(row, "get") else row["Year"] if "Year" in row else None
+    if year is not None and str(year).strip() != "" and pd.notna(year):
+        try:
+            values.append(str(int(year)))
+        except (TypeError, ValueError):
+            values.append(str(year).strip())
+    tmdb_year = (meta or {}).get("tmdb_release_year")
+    if tmdb_year is not None and str(tmdb_year).strip() != "":
+        try:
+            text = str(int(tmdb_year))
+        except (TypeError, ValueError):
+            text = str(tmdb_year).strip()
+        if text not in values:
+            values.append(text)
+    return values
+
+
+def film_search_match_sites(meta, release_year_values, keyword: str) -> list[str]:
+    """Ordered match-site labels for one film metadata blob and one keyword."""
+    entry = meta if isinstance(meta, dict) else {}
+    lang_code = str(entry.get("original_language") or "").strip()
+    lang_values: list[str] = []
+    if lang_code:
+        lang_values.append(lang_code)
+        label = display_lang(lang_code)
+        if label and label.casefold() != lang_code.casefold():
+            lang_values.append(label)
+    checks = {
+        "genre": entry.get("genres") or [],
+        "director": entry.get("directors") or [],
+        "actor": entry.get("cast") or [],
+        "studio": entry.get("companies") or [],
+        "country": entry.get("countries") or [],
+        "language": lang_values,
+        "year": list(release_year_values or ()),
+    }
+    return [
+        field
+        for field in SEARCH_MATCH_FIELDS
+        if field_values_match_keyword(checks[field], keyword)
+    ]
+
+
+def build_search_keyword_lists(catalog, cache, keywords) -> list[dict]:
+    """Film lists per search keyword over the same catalog the charts use.
+
+    Each entry: ``{keyword, films: [{name, year, matched: [...]}]}``.
+    Films are unique Name+Year, sorted by year then name. Empty keywords → [].
+    """
+    words = [str(w).strip() for w in (keywords or ()) if str(w).strip()]
+    if not words or catalog is None or getattr(catalog, "empty", True):
+        return []
+    films = catalog.drop_duplicates(subset=["Name", "Year"]).copy()
+    rows = []
+    for _, row in films.iterrows():
+        name = str(row.get("Name") or "").strip()
+        if not name:
+            continue
+        year_raw = row.get("Year")
+        year_int = None
+        if year_raw is not None and pd.notna(year_raw):
+            try:
+                year_int = int(year_raw)
+            except (TypeError, ValueError):
+                year_int = None
+        meta = _cache_meta_for_row(row, cache)
+        year_values = _release_year_values(row, meta)
+        rows.append(
+            {
+                "name": name,
+                "year": year_int,
+                "meta": meta,
+                "year_values": year_values,
+            }
+        )
+    rows.sort(
+        key=lambda item: (
+            item["year"] is None,
+            item["year"] if item["year"] is not None else 0,
+            item["name"].casefold(),
+        )
+    )
+    out = []
+    for word in words:
+        matched_films = []
+        for item in rows:
+            sites = film_search_match_sites(item["meta"], item["year_values"], word)
+            if not sites:
+                continue
+            matched_films.append(
+                {
+                    "name": item["name"],
+                    "year": item["year"],
+                    "matched": sites,
+                }
+            )
+        out.append({"keyword": word, "films": matched_films})
+    return out
+
+
+def write_search_keyword_lists(path: Path, lists) -> None:
+    payload = {"search_keywords": list(lists or [])}
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def chart_watches_by_country(diary, cache, path: Path, top_n: int = TOP_N_DEFAULT) -> bool:
@@ -1360,6 +1470,7 @@ def main():
         "include_drama": bool(opts.include_drama),
         "include_comedy": bool(opts.include_comedy),
         "exclude_keywords": list(opts.exclude_keywords or ()),
+        "search_keywords": list(opts.search_keywords or ()),
         "date_from": opts.date_from or "",
         "date_to": opts.date_to or "",
         "include_undated": bool(opts.include_undated and opts.has_window),
@@ -1375,6 +1486,17 @@ def main():
         encoding="utf-8",
     )
 
+    search_lists = build_search_keyword_lists(catalog, cache, opts.search_keywords)
+    if search_lists:
+        write_search_keyword_lists(Path("search_keyword_lists.json"), search_lists)
+        genre_summary["search_keyword_film_counts"] = {
+            item["keyword"]: len(item.get("films") or []) for item in search_lists
+        }
+        Path("genre_summary.json").write_text(
+            json.dumps(genre_summary, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
     print("\nDone. Files created:")
     for f in [
         "genre_counts_by_viewing_year.png",
@@ -1386,6 +1508,7 @@ def main():
         "letterboxd_with_genres.csv",
         "tmdb_unmatched.csv",
         "genre_summary.json",
+        "search_keyword_lists.json",
     ]:
         if Path(f).exists():
             print(" -", f)
