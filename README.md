@@ -50,7 +50,7 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 ![Horizontal bars of films that appear more than once, stacked by watch year](docs/images/top-rewatches.png)
 
-*Films logged more than once, stacked by watch year.*
+*Films logged more than once, stacked by watch year. The tip average is the mean of every rated diary row for that film (rewatches included), not the usual unique-film rating.*
 
 ## Commands
 
@@ -81,7 +81,7 @@ Custom keywords come next. Send one word or phrase per message (actor, director,
 
 These exclusions apply only to **count / watches** tops (genres, countries, directors, actors, languages, studios, release years by watches, rewatches, and the stacked genre charts). **Average-rating** tops (higher / lower) stay unchanged.
 
-Bar and column charts label each bar with the **count** and the **average rating** (a dash when the average is below the threshold or missing). Exceptions: the Letterboxd rating distribution in extra stats shows each bucket’s **percent of all ratings on that chart** (bold, two decimal places) plus the absolute count in parentheses (`NN.NN% (count)`; the rating is already the x-axis); Viewing pace and other non-bar pace charts stay unlabeled. Scatter/dot **Average rating by …** charts put the mean above the marker and the rated-film count in parentheses below it.
+Bar and column charts label each bar with the **count** and the **average rating** (a dash when the average is below the threshold or missing). Exceptions: the Letterboxd rating distribution in extra stats shows each bucket’s **percent of all ratings on that chart** (bold, two decimal places) plus the absolute count in parentheses (`NN.NN% (count)`; the rating is already the x-axis); Viewing pace and other non-bar pace charts stay unlabeled. Scatter/dot **Average rating by …** charts put the mean above the marker and the rated-film count in parentheses below it. **Most often in the diary** keeps diary-row counts, but its average tip is the mean over all rated diary watches of that film (including rewatches) — the only chart that does not use the unique Name+Year rating.
 
 ## Charts
 

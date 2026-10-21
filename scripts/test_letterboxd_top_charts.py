@@ -734,6 +734,52 @@ def test_letterboxd_rating_distribution_percent_tips(
     assert any("." in t or t == "—" for t in decade_texts)
 
 
+def test_top_rewatches_avg_is_diary_row_mean(tmp_path: Path | None = None):
+    """Most often in the diary: tip mean uses every rated diary row, not latest/merged."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-rewatch-diary-mean")
+    out.mkdir(parents=True, exist_ok=True)
+    diary = pd.DataFrame(
+        [
+            # Four diary rows; mean of rated rows = (5 + 3 + 1) / 3 = 3.00.
+            # Latest diary rating and a merged unique rating would both be 1.0.
+            {"Name": "Repeat", "Year": 2001, "Rating": 5.0, "Watched Date": "2020-01-01"},
+            {"Name": "Repeat", "Year": 2001, "Rating": 3.0, "Watched Date": "2021-01-01"},
+            {"Name": "Repeat", "Year": 2001, "Rating": None, "Watched Date": "2022-01-01"},
+            {"Name": "Repeat", "Year": 2001, "Rating": 1.0, "Watched Date": "2023-01-01"},
+            # Second rewatch title so the chart is not a single-film edge case.
+            {"Name": "Other", "Year": 1999, "Rating": 2.0, "Watched Date": "2020-06-01"},
+            {"Name": "Other", "Year": 1999, "Rating": 4.0, "Watched Date": "2021-06-01"},
+        ]
+    )
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+    # Misleading unique-film merge: must not drive the tip.
+    film_ratings = pd.DataFrame(
+        [{"Name": "Repeat", "Year": 2001, "Rating": 1.0, "source": "diary"}]
+    )
+
+    import letterboxd_calendar_charts as cal
+
+    assert cal.diary_row_rating_means(diary)["Repeat|||2001"] == 3.0  # (5+3+1)/3
+    assert cal.diary_row_rating_means(diary)["Other|||1999"] == 3.0
+
+    texts = _texts_on_save(
+        lambda c: c.chart_top_rewatches(
+            diary,
+            out / "top_rewatches.png",
+            film_ratings=film_ratings,
+        )
+    )
+    by_text = {t.get_text(): t for t in texts}
+    # Count = all diary rows (including the unrated rewatch).
+    assert "4" in by_text
+    assert "2" in by_text
+    # Diary-row means, not latest (1.00) / merged unique.
+    assert "3.00" in by_text
+    assert "1.00" not in by_text
+    assert by_text["3.00"].get_fontweight() == "bold"
+    assert _rgba(by_text["3.00"].get_color()) == _rgba(rating_color(3.0))
+
+
 def test_views_count_bars_show_avg_or_dash(tmp_path: Path | None = None):
     """Year and day count bars: white count, bold colored mean, dash if unrated."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-views-avg")
@@ -858,6 +904,7 @@ if __name__ == "__main__":
     test_watch_time_charts_label_every_position()
     test_percent_shares_two_decimals()
     test_letterboxd_rating_distribution_percent_tips()
+    test_top_rewatches_avg_is_diary_row_mean()
     test_views_count_bars_show_avg_or_dash()
     test_stacked_count_hbar_long_names()
     print("ok")

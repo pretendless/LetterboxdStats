@@ -1223,6 +1223,34 @@ def chart_average_rating_by_release_decade(
     )
 
 
+def diary_row_rating_means(df: pd.DataFrame) -> dict[str, float]:
+    """Mean Rating over every diary row that has one, keyed by Name+Year.
+
+    Unlike ``merged_film_ratings`` / latest-per-film, rewatches and prior views
+    each contribute. Unrated rows are skipped for the mean (they still count
+    toward diary frequency elsewhere). Only the Most often in the diary chart
+    uses this; other charts keep unique-film rating semantics.
+    """
+    if df is None or df.empty or "Rating" not in df.columns:
+        return {}
+    names = df["Name"].fillna("").astype(str).str.strip()
+    work = df.loc[names != "", ["Name", "Year", "Rating"]].copy()
+    if work.empty:
+        return {}
+    work = work[work["Rating"].notna()]
+    if work.empty:
+        return {}
+    work["_key"] = film_name_year_key(work)
+    means = work.groupby("_key", dropna=False)["Rating"].mean()
+    out: dict[str, float] = {}
+    for key_id, value in means.items():
+        try:
+            out[str(key_id)] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def chart_top_rewatches(
     df: pd.DataFrame,
     path: Path,
@@ -1231,7 +1259,15 @@ def chart_top_rewatches(
     film_ratings: pd.DataFrame | None = None,
     exclude_keywords: tuple[str, ...] | list[str] | None = None,
 ) -> bool:
-    """Horizontal stacked bars of rewatched films, colored by watch year."""
+    """Horizontal stacked bars of rewatched films, colored by watch year.
+
+    Bar length is diary-row frequency. The average tip is the mean Rating over
+    all diary rows for that film that have a rating (rewatches included) — not
+    ``merged_film_ratings``. ``film_ratings`` is accepted for call-site
+    compatibility and ignored for the tip. No multi-film rated threshold; a
+    dash only when no rated diary row exists for that film.
+    """
+    del film_ratings  # unique-film merge must not feed this chart's tip
     names = df["Name"].fillna("").astype(str).str.strip()
     years_release = df["Year"] if "Year" in df.columns else pd.Series(dtype=float)
     key = names + "|||" + years_release.map(lambda y: str(int(y)) if pd.notna(y) else "")
@@ -1281,25 +1317,8 @@ def chart_top_rewatches(
         else:
             labels.append(label)
 
-    rating_lookup: dict[str, float] = {}
-    if film_ratings is not None and not film_ratings.empty:
-        catalog_keys = work.drop_duplicates(subset=["_key"])
-        rated = ratings_for_catalog(catalog_keys, film_ratings)
-        if rated is not None and not rated.empty:
-            rated = rated.copy()
-            rated["_key"] = film_name_year_key(rated)
-            for _, row in rated.iterrows():
-                try:
-                    rating_lookup[str(row["_key"])] = float(row["Rating"])
-                except (TypeError, ValueError):
-                    continue
-    elif "Rating" in work.columns:
-        rated_rows = work[work["Rating"].notna()].sort_values("Watched Date", kind="mergesort")
-        for _, row in rated_rows.iterrows():
-            try:
-                rating_lookup[str(row["_key"])] = float(row["Rating"])
-            except (TypeError, ValueError):
-                continue
+    # Tip mean = all rated diary rows for the film (not latest / merged unique).
+    rating_lookup = diary_row_rating_means(work)
 
     matrix = np.zeros((len(years), len(keys)), dtype=float)
     year_index = {y: i for i, y in enumerate(years)}

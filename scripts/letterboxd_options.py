@@ -132,7 +132,7 @@ def format_count_avg_label(avg, rated, min_rated: int) -> str:
 
 
 def format_single_rating_label(avg) -> str:
-    """Avg for a single-film bar (rewatches): no multi-film rated gate."""
+    """Avg for a single-film bar (Most often in the diary): no rated-count gate."""
     try:
         avg_f = float(avg)
     except (TypeError, ValueError):
