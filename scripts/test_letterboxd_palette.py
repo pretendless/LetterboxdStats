@@ -48,27 +48,29 @@ def test_logo_anchor_constants_are_the_measured_bytes():
     assert LOGO_BLUE_HEX == "#3FB7EB"
     assert LOGO_GREEN_HEX == "#03E53E"
     assert LOGO_ORANGE_HEX == "#FC7A02"
-    assert (LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T) == (0.15, 0.3, 0.7)
-    assert PALETTE_KNOTS == (0.0, 0.15, 0.3, 0.7, 1.0)
+    assert (LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T) == (0.15, 0.35, 0.8)
+    assert PALETTE_KNOTS == (0.0, 0.15, 0.35, 0.8, 1.0)
     assert palette_hex(0.15) == "#3FB7EB"
-    assert palette_hex(0.3) == "#03E53E"
-    assert palette_hex(0.7) == "#FC7A02"
+    assert palette_hex(0.35) == "#03E53E"
+    assert palette_hex(0.8) == "#FC7A02"
     assert palette_rgb(0.15) == LOGO_BLUE_RGB
-    assert palette_rgb(0.3) == LOGO_GREEN_RGB
-    assert palette_rgb(0.7) == LOGO_ORANGE_RGB
+    assert palette_rgb(0.35) == LOGO_GREEN_RGB
+    assert palette_rgb(0.8) == LOGO_ORANGE_RGB
     # Blue and orange are not at the old quarter marks, and green is not the midpoint.
     assert palette_rgb(0.2) != LOGO_BLUE_RGB
     assert palette_rgb(0.25) != LOGO_BLUE_RGB
+    assert palette_rgb(0.3) != LOGO_GREEN_RGB
     assert palette_rgb(0.4) != LOGO_GREEN_RGB
     assert palette_rgb(0.5) != LOGO_GREEN_RGB
+    assert palette_rgb(0.7) != LOGO_ORANGE_RGB
     assert palette_rgb(0.75) != LOGO_ORANGE_RGB
     # The rating colorbar is the same blend, reversed: low is burgundy.
     cmap = rating_colormap()
     assert palette_rgb_from(cmap(0.0)) == palette_rgb(1.0)
     assert palette_rgb_from(cmap(1.0)) == palette_rgb(0.0)
     assert palette_rgb_from(cmap(1.0 - 0.15)) == LOGO_BLUE_RGB
-    assert palette_rgb_from(cmap(1.0 - 0.3)) == LOGO_GREEN_RGB
-    assert palette_rgb_from(cmap(1.0 - 0.7)) == LOGO_ORANGE_RGB
+    assert palette_rgb_from(cmap(1.0 - 0.35)) == LOGO_GREEN_RGB
+    assert palette_rgb_from(cmap(1.0 - 0.8)) == LOGO_ORANGE_RGB
 
 
 def palette_rgb_from(rgba) -> tuple[int, int, int]:
@@ -161,18 +163,18 @@ def _contrast_on_black(rgb: tuple[int, int, int]) -> float:
 
 def test_discrete_ranks_use_logo_knots_then_even_midpoints():
     """One, two, and three values are the logo knots. Four or more are midpoints."""
-    assert categorical_positions(1) == [0.3]
-    assert categorical_colors(1)[0] == palette_color(0.3)
+    assert categorical_positions(1) == [0.35]
+    assert categorical_colors(1)[0] == palette_color(0.35)
     assert palette_rgb(categorical_positions(1)[0]) == LOGO_GREEN_RGB
 
-    assert categorical_positions(2) == [0.15, 0.7]
+    assert categorical_positions(2) == [0.15, 0.8]
     two = categorical_colors(2)
     assert palette_rgb_from(two[0]) == LOGO_BLUE_RGB
     assert palette_rgb_from(two[1]) == LOGO_ORANGE_RGB
     # Not the even-midpoint formula, which would miss the logo.
     assert categorical_positions(2) != [0.25, 0.75]
 
-    assert categorical_positions(3) == [0.15, 0.3, 0.7]
+    assert categorical_positions(3) == [0.15, 0.35, 0.8]
     three = categorical_colors(3)
     assert palette_rgb_from(three[0]) == LOGO_BLUE_RGB
     assert palette_rgb_from(three[1]) == LOGO_GREEN_RGB
@@ -211,8 +213,8 @@ def test_rating_scale_uses_full_range_and_same_anchors():
     assert palette_rgb_from(rating_color(RATING_VMAX)) == palette_rgb(0.0)
     # t = 1 - (rating - 0.5) / 4.5. Logo blue is a high rating, not the low end.
     assert palette_rgb_from(rating_color(4.325)) == LOGO_BLUE_RGB  # t = 0.15
-    assert palette_rgb_from(rating_color(3.65)) == LOGO_GREEN_RGB  # t = 0.3
-    assert palette_rgb_from(rating_color(1.85)) == LOGO_ORANGE_RGB  # t = 0.7
+    assert palette_rgb_from(rating_color(3.425)) == LOGO_GREEN_RGB  # t = 0.35
+    assert palette_rgb_from(rating_color(1.4)) == LOGO_ORANGE_RGB  # t = 0.8
     assert palette_rgb_from(rating_color(RATING_VMAX)) != LOGO_BLUE_RGB
 
     # 4.30 is just short of logo blue, 4.8 is just short of purple, and 0.7
