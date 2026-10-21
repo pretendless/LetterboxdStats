@@ -24,7 +24,7 @@ on:
         default: "20"
         type: string
       min_rated:
-        description: Min unique rated films for average tops (1–50)
+        description: Rating-count threshold for average tops (1–50)
         required: false
         default: "3"
         type: string

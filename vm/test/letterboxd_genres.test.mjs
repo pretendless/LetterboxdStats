@@ -171,7 +171,7 @@ test("wizard prompts are html, with a default line and examples", () => {
   assert.equal(top.state.step, "min_rated");
   assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "✅ Default (3)");
   const minText = top.messages[0].text;
-  assert.match(minText, /<b>Minimum rated films<\/b>/);
+  assert.match(minText, /<b>Threshold for average-rating tops<\/b>/);
   assert.match(minText, /a director with two rated films is left out/);
   assert.match(minText, /Watch-count charts ignore this threshold/);
   assert.match(minText, /For example: 3, 5, 10/);
