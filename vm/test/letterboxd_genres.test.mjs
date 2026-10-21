@@ -260,7 +260,7 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   }
   assert.equal(rewatch.state.step, "rewatch_avg");
   assert.match(rewatch.messages[0].text, /<b>Count rewatches in averages\?<\/b>/);
-  assert.match(rewatch.messages[0].text, /By default each film counts once/);
+  assert.match(rewatch.messages[0].text, /By default averages use each film’s last set rating/);
   assert.match(rewatch.messages[0].text, /every rated diary entry should affect the average/);
   assert.equal(exclusions.state.includeRewatchInAverages, false);
   assert.match(exclusions.messages[0].text, /<b>Remove some rows from the watch-count tops\?<\/b>/);

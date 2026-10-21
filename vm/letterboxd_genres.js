@@ -721,7 +721,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Count rewatches in averages?",
-        "By default each film counts once, even if you watched it several times. Choose Yes if every rated diary entry should affect the average.",
+        "By default averages use each film’s last set rating, even if you watched it several times. Choose Yes if every rated diary entry should affect the average.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:rew", "no"),
     };
