@@ -328,7 +328,25 @@ def stacked_counts(ax, categories: list[str], years: list[int], matrix: np.ndarr
 
 
 def _place_count_avg_above_totals(fig, ax, totals, avg_labels, *, y_pad, fontsize=7) -> None:
-    """Count + mean centered above each stacked column total."""
+    """Count + mean centered above each stacked column total.
+
+    Pass ``avg_labels=None`` for count-only (Letterboxd rating distribution:
+    the bin is already on the x-axis, so the rating must not repeat as an end label).
+    """
+    if avg_labels is None:
+        for xi, total in zip(range(len(totals)), totals):
+            ax.text(
+                xi,
+                float(total) + y_pad,
+                str(int(total)),
+                ha="center",
+                va="bottom",
+                fontsize=fontsize,
+                color=FG,
+                fontweight="normal",
+                clip_on=False,
+            )
+        return
     pending = []
     for xi, total, label in zip(range(len(totals)), totals, avg_labels):
         y = float(total) + y_pad
@@ -779,11 +797,8 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
     )
     axes[1].set_title("Rating distribution — color is watch year")
     axes[1].set_xlabel("Letterboxd rating")
-    # Each column is a rating bin — the mean is the bin itself when it has entries.
-    rating_avgs = [
-        f"{float(bin_v):.2f}" if float(total) > 0 else "—"
-        for bin_v, total in zip(RATING_BINS, rating_totals)
-    ]
+    # Exception: do not label the bin value again — it is already the x-axis.
+    # Count above each stack stays; average/rating end labels are omitted.
     rating_max = float(rating_totals.max()) if len(rating_totals) else 1.0
     axes[1].set_ylim(0, rating_max * 1.18 if rating_max else 1.0)
 
@@ -793,7 +808,7 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
         fig, axes[0], decade_totals, decade_avgs, y_pad=decade_max * 0.02
     )
     _place_count_avg_above_totals(
-        fig, axes[1], rating_totals, rating_avgs, y_pad=rating_max * 0.02
+        fig, axes[1], rating_totals, None, y_pad=rating_max * 0.02
     )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
@@ -809,7 +824,10 @@ def _chart_average_rating_line(
     xlabel: str,
     ylabel: str = "Average rating (out of 5)",
 ) -> bool:
-    """Line + markers: points colored on the shared rating palette."""
+    """Line + markers: points colored on the shared rating palette.
+
+    Each point is labelled with the mean and the rated-film count in parentheses.
+    """
     if not labels or not values:
         return False
     point_colors = color_bars_by_rating(values)
@@ -838,21 +856,55 @@ def _chart_average_rating_line(
     fontsize, rotation = _dense_label_layout(len(labels))
     if rotation:
         ax.set_ylim(0, 5.6)
-    for xi, value in zip(x, values):
+    # Bold colored mean + rated-film count in parentheses (same pair as rating bars).
+    pending = []
+    for xi, value, count in zip(x, values, counts):
         text = f"{value:.2f}"
         style = count_avg_text_style(text)
-        ax.text(
+        y = float(value) + 0.12
+        mean_artist = ax.text(
             xi,
-            value + 0.12,
+            y,
             text,
-            ha="center",
+            ha="left",
             va="bottom",
             fontsize=fontsize,
             rotation=rotation,
             color=style["color"],
             fontweight=style["fontweight"],
             path_effects=style["path_effects"],
+            clip_on=False,
         )
+        count_artist = ax.text(
+            xi,
+            y,
+            f"({int(count)})",
+            ha="left",
+            va="bottom",
+            fontsize=fontsize,
+            rotation=rotation,
+            color=FG,
+            fontweight="normal",
+            clip_on=False,
+        )
+        pending.append((mean_artist, count_artist, y))
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    gap = 4.0
+    for mean_artist, count_artist, y in pending:
+        mb = mean_artist.get_window_extent(renderer=renderer)
+        cb = count_artist.get_window_extent(renderer=renderer)
+        total_w = mb.width + gap + cb.width
+        anchor = ax.transData.transform(mean_artist.get_position())
+        start = anchor[0] - total_w / 2
+
+        def shift(artist, bbox, target_x0, y_data=y):
+            origin = ax.transData.transform(artist.get_position())
+            moved = ax.transData.inverted().transform((origin[0] + (target_x0 - bbox.x0), origin[1]))
+            artist.set_position((moved[0], y_data))
+
+        shift(mean_artist, mb, start)
+        shift(count_artist, cb, start + mb.width + gap)
     add_rating_colorbar(fig, ax)
     fig.tight_layout()
     save_dark_figure(fig, path, dpi=160)
