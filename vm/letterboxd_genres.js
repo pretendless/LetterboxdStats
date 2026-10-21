@@ -720,8 +720,8 @@ function promptFor(step, state, now = new Date()) {
   if (step === "rewatch_avg") {
     return {
       text: choicePrompt(
-        "Count previous watches in averages?",
-        "No — one rating per unique film (Name+Year). Rewatches do not inflate averages; they clutter the statistics. Default. Yes — each rated diary row contributes (including rewatches). Most often in the diary always counts rewatches for its tip average; this setting does not change that. Search-keyword film lists still show every view. Bar lengths stay watch counts; only the mean changes. The threshold still uses unique rated films.",
+        "Count rewatches in averages?",
+        "By default averages use each film’s last set rating, even if you watched it several times. Choose Yes if every rated diary entry should affect the average.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:rew", "no"),
     };

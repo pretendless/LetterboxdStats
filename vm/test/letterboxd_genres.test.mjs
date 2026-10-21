@@ -259,9 +259,9 @@ test("binary steps keep the default button and drop the repeated lines", () => {
     assert.doesNotMatch(message.messages[0].text, /Default:/);
   }
   assert.equal(rewatch.state.step, "rewatch_avg");
-  assert.match(rewatch.messages[0].text, /<b>Count previous watches in averages\?<\/b>/);
-  assert.match(rewatch.messages[0].text, /Most often in the diary always counts rewatches/);
-  assert.match(rewatch.messages[0].text, /clutter the statistics/);
+  assert.match(rewatch.messages[0].text, /<b>Count rewatches in averages\?<\/b>/);
+  assert.match(rewatch.messages[0].text, /By default averages use each film’s last set rating/);
+  assert.match(rewatch.messages[0].text, /every rated diary entry should affect the average/);
   assert.equal(exclusions.state.includeRewatchInAverages, false);
   assert.match(exclusions.messages[0].text, /<b>Remove some rows from the watch-count tops\?<\/b>/);
   assert.match(usa.messages[0].text, /<b>Show USA in the country top\?<\/b>/);
