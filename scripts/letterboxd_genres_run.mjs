@@ -284,10 +284,42 @@ export function buildGenreReportHtml(summary, unmatchedFallback = 0) {
 
 const TELEGRAM_TEXT_LIMIT = 4096;
 
+/** Fixed match-site section order (same as Python SEARCH_MATCH_FIELDS). */
+export const SEARCH_MATCH_FIELDS = [
+  "genre",
+  "director",
+  "actor",
+  "studio",
+  "country",
+  "language",
+  "year",
+];
+
+/**
+ * Format one film row under a match-site section: `1. Name (Year) — 5, —, 3.5`.
+ * Ratings: one value per watch (diary oldest→newest, or one watched-only slot).
+ */
+function formatSearchFilmLine(film, index) {
+  const name = escapeHtml(film && film.name != null ? film.name : "?");
+  const year =
+    film && film.year != null && Number.isFinite(Number(film.year))
+      ? String(Number(film.year))
+      : "?";
+  const ratings = Array.isArray(film && film.ratings) ? film.ratings : [];
+  const ratingText = ratings.length
+    ? ratings.map((slot) => escapeHtml(slot == null || slot === "" ? "—" : slot)).join(", ")
+    : "";
+  const base = `${index}. ${name} (${escapeHtml(year)})`;
+  return ratingText ? `${base} — ${ratingText}` : base;
+}
+
 /**
  * Format one search-keyword film list as HTML message chunk(s).
- * Line: Name (Year) (actor, …) — 5, —, 3.5
- * Ratings: one value per watch (diary oldest→newest, or one watched-only slot).
+ *
+ * Structure: title + unique film count, then a bold section per match site
+ * (genre → … → year). Under each header, numbered films that matched that
+ * field; a film that hits multiple fields is repeated under each. Empty
+ * sections are omitted. Line: `1. Name (Year) — 5, —, 3.5`.
  * Empty list → one short notice.
  */
 export function buildSearchKeywordMessages(keyword, films) {
@@ -298,25 +330,30 @@ export function buildSearchKeywordMessages(keyword, films) {
   if (!rows.length) {
     return [`${header}\n\nNo films matched in this catalog.`];
   }
-  const lines = rows.map((film) => {
-    const name = escapeHtml(film && film.name != null ? film.name : "?");
-    const year =
-      film && film.year != null && Number.isFinite(Number(film.year))
-        ? String(Number(film.year))
-        : "?";
-    const sites = Array.isArray(film && film.matched) ? film.matched.filter(Boolean) : [];
-    const where = sites.length ? sites.map((site) => escapeHtml(site)).join(", ") : "?";
-    const ratings = Array.isArray(film && film.ratings) ? film.ratings : [];
-    const ratingText = ratings.length
-      ? ratings.map((slot) => escapeHtml(slot == null || slot === "" ? "—" : slot)).join(", ")
-      : "";
-    const base = `${name} (${escapeHtml(year)}) (${where})`;
-    return ratingText ? `${base} — ${ratingText}` : base;
-  });
+
+  const bodyLines = [];
+  for (const site of SEARCH_MATCH_FIELDS) {
+    const inSection = rows.filter((film) => {
+      const matched = Array.isArray(film && film.matched) ? film.matched : [];
+      return matched.includes(site);
+    });
+    if (!inSection.length) continue;
+    if (bodyLines.length) bodyLines.push(""); // blank line between sections
+    bodyLines.push(`<b>${escapeHtml(site)}</b>`);
+    inSection.forEach((film, i) => {
+      bodyLines.push(formatSearchFilmLine(film, i + 1));
+    });
+  }
+
   const intro = `${header}\n${rows.length} film${rows.length === 1 ? "" : "s"}\n\n`;
+  // No match-site labels on any film → still show title + count (no sections).
+  if (!bodyLines.length) {
+    return [intro.trimEnd()];
+  }
+
   const chunks = [];
   let current = intro;
-  for (const line of lines) {
+  for (const line of bodyLines) {
     const candidate = current === intro ? current + line : `${current}\n${line}`;
     if (candidate.length <= TELEGRAM_TEXT_LIMIT) {
       current = candidate;
