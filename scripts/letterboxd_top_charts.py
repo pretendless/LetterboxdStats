@@ -74,6 +74,33 @@ SHORT_BAR_NAME_CHARS = 15
 NAME_ELLIPSIS = "..."
 # U+2665 BLACK HEART SUIT only — never U+2764 or emoji presentation.
 LIKED_HEART = "\u2665"
+# U+1F5C8 NOTE. Append U+FE0E (VS15) for text presentation in Telegram/HTML
+# next to ♥ (U+2665). Matplotlib draws the base NOTE only (VS15 is not in
+# Noto Sans Symbols 2); that face is already a text symbols font.
+REVIEW_NOTE = "\U0001f5c8"
+REVIEW_MARK = REVIEW_NOTE + "\ufe0e"
+
+
+def review_mark_for_matplotlib() -> str:
+    """NOTE without VS15 — safe for DejaVu/Symbols2 chart text."""
+    return REVIEW_NOTE
+
+
+def _mpl_engagement_text(text: str) -> str:
+    """Strip emoji variation selectors so chart fonts do not draw tofu boxes."""
+    return str(text or "").replace("\ufe0e", "").replace("\ufe0f", "")
+
+
+def review_mark_fontproperties():
+    """Font that has U+1F5C8 (Noto Sans Symbols 2), or None to use the theme default."""
+    from pathlib import Path
+
+    from matplotlib.font_manager import FontProperties
+
+    path = Path("/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf")
+    if not path.is_file():
+        return None
+    return FontProperties(fname=str(path))
 
 
 def film_title_with_liked_heart(visible_title: str, *, liked: bool) -> str:
@@ -88,6 +115,26 @@ def film_title_with_liked_heart(visible_title: str, *, liked: bool) -> str:
     return f"{text}{LIKED_HEART}"
 
 
+def film_title_with_review_mark(visible_title: str, *, reviewed: bool) -> str:
+    """Append NOTE (U+1F5C8) after the visible title (including after truncation).
+
+    Same no-space rule as likes: ``Some long titl...🗈`` when reviewed.
+    Chart labels use the base NOTE (no VS15); Telegram HTML adds FE0E via JS.
+    """
+    text = str(visible_title or "")
+    if not reviewed or not REVIEW_NOTE:
+        return text
+    return f"{text}{REVIEW_NOTE}"
+
+
+def film_title_with_engagement_marks(
+    visible_title: str, *, liked: bool = False, reviewed: bool = False
+) -> str:
+    """Append ♥ then NOTE (each only when True), no spaces before marks."""
+    text = film_title_with_liked_heart(visible_title, liked=liked)
+    return film_title_with_review_mark(text, reviewed=reviewed)
+
+
 def category_label_with_liked_count(name: str, liked_count: int) -> str:
     """Category bar label: ``Drama ♥ 12`` when liked_count > 0; else the name only."""
     label = str(name or "?")
@@ -98,6 +145,20 @@ def category_label_with_liked_count(name: str, liked_count: int) -> str:
     if n <= 0:
         return label
     return f"{label} {LIKED_HEART} {n}"
+
+
+def category_label_with_engagement_counts(
+    name: str, liked_count: int = 0, reviewed_count: int = 0
+) -> str:
+    """Category label with optional ``♥ N`` and/or ``🗈 M`` (NOTE) when > 0."""
+    label = category_label_with_liked_count(name, liked_count)
+    try:
+        n = int(reviewed_count)
+    except (TypeError, ValueError):
+        n = 0
+    if n <= 0 or not REVIEW_NOTE:
+        return label
+    return f"{label} {REVIEW_NOTE} {n}"
 
 
 def format_liked_tip(liked_count: int) -> str | None:
@@ -111,11 +172,40 @@ def format_liked_tip(liked_count: int) -> str | None:
     return f"{LIKED_HEART} {n}"
 
 
+def format_reviewed_tip(reviewed_count: int) -> str | None:
+    """Tip fragment ``🗈 N`` (U+1F5C8 NOTE) when N > 0; otherwise None."""
+    if not REVIEW_NOTE:
+        return None
+    try:
+        n = int(reviewed_count)
+    except (TypeError, ValueError):
+        return None
+    if n <= 0:
+        return None
+    return f"{REVIEW_NOTE} {n}"
+
+
+def format_engagement_tip(liked_count: int = 0, reviewed_count: int = 0) -> str | None:
+    """Combined tip ``♥ N 🗈 M`` for whichever counts are > 0; None when both omit."""
+    parts = []
+    liked = format_liked_tip(liked_count)
+    if liked:
+        parts.append(liked)
+    reviewed = format_reviewed_tip(reviewed_count)
+    if reviewed:
+        parts.append(reviewed)
+    return " ".join(parts) if parts else None
+
+
 def count_liked_among_keys(film_keys, liked_keys) -> int:
     """Unique Name+Year keys that appear in both the column set and likes/films.csv."""
     if not film_keys or not liked_keys:
         return 0
     return len(set(film_keys) & set(liked_keys))
+
+
+# Same intersection math as likes; name kept for call-site clarity.
+count_reviewed_among_keys = count_liked_among_keys
 
 
 def rank_most_liked(
@@ -144,6 +234,10 @@ def rank_most_liked(
         usable.append((label, n))
     usable.sort(key=lambda pair: (-pair[1], pair[0].casefold()))
     return usable[: int(top_n)]
+
+
+# Same ranking as Most liked; alias for Most reviewed call sites.
+rank_most_reviewed = rank_most_liked
 
 
 def display_lang(code) -> str:
@@ -264,6 +358,19 @@ def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Wat
     return leg
 
 
+def _positive_rank_rows(rows) -> list[tuple[str, int]]:
+    out: list[tuple[str, int]] = []
+    for name, count in rows or []:
+        try:
+            n = int(count)
+        except (TypeError, ValueError):
+            continue
+        if n <= 0:
+            continue
+        out.append((str(name or "").strip() or "?", n))
+    return out
+
+
 def normalize_most_liked_sections(
     most_liked: list[tuple[str, int]] | None = None,
     most_liked_sections: list[tuple[str, list[tuple[str, int]]]] | None = None,
@@ -274,29 +381,37 @@ def normalize_most_liked_sections(
     ``most_liked_sections`` for stacked category families (weekdays + months).
     Empty sections are dropped.
     """
-    def _positive_rows(rows) -> list[tuple[str, int]]:
-        out: list[tuple[str, int]] = []
-        for name, count in rows or []:
-            try:
-                n = int(count)
-            except (TypeError, ValueError):
-                continue
-            if n <= 0:
-                continue
-            out.append((str(name or "").strip() or "?", n))
-        return out
-
     if most_liked_sections is not None:
         sections: list[tuple[str, list[tuple[str, int]]]] = []
         for title, rows in most_liked_sections:
-            cleaned = _positive_rows(rows)
+            cleaned = _positive_rank_rows(rows)
             if cleaned:
                 sections.append((str(title or "Most liked").strip() or "Most liked", cleaned))
         return sections
-    cleaned = _positive_rows(most_liked)
+    cleaned = _positive_rank_rows(most_liked)
     if not cleaned:
         return []
     return [("Most liked", cleaned)]
+
+
+def normalize_most_reviewed_sections(
+    most_reviewed: list[tuple[str, int]] | None = None,
+    most_reviewed_sections: list[tuple[str, list[tuple[str, int]]]] | None = None,
+) -> list[tuple[str, list[tuple[str, int]]]]:
+    """Build titled Most reviewed blocks (same shape as Most liked)."""
+    if most_reviewed_sections is not None:
+        sections: list[tuple[str, list[tuple[str, int]]]] = []
+        for title, rows in most_reviewed_sections:
+            cleaned = _positive_rank_rows(rows)
+            if cleaned:
+                sections.append(
+                    (str(title or "Most reviewed").strip() or "Most reviewed", cleaned)
+                )
+        return sections
+    cleaned = _positive_rank_rows(most_reviewed)
+    if not cleaned:
+        return []
+    return [("Most reviewed", cleaned)]
 
 
 def draw_watch_year_most_liked_panel(
@@ -307,23 +422,37 @@ def draw_watch_year_most_liked_panel(
     most_liked: list[tuple[str, int]] | None = None,
     *,
     most_liked_sections: list[tuple[str, list[tuple[str, int]]]] | None = None,
+    most_reviewed: list[tuple[str, int]] | None = None,
+    most_reviewed_sections: list[tuple[str, list[tuple[str, int]]]] | None = None,
     fontsize: float = 7,
     title_fontsize: float = 8,
 ) -> None:
-    """Shared right-side column: Watch year legend, then Most liked (if any).
+    """Shared right-side column: Watch year, Most liked, then Most reviewed.
 
     Call after ``tight_layout`` has reserved a right gutter. Watch year sits on
-    top; Most liked below with the same left edge and typography scale. Liked
-    counts are bold. Omits empty lists. Use ``most_liked_sections`` when a
-    figure stacks distinct category families (e.g. weekdays and months) so each
-    family gets its own titled ranking instead of one mixed list.
+    top; Most liked below; Most reviewed directly under Most liked. Counts are
+    bold. Omits empty lists. Use ``*_sections`` when a figure stacks distinct
+    category families (e.g. weekdays and months) so each family gets its own
+    titled ranking instead of one mixed list.
 
     Line spacing is compact (display-pixel gaps from measured text height). It
     does not stretch to fill the axes or track bar y-positions on tall hbars.
+
+    Review rows use ``REVIEW_MARK`` (U+1F5C8 NOTE + VS15).
     """
     from matplotlib.lines import Line2D
 
-    sections = normalize_most_liked_sections(most_liked, most_liked_sections)
+    liked_sections = normalize_most_liked_sections(most_liked, most_liked_sections)
+    reviewed_sections = normalize_most_reviewed_sections(
+        most_reviewed, most_reviewed_sections
+    )
+    # (section_title, rows, mark_symbol) — likes first, reviews directly below.
+    sections: list[tuple[str, list[tuple[str, int]], str]] = [
+        (title, rows, LIKED_HEART) for title, rows in liked_sections
+    ]
+    sections.extend(
+        (title, rows, REVIEW_NOTE) for title, rows in reviewed_sections if REVIEW_NOTE
+    )
     year_list = [int(y) for y in (years or [])]
     if not year_list and not sections:
         return
@@ -406,7 +535,7 @@ def draw_watch_year_most_liked_panel(
     title_gap_px = max(3.0, title_fontsize * 0.4)
     section_gap_px = max(6.0, fontsize * 0.9)
 
-    for section_i, (section_title, liked_rows) in enumerate(sections):
+    for section_i, (section_title, rank_rows, mark) in enumerate(sections):
         if section_i:
             # Extra breath between titled blocks, still font-sized not axes-tall.
             y_disp = ax.transAxes.transform((panel_x, y_line))[1]
@@ -429,13 +558,16 @@ def draw_watch_year_most_liked_panel(
         title_box = title.get_window_extent(renderer=renderer)
         y_line = _advance_below(title_box, gap_px=title_gap_px)
 
-        for rank, (name, count) in enumerate(liked_rows, start=1):
-            # Rank order by like count: ``1. Christopher Nolan ♥ `` + bold count.
-            prefix = f"{rank}. {name} {LIKED_HEART} "
-            name_artist = ax.text(
+        mark_fp = review_mark_fontproperties()
+        for rank, (name, count) in enumerate(rank_rows, start=1):
+            # Rank: ``1. Name `` + mark (♥ or NOTE) + space + bold count.
+            # Latin stays on DejaVu; NOTE uses Noto Sans Symbols 2 when available.
+            mark_draw = _mpl_engagement_text(mark)
+            head = f"{rank}. {name} "
+            head_artist = ax.text(
                 panel_x,
                 y_line,
-                prefix,
+                head,
                 transform=ax.transAxes,
                 fontsize=fontsize,
                 fontweight="normal",
@@ -446,8 +578,26 @@ def draw_watch_year_most_liked_panel(
             )
             fig.canvas.draw()
             renderer = fig.canvas.get_renderer()
-            nb = name_artist.get_window_extent(renderer=renderer)
-            x_count, _yc = inv.transform((nb.x1 + 1.0, nb.y0))
+            hb = head_artist.get_window_extent(renderer=renderer)
+            x_mark, _ym = inv.transform((hb.x1, hb.y0))
+            use_mark_fp = mark_fp if mark_draw == REVIEW_NOTE else None
+            mark_artist = ax.text(
+                float(x_mark),
+                y_line,
+                f"{mark_draw} ",
+                transform=ax.transAxes,
+                fontsize=fontsize,
+                fontweight="normal",
+                color=FG,
+                ha="left",
+                va="top",
+                clip_on=False,
+                fontproperties=use_mark_fp,
+            )
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            mb = mark_artist.get_window_extent(renderer=renderer)
+            x_count, _yc = inv.transform((mb.x1 + 1.0, mb.y0))
             ax.text(
                 float(x_count),
                 y_line,
@@ -462,7 +612,7 @@ def draw_watch_year_most_liked_panel(
             )
             # Advance by measured line height in display pixels — never axes
             # fraction (tall language/director hbars would stretch the list).
-            y_line = _advance_below(nb, gap_px=row_gap_px)
+            y_line = _advance_below(hb, gap_px=row_gap_px)
 
 
 def _count_avg_stroke():
@@ -495,32 +645,48 @@ def count_avg_text_style(label: str) -> dict:
     }
 
 
-def _place_liked_tip_inline_after(fig, ax, anchor_artists, liked_counts, *, fontsize=8) -> None:
-    """Horizontal tips: ``♥ N`` on the same row, immediately after the last tip metric."""
+def _place_liked_tip_inline_after(
+    fig,
+    ax,
+    anchor_artists,
+    liked_counts,
+    *,
+    reviewed_counts=None,
+    fontsize=8,
+) -> None:
+    """Horizontal tips: ``♥ N □ M`` on the same row after the last tip metric."""
     if not anchor_artists:
         return
     n = len(anchor_artists)
-    counts = list(liked_counts or [])
-    if len(counts) < n:
-        counts = counts + [0] * (n - len(counts))
+    likes = list(liked_counts or [])
+    if len(likes) < n:
+        likes = likes + [0] * (n - len(likes))
+    reviews = list(reviewed_counts or [])
+    if len(reviews) < n:
+        reviews = reviews + [0] * (n - len(reviews))
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
-    for artist, liked_n in zip(anchor_artists, counts):
-        tip = format_liked_tip(liked_n)
+    tip_fp = review_mark_fontproperties()
+    for artist, liked_n, reviewed_n in zip(anchor_artists, likes, reviews):
+        tip = format_engagement_tip(liked_n, reviewed_n)
         if not tip or artist is None:
             continue
+        tip_draw = _mpl_engagement_text(tip)
         bbox = artist.get_window_extent(renderer=renderer)
         x_data, _y = ax.transData.inverted().transform((bbox.x1 + 10, bbox.y0))
+        # Symbols2 covers ♥ + NOTE + digits when a review mark is present.
+        use_fp = tip_fp if REVIEW_NOTE in tip_draw else None
         ax.text(
             x_data,
             artist.get_position()[1],
-            tip,
+            tip_draw,
             va="center",
             ha="left",
             fontsize=fontsize,
             color=FG,
             fontweight="bold",
             clip_on=False,
+            fontproperties=use_fp,
         )
 
 
@@ -537,13 +703,15 @@ def chart_stacked_count_hbar(
     avg_labels: list[str] | None = None,
     liked_counts: list[int] | None = None,
     most_liked: list[tuple[str, int]] | None = None,
+    reviewed_counts: list[int] | None = None,
+    most_reviewed: list[tuple[str, int]] | None = None,
 ) -> bool:
     """matrix shape (len(years), len(labels)); labels ordered bottom→top.
 
     Full-bleed stacked count chart for TMDB watches_by_* (and similar):
     readable y-names without oversized fonts or empty black voids.
-    Tip row is count + average, then ``♥ N`` inline when N > 0.
-    Right side panel: Watch year legend + optional Most liked list.
+    Tip row is count + average, then ``♥ N`` / REVIEW_MARK inline when N > 0.
+    Right side panel: Watch year + Most liked + Most reviewed (when present).
     """
     if not labels or not years or matrix.size == 0:
         return False
@@ -562,9 +730,16 @@ def chart_stacked_count_hbar(
         likes = likes + [0] * (n - len(likes))
     elif len(likes) > n:
         likes = likes[:n]
+    reviews = list(reviewed_counts) if reviewed_counts is not None else [0] * n
+    if len(reviews) < n:
+        reviews = reviews + [0] * (n - len(reviews))
+    elif len(reviews) > n:
+        reviews = reviews[:n]
     liked_panel = list(most_liked or [])
-    # Wider canvas when Most liked joins the Watch year column.
-    fig_w = 12.6 if liked_panel else 11.8
+    reviewed_panel = list(most_reviewed or [])
+    has_side_lists = bool(liked_panel or reviewed_panel)
+    # Wider canvas when Most liked / Most reviewed joins the Watch year column.
+    fig_w = 12.6 if has_side_lists else 11.8
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     y = np.arange(n)
     left_stack = np.zeros(n)
@@ -593,7 +768,7 @@ def chart_stacked_count_hbar(
     ax.xaxis.label.set_fontsize(10)
     ax.set_title(title, fontsize=12, pad=6, color=FG)
     xmax = float(left_stack.max()) if len(left_stack) else 1.0
-    # Room past the bar for the white count, mean, and optional ♥ N.
+    # Room past the bar for the white count, mean, and optional ♥ / review tips.
     ax.set_xlim(0, xmax * 1.42)
     count_artists = []
     for yi, total in enumerate(left_stack):
@@ -608,18 +783,25 @@ def chart_stacked_count_hbar(
             clip_on=False,
         )
         count_artists.append(artist)
-    # Reserve a shared right gutter for Watch year + Most liked.
-    right_frac = 0.74 if liked_panel else 0.78
+    # Reserve a shared right gutter for Watch year + Most liked + Most reviewed.
+    right_frac = 0.74 if has_side_lists else 0.78
     if footer:
         fig.text(0.005, 0.005, footer, fontsize=6.5, color=FG)
         fig.tight_layout(rect=[0.0, 0.025, right_frac, 1.0])
     else:
         fig.tight_layout(rect=[0.0, 0.0, right_frac, 1.0])
     draw_watch_year_most_liked_panel(
-        fig, ax, list(years), palette, liked_panel, fontsize=7, title_fontsize=8
+        fig,
+        ax,
+        list(years),
+        palette,
+        liked_panel,
+        most_reviewed=reviewed_panel,
+        fontsize=7,
+        title_fontsize=8,
     )
     # Count stays at the bar tip; mean sits just to its right (no overlap).
-    # Liked tip continues on the same horizontal row after the mean.
+    # Liked / review tips continue on the same horizontal row after the mean.
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     tip_anchors = []
@@ -643,7 +825,9 @@ def chart_stacked_count_hbar(
             clip_on=False,
         )
         tip_anchors.append(mean_artist)
-    _place_liked_tip_inline_after(fig, ax, tip_anchors, likes, fontsize=8)
+    _place_liked_tip_inline_after(
+        fig, ax, tip_anchors, likes, reviewed_counts=reviews, fontsize=8
+    )
     save_dark_figure(fig, path, dpi=160, pad_inches=0.05)
     plt.close(fig)
     return True
@@ -658,11 +842,12 @@ def _prepare_rating_rows(
     label_fn: Callable[[object], str] | None = None,
     limit: int = TOP_N_DEFAULT,
     ascending: bool = False,
-) -> list[tuple[str, float, int | None, int, bool]]:
-    """Return (label, avg, rated_n, liked_count, film_liked) rows.
+) -> list[tuple[str, float, int | None, int, bool, int, bool]]:
+    """Return (label, avg, rated_n, liked_count, film_liked, reviewed_count, film_reviewed).
 
-    ``liked_count`` is for category avg charts (``♥ N`` beside the name).
-    ``film_liked`` is for film-title bars (bare ``♥`` after the visible title).
+    ``liked_count`` / ``reviewed_count`` are for category avg charts (``♥ N`` /
+    REVIEW_MARK beside the name). ``film_liked`` / ``film_reviewed`` are for
+    film-title bars (bare marks after the visible title).
     """
     usable = []
     for row in rows or []:
@@ -684,8 +869,15 @@ def _prepare_rating_rows(
             liked_count = int(row.get("liked_count") or 0)
         except (TypeError, ValueError):
             liked_count = 0
+        try:
+            reviewed_count = int(row.get("reviewed_count") or 0)
+        except (TypeError, ValueError):
+            reviewed_count = 0
         film_liked = bool(row.get("liked"))
-        usable.append((label, avg_f, rated_n, liked_count, film_liked))
+        film_reviewed = bool(row.get("reviewed"))
+        usable.append(
+            (label, avg_f, rated_n, liked_count, film_liked, reviewed_count, film_reviewed)
+        )
     if not usable:
         return []
     if ascending:
@@ -770,14 +962,18 @@ def chart_rating_vbar(
     if not usable:
         return False
     labels = []
-    for lab, _avg, _rated, liked_count, film_liked in usable:
+    for lab, _avg, _rated, liked_count, film_liked, reviewed_count, film_reviewed in usable:
         short = _short_label(lab, limit=18)
-        if film_liked:
-            short = film_title_with_liked_heart(short, liked=True)
-        elif liked_count > 0:
-            short = category_label_with_liked_count(short, liked_count)
+        if film_liked or film_reviewed:
+            short = film_title_with_engagement_marks(
+                short, liked=film_liked, reviewed=film_reviewed
+            )
+        elif liked_count > 0 or reviewed_count > 0:
+            short = category_label_with_engagement_counts(
+                short, liked_count, reviewed_count
+            )
         labels.append(short)
-    avgs = [a for _, a, _, _, _ in usable]
+    avgs = [a for _, a, _, _, _, _, _ in usable]
     colors = rating_colors(avgs)
 
     fig, ax = plt.subplots(figsize=(max(10.0, len(labels) * 0.55), 6.5))
@@ -791,7 +987,7 @@ def chart_rating_vbar(
     ax.yaxis.grid(True, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     style_axes(ax)
-    for bar, avg, rated in zip(bars, avgs, [n for _, _, n, _, _ in usable]):
+    for bar, avg, rated in zip(bars, avgs, [n for _, _, n, _, _, _, _ in usable]):
         x = bar.get_x() + bar.get_width() / 2
         label = f"{avg:.2f}"
         style = count_avg_text_style(label)
@@ -854,10 +1050,10 @@ def chart_rating_hbar(
     The mean to the right is bold and colored on the rating scale. The rated-film
     count sits beside it in regular light text as ``(12)``.
 
-    Category rows may set ``liked_count`` (liked films in that average): the
-    label becomes ``Name ♥ N`` when N > 0. Film-title rows may set ``liked``
-    True: a bare ``♥`` is appended after the visible title, including after
-    ``...`` truncation.
+    Category rows may set ``liked_count`` / ``reviewed_count`` (films in that
+    average): the label becomes ``Name ♥ N □ M`` when counts > 0. Film-title
+    rows may set ``liked`` / ``reviewed`` True: bare marks append after the
+    visible title, including after ``...`` truncation.
     """
     import matplotlib.patheffects as path_effects
 
@@ -876,11 +1072,13 @@ def chart_rating_hbar(
     # barh draws first row at bottom — reverse so rank 1 sits at top.
     display = list(reversed(list(enumerate(usable, start=1))))
     ranks = [rank for rank, _ in display]
-    labels = [lab for _, (lab, _, _, _, _) in display]
-    avgs = [avg for _, (_, avg, _, _, _) in display]
-    rateds = [rated for _, (_, _, rated, _, _) in display]
-    liked_counts = [lc for _, (_, _, _, lc, _) in display]
-    film_likeds = [fl for _, (_, _, _, _, fl) in display]
+    labels = [lab for _, (lab, _, _, _, _, _, _) in display]
+    avgs = [avg for _, (_, avg, _, _, _, _, _) in display]
+    rateds = [rated for _, (_, _, rated, _, _, _, _) in display]
+    liked_counts = [lc for _, (_, _, _, lc, _, _, _) in display]
+    film_likeds = [fl for _, (_, _, _, _, fl, _, _) in display]
+    reviewed_counts = [rc for _, (_, _, _, _, _, rc, _) in display]
+    film_revieweds = [fr for _, (_, _, _, _, _, _, fr) in display]
     colors = rating_colors(avgs)
 
     # Same point size at any N; the canvas grows about half an inch per row.
@@ -944,8 +1142,28 @@ def chart_rating_hbar(
         return best
 
     rows_drawn = []
-    for yi, bar, rank, label, avg, rated, liked_count, film_liked in zip(
-        y, bars, ranks, labels, avgs, rateds, liked_counts, film_likeds
+    for (
+        yi,
+        bar,
+        rank,
+        label,
+        avg,
+        rated,
+        liked_count,
+        film_liked,
+        reviewed_count,
+        film_reviewed,
+    ) in zip(
+        y,
+        bars,
+        ranks,
+        labels,
+        avgs,
+        rateds,
+        liked_counts,
+        film_likeds,
+        reviewed_counts,
+        film_revieweds,
     ):
         yi, avg = float(yi), float(avg)
         prefix = f"{rank}. "
@@ -966,17 +1184,35 @@ def chart_rating_hbar(
             )
         else:
             shown = prefix + name[:SHORT_BAR_NAME_CHARS].rstrip() + NAME_ELLIPSIS
-        # Hearts sit after the visible (possibly truncated) title / category name.
-        if film_liked:
-            shown = film_title_with_liked_heart(shown, liked=True)
-        elif liked_count > 0:
-            shown = f"{shown} {LIKED_HEART} {liked_count}"
-        # Keep ♥ / ♥ N readable: do not clip markers away inside short bars.
-        clip_inside = inside and not film_liked and liked_count <= 0
+        # Hearts / review marks sit after the visible (possibly truncated) title.
+        if film_liked or film_reviewed:
+            shown = film_title_with_engagement_marks(
+                shown, liked=film_liked, reviewed=film_reviewed
+            )
+        elif liked_count > 0 or reviewed_count > 0:
+            shown = category_label_with_engagement_counts(
+                shown, liked_count, reviewed_count
+            )
+        # Keep marks readable: do not clip them away inside short bars.
+        clip_inside = (
+            inside
+            and not film_liked
+            and not film_reviewed
+            and liked_count <= 0
+            and reviewed_count <= 0
+        )
+        # DejaVu lacks U+1F5C8 — draw NOTE (+ trailing count) with Symbols2.
+        note_fp = review_mark_fontproperties()
+        main_shown = shown
+        note_part = ""
+        if note_fp is not None and REVIEW_NOTE in shown:
+            split_at = shown.index(REVIEW_NOTE)
+            main_shown = shown[:split_at]
+            note_part = shown[split_at:]
         txt = ax.text(
             pad_left,
             yi,
-            shown,
+            main_shown,
             ha="left",
             va="center",
             fontsize=name_fs,
@@ -989,7 +1225,28 @@ def chart_rating_hbar(
         if clip_inside:
             # Hard clip to the bar rectangle — name cannot draw past the tip.
             txt.set_clip_path(bar)
-        rows_drawn.append((txt, inside, yi, avg, rated))
+        anchor = txt
+        if note_part:
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            bb = txt.get_window_extent(renderer=renderer)
+            x_note = float(ax.transData.inverted().transform((bb.x1, bb.y0))[0])
+            note_artist = ax.text(
+                x_note,
+                yi,
+                note_part,
+                ha="left",
+                va="center",
+                fontsize=name_fs,
+                fontweight="bold",
+                color=ON_BAR,
+                path_effects=stroke,
+                clip_on=False,
+                zorder=5,
+                fontproperties=note_fp,
+            )
+            anchor = note_artist
+        rows_drawn.append((anchor, inside, yi, avg, rated))
 
     # Overflowing labels push the mean past their right edge so the two never overlap.
     fig.canvas.draw()
@@ -1057,6 +1314,7 @@ def chart_diary_entity_stacked(
     min_rated: int = MIN_RATED_FOR_TOP,
     exclude_keywords: tuple[str, ...] | list[str] | None = None,
     liked_keys: set[str] | frozenset | None = None,
+    reviewed_keys: set[str] | frozenset | None = None,
     catalog: pd.DataFrame | None = None,
 ) -> bool:
     """Top entities by catalog hits; stack segments by watch year.
@@ -1066,8 +1324,9 @@ def chart_diary_entity_stacked(
     their watch-year segment; rows with no Watched Date fill ``No date``.
 
     When ``catalog`` is omitted, counts stay diary-dated only (legacy callers /
-    tests). When ``liked_keys`` is set, each tip may show ``♥ N`` (inline after
-    count+avg) for unique Name+Year films in that row in likes/films.csv.
+    tests). When ``liked_keys`` / ``reviewed_keys`` are set, tips may show
+    ``♥ N`` / REVIEW_MARK (inline after count+avg) for unique Name+Year films
+    in likes/films.csv / reviews.csv.
     """
     frame = catalog if catalog is not None else diary
     if frame is None or getattr(frame, "empty", True):
@@ -1075,6 +1334,7 @@ def chart_diary_entity_stacked(
     work = frame.copy()
     work["_film_key"] = film_name_year_key(work)
     liked = set(liked_keys or ())
+    reviewed = set(reviewed_keys or ())
 
     totals: Counter[str] = Counter()
     pairs: list[tuple[int, list[str]]] = []
@@ -1131,12 +1391,14 @@ def chart_diary_entity_stacked(
     labels = []
     avg_labels = []
     liked_counts = []
+    reviewed_counts = []
     liked_by_display: dict[str, int] = {}
+    reviewed_by_display: dict[str, int] = {}
     for n, _c in candidates:
         display = label_fn(n) if label_fn else n
-        liked_by_display[str(display)] = count_liked_among_keys(
-            entity_keys.get(n) or (), liked
-        )
+        keys = entity_keys.get(n) or ()
+        liked_by_display[str(display)] = count_liked_among_keys(keys, liked)
+        reviewed_by_display[str(display)] = count_reviewed_among_keys(keys, reviewed)
     for n in top:
         raw = label_fn(n) if label_fn else n
         labels.append(_short_label(raw, limit=40))
@@ -1146,7 +1408,9 @@ def chart_diary_entity_stacked(
         else:
             avg_labels.append(format_count_avg_label(pair[0], pair[1], min_rated))
         liked_counts.append(liked_by_display.get(str(raw), 0))
+        reviewed_counts.append(reviewed_by_display.get(str(raw), 0))
     most_liked = rank_most_liked(liked_by_display, top_n)
+    most_reviewed = rank_most_reviewed(reviewed_by_display, top_n)
     return chart_stacked_count_hbar(
         labels,
         all_years,
@@ -1158,6 +1422,8 @@ def chart_diary_entity_stacked(
         avg_labels=avg_labels,
         liked_counts=liked_counts,
         most_liked=most_liked,
+        reviewed_counts=reviewed_counts,
+        most_reviewed=most_reviewed,
     )
 
 
@@ -1171,6 +1437,7 @@ def chart_release_years_by_count(
     min_rated: int = MIN_RATED_FOR_TOP,
     exclude_keywords: tuple[str, ...] | list[str] | None = None,
     liked_keys: set[str] | frozenset | None = None,
+    reviewed_keys: set[str] | frozenset | None = None,
 ) -> bool:
     """Release-year count top stacked by watch year (catalog hits)."""
 
@@ -1194,6 +1461,7 @@ def chart_release_years_by_count(
         min_rated=min_rated,
         exclude_keywords=exclude_keywords,
         liked_keys=liked_keys,
+        reviewed_keys=reviewed_keys,
         catalog=catalog,
     )
 

@@ -25,7 +25,10 @@ from PIL import Image
 from letterboxd_options import TOP_N_MAX, TOP_N_MIN, clamp_top_n
 from letterboxd_top_charts import (
     LIKED_HEART,
+    REVIEW_MARK,
+    REVIEW_NOTE,
     TOP_N_DEFAULT,
+    category_label_with_engagement_counts,
     category_label_with_liked_count,
     chart_rating_hbar,
     chart_rating_vbar,
@@ -34,12 +37,18 @@ from letterboxd_top_charts import (
     chart_stacked_count_hbar,
     count_avg_text_style,
     count_liked_among_keys,
+    count_reviewed_among_keys,
     display_lang,
     draw_watch_year_most_liked_panel,
+    film_title_with_engagement_marks,
     film_title_with_liked_heart,
+    format_engagement_tip,
     format_liked_tip,
+    format_reviewed_tip,
     normalize_most_liked_sections,
+    normalize_most_reviewed_sections,
     rank_most_liked,
+    rank_most_reviewed,
 )
 
 
@@ -199,6 +208,37 @@ def test_liked_heart_helpers_use_black_heart_suit():
     # Months still respect top_n; weekdays keep the full liked set (here 6 of 7).
     assert len(weekdays) == 6
     assert len(months) == 3
+
+
+def test_review_mark_helpers_use_note_with_vs15():
+    """U+1F5C8 NOTE (+ FE0E in REVIEW_MARK); chart helpers use base NOTE."""
+    assert REVIEW_NOTE == "\U0001f5c8"
+    assert REVIEW_MARK == "\U0001f5c8\ufe0e"
+    assert film_title_with_engagement_marks("Short", liked=False, reviewed=False) == "Short"
+    assert film_title_with_engagement_marks("Short", reviewed=True) == f"Short{REVIEW_NOTE}"
+    assert (
+        film_title_with_engagement_marks("Short", liked=True, reviewed=True)
+        == f"Short{LIKED_HEART}{REVIEW_NOTE}"
+    )
+    truncated = "Some long titl..."
+    assert (
+        film_title_with_engagement_marks(truncated, reviewed=True)
+        == f"{truncated}{REVIEW_NOTE}"
+    )
+    assert category_label_with_engagement_counts("Drama", 0, 0) == "Drama"
+    assert category_label_with_engagement_counts("Drama", 12, 0) == f"Drama {LIKED_HEART} 12"
+    assert (
+        category_label_with_engagement_counts("Drama", 12, 5)
+        == f"Drama {LIKED_HEART} 12 {REVIEW_NOTE} 5"
+    )
+    assert format_reviewed_tip(0) is None
+    assert format_reviewed_tip(3) == f"{REVIEW_NOTE} 3"
+    assert format_engagement_tip(2, 3) == f"{LIKED_HEART} 2 {REVIEW_NOTE} 3"
+    assert count_reviewed_among_keys({"A|||1", "B|||2"}, {"B|||2"}) == 1
+    ranked = rank_most_reviewed({"Nolan": 5, "Nobody": 0}, top_n=3)
+    assert ranked == [("Nolan", 5)]
+    assert normalize_most_reviewed_sections(ranked) == [("Most reviewed", ranked)]
+    assert normalize_most_reviewed_sections([]) == []
 
 
 def test_top_n_default_about_20():
@@ -1366,6 +1406,7 @@ def test_rating_hbar_worst_skips_short_slate(tmp_path: Path | None = None):
 if __name__ == "__main__":
     test_display_lang()
     test_liked_heart_helpers_use_black_heart_suit()
+    test_review_mark_helpers_use_note_with_vs15()
     test_no_date_legend_swatch_is_logo_gray_gradient()
     test_top_n_default_about_20()
     test_ranked_hbar_grows_taller_with_n()
