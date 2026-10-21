@@ -74,15 +74,14 @@ SHORT_BAR_NAME_CHARS = 15
 NAME_ELLIPSIS = "..."
 # U+2665 BLACK HEART SUIT only — never U+2764 or emoji presentation.
 LIKED_HEART = "\u2665"
-# U+1F5C8 NOTE. Append U+FE0E (VS15) for text presentation in Telegram/HTML
-# next to ♥ (U+2665). Matplotlib draws the base NOTE only (VS15 is not in
-# Noto Sans Symbols 2); that face is already a text symbols font.
-REVIEW_NOTE = "\U0001f5c8"
-REVIEW_MARK = REVIEW_NOTE + "\ufe0e"
+# U+275D HEAVY DOUBLE TURNED COMMA QUOTATION MARK ORNAMENT (❝). Same text-style
+# dingbat rules as ♥ — no VS15. DejaVu Sans has the glyph (charts + Telegram).
+REVIEW_NOTE = "\u275d"
+REVIEW_MARK = REVIEW_NOTE
 
 
 def review_mark_for_matplotlib() -> str:
-    """NOTE without VS15 — safe for DejaVu/Symbols2 chart text."""
+    """Review mark for chart text (same codepoint as Telegram; no VS15)."""
     return REVIEW_NOTE
 
 
@@ -92,15 +91,11 @@ def _mpl_engagement_text(text: str) -> str:
 
 
 def review_mark_fontproperties():
-    """Font that has U+1F5C8 (Noto Sans Symbols 2), or None to use the theme default."""
-    from pathlib import Path
+    """Optional font override for the review mark; None uses the theme default.
 
-    from matplotlib.font_manager import FontProperties
-
-    path = Path("/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf")
-    if not path.is_file():
-        return None
-    return FontProperties(fname=str(path))
+    DejaVu Sans already has U+275D (like ♥), so charts normally need no override.
+    """
+    return None
 
 
 def film_title_with_liked_heart(visible_title: str, *, liked: bool) -> str:
@@ -116,10 +111,9 @@ def film_title_with_liked_heart(visible_title: str, *, liked: bool) -> str:
 
 
 def film_title_with_review_mark(visible_title: str, *, reviewed: bool) -> str:
-    """Append NOTE (U+1F5C8) after the visible title (including after truncation).
+    """Append ❝ (U+275D) after the visible title (including after truncation).
 
-    Same no-space rule as likes: ``Some long titl...🗈`` when reviewed.
-    Chart labels use the base NOTE (no VS15); Telegram HTML adds FE0E via JS.
+    Same no-space rule as likes: ``Some long titl...❝`` when reviewed.
     """
     text = str(visible_title or "")
     if not reviewed or not REVIEW_NOTE:
@@ -130,7 +124,7 @@ def film_title_with_review_mark(visible_title: str, *, reviewed: bool) -> str:
 def film_title_with_engagement_marks(
     visible_title: str, *, liked: bool = False, reviewed: bool = False
 ) -> str:
-    """Append ♥ then NOTE (each only when True), no spaces before marks."""
+    """Append ♥ then ❝ (each only when True), no spaces before marks."""
     text = film_title_with_liked_heart(visible_title, liked=liked)
     return film_title_with_review_mark(text, reviewed=reviewed)
 
@@ -150,7 +144,7 @@ def category_label_with_liked_count(name: str, liked_count: int) -> str:
 def category_label_with_engagement_counts(
     name: str, liked_count: int = 0, reviewed_count: int = 0
 ) -> str:
-    """Category label with optional ``♥ N`` and/or ``🗈 M`` (NOTE) when > 0."""
+    """Category label with optional ``♥ N`` and/or ``❝ M`` when > 0."""
     label = category_label_with_liked_count(name, liked_count)
     try:
         n = int(reviewed_count)
@@ -173,7 +167,7 @@ def format_liked_tip(liked_count: int) -> str | None:
 
 
 def format_reviewed_tip(reviewed_count: int) -> str | None:
-    """Tip fragment ``🗈 N`` (U+1F5C8 NOTE) when N > 0; otherwise None."""
+    """Tip fragment ``❝ N`` (U+275D) when N > 0; otherwise None."""
     if not REVIEW_NOTE:
         return None
     try:
@@ -186,7 +180,7 @@ def format_reviewed_tip(reviewed_count: int) -> str | None:
 
 
 def format_engagement_tip(liked_count: int = 0, reviewed_count: int = 0) -> str | None:
-    """Combined tip ``♥ N 🗈 M`` for whichever counts are > 0; None when both omit."""
+    """Combined tip ``♥ N ❝ M`` for whichever counts are > 0; None when both omit."""
     parts = []
     liked = format_liked_tip(liked_count)
     if liked:
@@ -438,7 +432,7 @@ def draw_watch_year_most_liked_panel(
     Line spacing is compact (display-pixel gaps from measured text height). It
     does not stretch to fill the axes or track bar y-positions on tall hbars.
 
-    Review rows use ``REVIEW_MARK`` (U+1F5C8 NOTE + VS15).
+    Review rows use ``REVIEW_MARK`` (U+275D ❝).
     """
     from matplotlib.lines import Line2D
 
@@ -560,8 +554,8 @@ def draw_watch_year_most_liked_panel(
 
         mark_fp = review_mark_fontproperties()
         for rank, (name, count) in enumerate(rank_rows, start=1):
-            # Rank: ``1. Name `` + mark (♥ or NOTE) + space + bold count.
-            # Latin stays on DejaVu; NOTE uses Noto Sans Symbols 2 when available.
+            # Rank: ``1. Name `` + mark (♥ or ❝) + space + bold count.
+            # Latin and marks stay on DejaVu (theme default).
             mark_draw = _mpl_engagement_text(mark)
             head = f"{rank}. {name} "
             head_artist = ax.text(
@@ -674,7 +668,7 @@ def _place_liked_tip_inline_after(
         tip_draw = _mpl_engagement_text(tip)
         bbox = artist.get_window_extent(renderer=renderer)
         x_data, _y = ax.transData.inverted().transform((bbox.x1 + 10, bbox.y0))
-        # Symbols2 covers ♥ + NOTE + digits when a review mark is present.
+        # Optional mark font when theme default lacks ❝ (normally unused).
         use_fp = tip_fp if REVIEW_NOTE in tip_draw else None
         ax.text(
             x_data,
@@ -1201,7 +1195,7 @@ def chart_rating_hbar(
             and liked_count <= 0
             and reviewed_count <= 0
         )
-        # DejaVu lacks U+1F5C8 — draw NOTE (+ trailing count) with Symbols2.
+        # Optional mark font when theme default lacks ❝ (normally unused).
         note_fp = review_mark_fontproperties()
         main_shown = shown
         note_part = ""
