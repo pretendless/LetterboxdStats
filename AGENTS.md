@@ -79,7 +79,7 @@ The three middle knots are the measured logo circles (median sRGB of each non-ov
 
 Never use hue bands, hard cuts, holds, or easing.
 
-A rating maps with `t = (rating − 0.5) / 4.5` (`RATING_VMIN = 0.5`, `RATING_VMAX = 5.0`). So 1.175 is logo blue, 1.85 is green, and 3.65 is logo orange.
+A rating maps with `t = 1 − (rating − 0.5) / 4.5` (`RATING_VMIN = 0.5`, `RATING_VMAX = 5.0`), clamped to 0–1. So 5 is deep purple, 0.5 is deep burgundy, 4.325 is logo blue, 3.65 is green, and 1.85 is logo orange. This reversal is only the rating map. Discrete series below still start at the purple side.
 
 Discrete ordered series (watch years, ranked genres), earliest or lowest first, use `categorical_positions`. This is the permanent rule:
 

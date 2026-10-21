@@ -62,11 +62,13 @@ def test_logo_anchor_constants_are_the_measured_bytes():
     assert palette_rgb(0.4) != LOGO_GREEN_RGB
     assert palette_rgb(0.5) != LOGO_GREEN_RGB
     assert palette_rgb(0.75) != LOGO_ORANGE_RGB
-    # Colorbars go through the same function, not a binned lookup.
+    # The rating colorbar is the same blend, reversed: low is burgundy.
     cmap = rating_colormap()
-    assert palette_rgb_from(cmap(0.15)) == LOGO_BLUE_RGB
-    assert palette_rgb_from(cmap(0.3)) == LOGO_GREEN_RGB
-    assert palette_rgb_from(cmap(0.7)) == LOGO_ORANGE_RGB
+    assert palette_rgb_from(cmap(0.0)) == palette_rgb(1.0)
+    assert palette_rgb_from(cmap(1.0)) == palette_rgb(0.0)
+    assert palette_rgb_from(cmap(1.0 - 0.15)) == LOGO_BLUE_RGB
+    assert palette_rgb_from(cmap(1.0 - 0.3)) == LOGO_GREEN_RGB
+    assert palette_rgb_from(cmap(1.0 - 0.7)) == LOGO_ORANGE_RGB
 
 
 def palette_rgb_from(rgba) -> tuple[int, int, int]:
@@ -205,22 +207,22 @@ def test_discrete_ranks_use_logo_knots_then_even_midpoints():
 
 
 def test_rating_scale_uses_full_range_and_same_anchors():
-    assert palette_rgb_from(rating_color(RATING_VMIN)) == palette_rgb(0.0)
-    assert palette_rgb_from(rating_color(RATING_VMAX)) == palette_rgb(1.0)
-    # Logo blue is inside the rating scale, not the low end.
-    # t = 0.15 → rating = 0.5 + 0.15 * 4.5 = 1.175
-    assert palette_rgb_from(rating_color(1.175)) == LOGO_BLUE_RGB
-    assert palette_rgb_from(rating_color(1.85)) == LOGO_GREEN_RGB  # t = 0.3
-    assert palette_rgb_from(rating_color(3.65)) == LOGO_ORANGE_RGB  # t = 0.7
-    assert palette_rgb_from(rating_color(RATING_VMIN)) != LOGO_BLUE_RGB
+    assert palette_rgb_from(rating_color(RATING_VMIN)) == palette_rgb(1.0)
+    assert palette_rgb_from(rating_color(RATING_VMAX)) == palette_rgb(0.0)
+    # t = 1 - (rating - 0.5) / 4.5. Logo blue is a high rating, not the low end.
+    assert palette_rgb_from(rating_color(4.325)) == LOGO_BLUE_RGB  # t = 0.15
+    assert palette_rgb_from(rating_color(3.65)) == LOGO_GREEN_RGB  # t = 0.3
+    assert palette_rgb_from(rating_color(1.85)) == LOGO_ORANGE_RGB  # t = 0.7
+    assert palette_rgb_from(rating_color(RATING_VMAX)) != LOGO_BLUE_RGB
 
-    # The scale is the same straight blend: 0.7 is just in from purple,
-    # 1.15 is just short of logo blue, and 4.8 is just short of burgundy.
-    assert palette_rgb_from(rating_color(0.7)) != palette_rgb(0.0)
-    assert palette_rgb_from(rating_color(1.15)) != LOGO_BLUE_RGB
-    assert palette_rgb_from(rating_color(4.8)) != palette_rgb(1.0)
-    assert _oklab_distance(palette_rgb_from(rating_color(1.15)), LOGO_BLUE_RGB) < 0.05
-    assert _oklab_distance(palette_rgb_from(rating_color(4.8)), palette_rgb(1.0)) < 0.08
+    # 4.30 is just short of logo blue, 4.8 is just short of purple, and 0.7
+    # is just short of burgundy.
+    assert palette_rgb_from(rating_color(0.7)) != palette_rgb(1.0)
+    assert palette_rgb_from(rating_color(4.30)) != LOGO_BLUE_RGB
+    assert palette_rgb_from(rating_color(4.8)) != palette_rgb(0.0)
+    assert _oklab_distance(palette_rgb_from(rating_color(4.30)), LOGO_BLUE_RGB) < 0.05
+    near_high = palette_rgb_from(rating_color(4.8))
+    assert _oklab_distance(near_high, palette_rgb(0.0)) < _oklab_distance(near_high, LOGO_BLUE_RGB)
 
 
 if __name__ == "__main__":

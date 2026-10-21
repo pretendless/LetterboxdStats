@@ -18,7 +18,6 @@ from letterboxd_palette import (
     palette_color,
     rating_color,
     rating_colormap,
-    srgb_to_oklab,
     watch_year_palette,
 )
 from PIL import Image
@@ -102,38 +101,33 @@ def test_categorical_palette_samples_quartile_ranks():
     # Rating colors stay a continuous map of the numeric value.
     assert np.allclose(rating_color(RATING_VMIN), rating_colormap()(0.0))
     assert np.allclose(rating_color(RATING_VMAX), rating_colormap()(1.0))
-    assert np.allclose(rating_color(RATING_VMIN), palette_color(0.0))
-    assert np.allclose(rating_color(RATING_VMAX), palette_color(1.0))
+    assert np.allclose(rating_color(RATING_VMIN), palette_color(1.0))
+    assert np.allclose(rating_color(RATING_VMAX), palette_color(0.0))
 
 
 def test_rating_colormap_is_blue_green_red():
     cmap = rating_colormap()
     low = cmap(0.0)
-    mid = cmap(0.3)
+    mid = cmap(1.0 - 0.3)
     high = cmap(1.0)
-    # low: blue dominates red
-    assert low[2] > low[0]
-    # logo green, not the numeric midpoint: green dominates
+    # low rating: burgundy, red dominates blue
+    assert low[0] > low[2]
+    # logo green sits on the reversed scale: green dominates
     assert mid[1] > mid[0] and mid[1] > mid[2]
-    # high: red dominates blue
-    assert high[0] > high[2]
+    # high rating: purple, blue dominates red
+    assert high[2] > high[0]
     # not a pale peach (coolwarm mid ≈ white/cream)
     for sample in (mid, cmap(0.5)):
         assert not (sample[0] > 0.85 and sample[1] > 0.85 and sample[2] > 0.85)
 
 
 def test_rating_color_fixed_scale_separates_high_band():
-    """3.6 vs 4.5 must not collapse into the same flesh band."""
-    a = rating_color(3.6, vmin=RATING_VMIN, vmax=RATING_VMAX)
-    b = rating_color(4.5, vmin=RATING_VMIN, vmax=RATING_VMAX)
-    # Distinct colors. Burgundy is darker than orange, so the red byte can fall
-    # while the color still moves toward red in OKLab.
-    dist = sum(abs(x - y) for x, y in zip(a[:3], b[:3]))
+    """3.6 vs 4.5 stay apart, and the higher rating moves toward purple."""
+    lower = rating_color(3.6, vmin=RATING_VMIN, vmax=RATING_VMAX)
+    higher = rating_color(4.5, vmin=RATING_VMIN, vmax=RATING_VMAX)
+    dist = sum(abs(x - y) for x, y in zip(lower[:3], higher[:3]))
     assert dist > 0.15
-    lab_a = srgb_to_oklab(*a[:3])
-    lab_b = srgb_to_oklab(*b[:3])
-    assert lab_b[1] > lab_a[1]
-    assert lab_b[2] < lab_a[2]
+    assert higher[2] > lower[2]
 
 
 def test_release_year_charts(tmp_path: Path | None = None):
@@ -482,9 +476,9 @@ def test_count_avg_text_style_colors_mean_only():
     assert _rgba(dash["color"]) == _rgba(FG)
     assert low["path_effects"] and high["path_effects"]
     assert dash["path_effects"] is None
-    # 1.94 is just past logo green; 4.80 is near burgundy, so redder.
-    assert high["color"][0] > high["color"][2]
-    assert high["color"][0] > low["color"][0]
+    # 4.80 is near purple; 1.94 is toward orange, so the low rating is redder.
+    assert high["color"][2] > high["color"][0]
+    assert low["color"][0] > high["color"][0]
 
 
 def test_count_bars_drop_n_and_style_mean(tmp_path: Path | None = None):
