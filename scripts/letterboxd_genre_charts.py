@@ -39,7 +39,9 @@ import numpy as np
 
 from letterboxd_export import (  # noqa: E402
     film_name_year_key,
+    liked_film_keys,
     load_export,
+    load_liked_films,
     load_ratings,
     ratings_for_catalog,
 )
@@ -816,18 +818,22 @@ def build_search_keyword_lists(
     *,
     diary=None,
     ratings_csv=None,
+    liked_films=None,
 ) -> list[dict]:
     """Film lists per search keyword over the same catalog the charts use.
 
-    Each entry: ``{keyword, films: [{name, year, matched: [...], ratings: [...]}]}``.
+    Each entry: ``{keyword, films: [{name, year, matched: [...], ratings: [...],
+    liked: bool}]}``.
     ``ratings`` has one value per watch (diary order oldest→newest, or one
-    watched-only slot). Films are unique Name+Year, sorted by year then name.
-    Empty keywords → [].
+    watched-only slot). ``liked`` is True when Name+Year appears in
+    likes/films.csv (film-level; diary has no per-view Like column). Films are
+    unique Name+Year, sorted by year then name. Empty keywords → [].
     """
     words = [str(w).strip() for w in (keywords or ()) if str(w).strip()]
     if not words or catalog is None or getattr(catalog, "empty", True):
         return []
     ratings_by_key = ratings_csv_lookup(ratings_csv)
+    liked_keys = liked_film_keys(liked_films) if not isinstance(liked_films, (set, frozenset)) else set(liked_films)
     films = catalog.drop_duplicates(subset=["Name", "Year"]).copy()
     rows = []
     for _, row in films.iterrows():
@@ -843,6 +849,8 @@ def build_search_keyword_lists(
                 year_int = None
         meta = _cache_meta_for_row(row, cache)
         year_values = _release_year_values(row, meta)
+        key_year = "" if year_int is None else str(year_int)
+        film_key = f"{name}|||{key_year}"
         rows.append(
             {
                 "name": name,
@@ -850,6 +858,7 @@ def build_search_keyword_lists(
                 "meta": meta,
                 "year_values": year_values,
                 "ratings": watch_rating_slots_for_film(name, year_int, diary, ratings_by_key),
+                "liked": film_key in liked_keys,
             }
         )
     rows.sort(
@@ -872,6 +881,7 @@ def build_search_keyword_lists(
                     "year": item["year"],
                     "matched": sites,
                     "ratings": list(item["ratings"]),
+                    "liked": bool(item["liked"]),
                 }
             )
         out.append({"keyword": word, "films": matched_films})
@@ -1593,12 +1603,14 @@ def main():
     )
 
     ratings_csv = load_ratings(sys.argv[1])
+    liked_films = load_liked_films(sys.argv[1])
     search_lists = build_search_keyword_lists(
         catalog,
         cache,
         opts.search_keywords,
         diary=diary,
         ratings_csv=ratings_csv,
+        liked_films=liked_films,
     )
     if search_lists:
         write_search_keyword_lists(Path("search_keyword_lists.json"), search_lists)

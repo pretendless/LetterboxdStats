@@ -1,4 +1,4 @@
-"""Load Letterboxd export ZIP: diary.csv + watched.csv + ratings.csv.
+"""Load Letterboxd export ZIP: diary.csv + watched.csv + ratings.csv + likes.
 
 Diary drives date-sensitive metrics (needs Watched Date).
 Catalog = diary ∪ watched-only films for date-insensitive stats.
@@ -11,6 +11,13 @@ Ratings for averages / «выше оценка» (one Rating per Name+Year):
   2) Else → ratings.csv (rated without a diary entry).
 Never prefer ratings.csv over a diary rating. Never use an older diary rating
 when a newer diary rating exists. watched.csv has no Rating column.
+
+Film likes: likes/films.csv is film-level (one Name+Year row; film-page URI).
+diary.csv has no Like column (sample export + deleted/orphaned copies).
+Tags/Rewatch do not encode likes. likes/films.csv Date is when the film was
+liked (often a bulk-like day), not a reliable match to Watched Date / diary
+Date, so per-view likes are not recoverable from this export shape.
+likes/reviews.csv is review-URI only and is not mapped to films here.
 """
 
 from __future__ import annotations
@@ -167,6 +174,63 @@ def load_ratings(zip_path: Path | str) -> pd.DataFrame:
     df["_film_key"] = film_name_year_key(df)
     df = df.groupby("_film_key", dropna=False, as_index=False).head(1)
     return df.drop(columns=["_film_key"], errors="ignore")
+
+
+def load_liked_films(zip_path: Path | str) -> pd.DataFrame:
+    """Parse likes/films.csv if present. Empty frame when missing (not an error).
+
+    Film-level likes only: one row per Name+Year with a film-page URI.
+    diary.csv has no Like / liked column in current exports; do not infer
+    per-diary-entry likes by aligning likes/films.csv Date to Watched Date
+    (bulk-like days break that). likes/reviews.csv is review-URI only.
+    """
+    path = Path(zip_path)
+    empty_cols = ["Name", "Year"]
+    if not path.is_file():
+        return pd.DataFrame(columns=empty_cols)
+    try:
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+            # Prefer likes/films.csv; never pick deleted/orphaned copies.
+            candidates = [n for n in names if n.lower().endswith("films.csv")]
+            likes_name = next(
+                (n for n in candidates if n.lower().replace("\\", "/").endswith("likes/films.csv")),
+                None,
+            )
+            if likes_name is None:
+                likes_name = next(
+                    (
+                        n
+                        for n in candidates
+                        if "likes/" in n.lower().replace("\\", "/")
+                        and not any(p in n.lower() for p in ("deleted/", "orphaned/"))
+                    ),
+                    None,
+                )
+            if not likes_name:
+                return pd.DataFrame(columns=empty_cols)
+            df = _read_csv_member(zf, likes_name)
+    except zipfile.BadZipFile:
+        return pd.DataFrame(columns=empty_cols)
+
+    if df.empty:
+        return pd.DataFrame(columns=empty_cols)
+
+    df = _normalize_common(df)
+    df = df[df["Name"].astype(str).str.strip() != ""].copy()
+    if df.empty:
+        return pd.DataFrame(columns=empty_cols)
+    df = df.copy()
+    df["_film_key"] = film_name_year_key(df)
+    df = df.groupby("_film_key", dropna=False, as_index=False).head(1)
+    return df[["Name", "Year"]].copy()
+
+
+def liked_film_keys(liked_films: pd.DataFrame | None) -> set[str]:
+    """Name|||Year keys from a likes/films.csv frame."""
+    if liked_films is None or getattr(liked_films, "empty", True):
+        return set()
+    return set(film_name_year_key(liked_films).tolist())
 
 
 def watched_only_films(diary: pd.DataFrame, watched: pd.DataFrame) -> pd.DataFrame:

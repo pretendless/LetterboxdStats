@@ -24,7 +24,9 @@ from letterboxd_calendar_charts import (
 )
 from letterboxd_export import (
     latest_rated_union,
+    liked_film_keys,
     load_export,
+    load_liked_films,
     load_ratings,
     merged_film_ratings,
     scope_letterboxd_frames,
@@ -57,6 +59,7 @@ def _write_zip(
     diary: str,
     watched: str | None = None,
     ratings: str | None = None,
+    liked_films: str | None = None,
 ) -> None:
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr("diary.csv", diary)
@@ -64,6 +67,8 @@ def _write_zip(
             zf.writestr("watched.csv", watched)
         if ratings is not None:
             zf.writestr("ratings.csv", ratings)
+        if liked_films is not None:
+            zf.writestr("likes/films.csv", liked_films)
 
 
 def test_union_and_diary_wins(tmp: Path) -> None:
@@ -396,6 +401,7 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert lists[0]["films"][0]["name"] == "The Fellowship of the Ring"
     assert lists[0]["films"][0]["matched"] == ["actor"]
     assert lists[0]["films"][0]["ratings"] == ["—"]  # no diary / ratings.csv
+    assert lists[0]["films"][0]["liked"] is False
     assert build_search_keyword_lists(catalog, cache, []) == []
     assert format_search_rating_slot(5) == "5"
     assert format_search_rating_slot(3.5) == "3.5"
@@ -449,6 +455,19 @@ def test_count_avg_label_and_usa_english_filter() -> None:
         ratings_csv=ratings_csv,
     )
     assert with_diary[0]["films"][0]["ratings"] == ["5", "4", "3.5"]
+    liked = pd.DataFrame([{"Name": "The Fellowship of the Ring", "Year": 2001}])
+    with_like = build_search_keyword_lists(
+        catalog,
+        cache,
+        ["Elijah Wood"],
+        diary=diary_slots,
+        ratings_csv=ratings_csv,
+        liked_films=liked,
+    )
+    assert with_like[0]["films"][0]["liked"] is True
+    assert with_like[0]["films"][0]["ratings"] == ["5", "4", "3.5"]
+    # Other Film is not liked; Elijah Wood match is only Fellowship.
+    assert liked_film_keys(liked) == {"The Fellowship of the Ring|||2001"}
     opts = read_chart_options(
         {
             "LETTERBOXD_SEARCH_KEYWORDS": "Wood,2001",
@@ -458,6 +477,58 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert opts.search_keywords == ("Wood", "2001")
     assert format_single_rating_label(4.5) == "4.50"
     assert format_single_rating_label(None) == "—"
+
+
+def test_load_liked_films_from_zip(tmp: Path) -> None:
+    """likes/films.csv Name+Year; missing file → empty; diary has no Like column."""
+    diary_csv = """Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date
+2024-01-02,Liked Film,2020,https://boxd.it/aaa,4.0,,,2024-01-01
+2024-01-03,Other Film,2019,https://boxd.it/bbb,3.0,,,2024-01-02
+"""
+    likes_csv = """Date,Name,Year,Letterboxd URI
+2024-02-01,Liked Film,2020,https://boxd.it/film1
+2024-02-02,"Paris, Texas",1984,https://boxd.it/29Ts
+"""
+    zip_path = tmp / "with_likes.zip"
+    _write_zip(zip_path, diary_csv, liked_films=likes_csv)
+    liked = load_liked_films(zip_path)
+    keys = liked_film_keys(liked)
+    assert keys == {"Liked Film|||2020", "Paris, Texas|||1984"}
+
+    zip_no_likes = tmp / "no_likes.zip"
+    _write_zip(zip_no_likes, diary_csv)
+    assert liked_film_keys(load_liked_films(zip_no_likes)) == set()
+
+    # Search list marks liked catalog films only (period-scoped catalog unchanged).
+    diary, catalog, _only, _ratings = load_export(zip_path)
+    cache = {
+        "Liked Film|||2020": {
+            "genres": ["Drama"],
+            "directors": [],
+            "cast": [],
+            "companies": [],
+            "countries": [],
+            "original_language": "en",
+        },
+        "Other Film|||2019": {
+            "genres": ["Drama"],
+            "directors": [],
+            "cast": [],
+            "companies": [],
+            "countries": [],
+            "original_language": "en",
+        },
+    }
+    lists = build_search_keyword_lists(
+        catalog,
+        cache,
+        ["Drama"],
+        diary=diary,
+        liked_films=liked,
+    )
+    by_name = {f["name"]: f for f in lists[0]["films"]}
+    assert by_name["Liked Film"]["liked"] is True
+    assert by_name["Other Film"]["liked"] is False
 
 
 def main() -> int:
@@ -474,6 +545,7 @@ def main() -> int:
         test_watch_window_keeps_undated_out_unless_asked()
         test_watch_time_grain_cutoffs()
         test_count_avg_label_and_usa_english_filter()
+        test_load_liked_films_from_zip(tmp)
     print("test_letterboxd_export: ok")
     return 0
 
