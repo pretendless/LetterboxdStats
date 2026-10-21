@@ -48,14 +48,41 @@ def test_display_lang():
     assert display_lang("XX") == "xx"
 
 
-def test_no_date_legend_swatch_is_white_with_edge():
-    """Watch-year legend paints No date white with a thin rim on black."""
+def test_no_date_legend_swatch_is_logo_gray_gradient():
+    """Watch-year legend paints No date as a horizontal logo-charcoal gradient."""
     import matplotlib.pyplot as plt
-    from letterboxd_palette import UNDATED_LEGEND_EDGE, UNDATED_WATCH_YEAR, UNDATED_WATCH_YEAR_RGBA
+    import matplotlib.colors as mcolors
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Rectangle
+    from letterboxd_palette import (
+        UNDATED_GRADIENT_LEFT_HEX,
+        UNDATED_GRADIENT_RIGHT_HEX,
+        UNDATED_LEGEND_EDGE,
+        UNDATED_WATCH_YEAR,
+        UNDATED_WATCH_YEAR_RGBA,
+        UndatedLegendProxy,
+        undated_horizontal_colormap,
+        undated_legend_handle,
+        undated_legend_handler_map,
+    )
 
     years = [2020, UNDATED_WATCH_YEAR]
     palette = watch_year_palette(years)
     assert palette[UNDATED_WATCH_YEAR] == UNDATED_WATCH_YEAR_RGBA
+    assert palette[UNDATED_WATCH_YEAR] != (1.0, 1.0, 1.0, 1.0)
+    cmap = undated_horizontal_colormap()
+    assert mcolors.to_hex(cmap(0.0)).lower() == UNDATED_GRADIENT_LEFT_HEX.lower()
+    assert mcolors.to_hex(cmap(1.0)).lower() == UNDATED_GRADIENT_RIGHT_HEX.lower()
+
+    handler = undated_legend_handler_map()[UndatedLegendProxy]
+    artists = handler.create_artists(
+        None, undated_legend_handle(), 0.0, 0.0, 10.0, 4.0, 8, None
+    )
+    fills = [a for a in artists if isinstance(a, Rectangle) and a.get_edgecolor()[3] == 0.0]
+    assert len(fills) >= 2
+    assert mcolors.to_hex(fills[0].get_facecolor()).lower() == UNDATED_GRADIENT_LEFT_HEX.lower()
+    assert mcolors.to_hex(fills[-1].get_facecolor()).lower() == UNDATED_GRADIENT_RIGHT_HEX.lower()
+
     fig, ax = plt.subplots(figsize=(4, 2))
     try:
         draw_watch_year_most_liked_panel(fig, ax, years, palette, most_liked=None)
@@ -64,13 +91,10 @@ def test_no_date_legend_swatch_is_white_with_edge():
         labels = [t.get_text() for t in leg.get_texts()]
         assert labels[-1] == "No date"
         undated_handle = leg.legend_handles[-1]
-        assert undated_handle.get_markerfacecolor() == UNDATED_WATCH_YEAR_RGBA
-        edge = undated_handle.get_markeredgecolor()
-        # Matplotlib may return rgba tuple or hex for the rim.
-        import matplotlib.colors as mcolors
-
-        assert mcolors.to_hex(edge) == mcolors.to_hex(UNDATED_LEGEND_EDGE)
-        assert float(undated_handle.get_markeredgewidth()) > 0
+        # Must not be the old solid-white square marker.
+        if isinstance(undated_handle, Line2D):
+            assert mcolors.to_hex(undated_handle.get_markerfacecolor()) != "#ffffff"
+        assert UNDATED_LEGEND_EDGE
     finally:
         plt.close(fig)
 
@@ -673,11 +697,12 @@ def test_non_date_count_charts_include_watched_only(tmp_path: Path | None = None
     assert 2020 in genre_captured["years"]
     undated_i = genre_captured["years"].index(UNDATED_WATCH_YEAR)
     assert float(genre_captured["matrix"][undated_i, 0]) == 1.0
-    # No date is white and does not steal a year-colormap slot from 2020.
+    # No date is logo charcoal (not white) and does not steal a year-colormap slot.
     from letterboxd_palette import UNDATED_WATCH_YEAR_RGBA
 
     genre_palette = watch_year_palette(genre_captured["years"])
     assert genre_palette[UNDATED_WATCH_YEAR] == UNDATED_WATCH_YEAR_RGBA
+    assert genre_palette[UNDATED_WATCH_YEAR] != (1.0, 1.0, 1.0, 1.0)
     assert np.allclose(genre_palette[2020], categorical_colors(1)[0])
 
     # Both release years appear; watched-only 2018 is a full catalog hit.
@@ -1222,7 +1247,7 @@ def test_rating_hbar_worst_skips_short_slate(tmp_path: Path | None = None):
 if __name__ == "__main__":
     test_display_lang()
     test_liked_heart_helpers_use_black_heart_suit()
-    test_no_date_legend_swatch_is_white_with_edge()
+    test_no_date_legend_swatch_is_logo_gray_gradient()
     test_top_n_default_about_20()
     test_ranked_hbar_grows_taller_with_n()
     test_categorical_palette_samples_quartile_ranks()

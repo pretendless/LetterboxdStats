@@ -208,20 +208,33 @@ def test_discrete_ranks_use_logo_knots_then_even_midpoints():
     assert palette_rgb_from(palette[2023]) != LOGO_ORANGE_RGB
 
     from letterboxd_palette import (
+        UNDATED_GRADIENT_LEFT_HEX,
+        UNDATED_GRADIENT_RIGHT_HEX,
         UNDATED_LEGEND_EDGE,
+        UNDATED_LOGO_BOTTOM_HEX,
+        UNDATED_LOGO_TOP_HEX,
         UNDATED_WATCH_YEAR,
         UNDATED_WATCH_YEAR_RGBA,
         is_undated_watch_year,
+        undated_horizontal_colormap,
         watch_year_legend_label,
     )
+    import matplotlib.colors as mcolors
 
     with_undated = watch_year_palette([2020, UNDATED_WATCH_YEAR, 2021])
     ordered = [2020, 2021, UNDATED_WATCH_YEAR]
     assert list(with_undated.keys()) == ordered
-    # Dated years alone set the year colormap; No date is white, not a slot.
+    # Dated years alone set the year colormap; No date is logo charcoal, not a slot.
     assert [with_undated[y] for y in (2020, 2021)] == categorical_colors(2)
     assert with_undated[UNDATED_WATCH_YEAR] == UNDATED_WATCH_YEAR_RGBA
-    assert with_undated[UNDATED_WATCH_YEAR] == (1.0, 1.0, 1.0, 1.0)
+    assert with_undated[UNDATED_WATCH_YEAR] != (1.0, 1.0, 1.0, 1.0)
+    assert UNDATED_LOGO_TOP_HEX == "#2C3440"
+    assert UNDATED_LOGO_BOTTOM_HEX == "#14181C"
+    assert UNDATED_GRADIENT_LEFT_HEX == UNDATED_LOGO_TOP_HEX
+    assert UNDATED_GRADIENT_RIGHT_HEX == UNDATED_LOGO_BOTTOM_HEX
+    cmap = undated_horizontal_colormap()
+    assert mcolors.to_hex(cmap(0.0)).lower() == UNDATED_GRADIENT_LEFT_HEX.lower()
+    assert mcolors.to_hex(cmap(1.0)).lower() == UNDATED_GRADIENT_RIGHT_HEX.lower()
     # Two dated years stay logo blue + orange even when No date is present.
     assert with_undated[2020] == categorical_colors(2)[0]
     assert with_undated[2021] == categorical_colors(2)[1]
@@ -231,7 +244,7 @@ def test_discrete_ranks_use_logo_knots_then_even_midpoints():
     assert is_undated_watch_year(UNDATED_WATCH_YEAR)
     assert is_undated_watch_year(0)
     assert not is_undated_watch_year(2020)
-    assert UNDATED_LEGEND_EDGE  # thin rim constant for white swatches on black
+    assert UNDATED_LEGEND_EDGE  # thin rim for charcoal swatches on black
     assert watch_year_legend_label(UNDATED_WATCH_YEAR) == "No date"
     assert watch_year_legend_label(2020) == "2020"
 
