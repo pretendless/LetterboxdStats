@@ -42,6 +42,7 @@ from letterboxd_export import (  # noqa: E402
     load_export,
     load_ratings,
     ratings_for_catalog,
+    unique_rated_film_count,
 )
 from letterboxd_options import (  # noqa: E402
     SEARCH_MATCH_FIELDS,
@@ -373,6 +374,18 @@ def save_cache(cache):
     CACHE_PATH.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _mean_from_stats(st) -> float | None:
+    """Mean from rating_sum over contribution count (rating_n), else unique rated."""
+    rated = int(st.get("rated") or 0)
+    rating_n = int(st.get("rating_n") or 0) or rated
+    if not rating_n:
+        return None
+    try:
+        return round(float(st["rating_sum"]) / rating_n, 2)
+    except (TypeError, ValueError, ZeroDivisionError, KeyError):
+        return None
+
+
 def _rank_named(
     stats,
     min_count=1,
@@ -381,11 +394,12 @@ def _rank_named(
     min_rated=None,
     ascending=False,
 ):
-    """stats: name -> {count, rating_sum, rated}.
+    """stats: name -> {count, rating_sum, rated[, rating_n]}.
 
     Count tops use min_count on watch hits.
     Rating tops require unique rated films ≥ min_rated (inclusive); omit failures.
-    `rated` must be unique-film count after latest_rated_* dedupe, not diary rows.
+    `rated` must be unique-film count (Name+Year), not diary rows — even when
+    include_rewatch_in_averages multiplies rating_sum / rating_n.
     ascending=True on by_avg → worst averages first («ниже оценка»).
     """
     rows = []
@@ -397,7 +411,7 @@ def _rank_named(
                 continue
         elif count < min_count:
             continue
-        avg = round(st["rating_sum"] / rated, 2) if rated else None
+        avg = _mean_from_stats(st)
         rows.append({"name": name, "count": count, "avg": avg, "rated": rated})
     if by_avg:
         if ascending:
@@ -437,8 +451,7 @@ def _rating_lookup(stats) -> dict:
     out = {}
     for name, st in stats.items():
         rated = int(st.get("rated") or 0)
-        avg = round(float(st["rating_sum"]) / rated, 2) if rated else None
-        out[name] = (avg, rated)
+        out[name] = (_mean_from_stats(st), rated)
     return out
 
 
@@ -493,18 +506,18 @@ def aggregate_person_stats(
     include_english=True,
 ):
     """Catalog counts (diary∪watched); avgs from ratings.csv ∪ diary joined to catalog."""
-    countries = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0})
-    directors = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0})
-    actors = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0})
-    languages = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0})
-    companies = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0})
+    countries = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0})
+    directors = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0})
+    actors = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0})
+    languages = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0})
+    companies = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0})
 
     def bump_count(bucket, name):
         if not name:
             return
         bucket[name]["count"] += 1
 
-    def bump_rating(bucket, name, rating):
+    def bump_rating(bucket, name, rating, film_key):
         if not name:
             return
         if rating is None or (isinstance(rating, float) and np.isnan(rating)):
@@ -517,7 +530,12 @@ def aggregate_person_stats(
             return
         st = bucket[name]
         st["rating_sum"] += r
-        st["rated"] += 1
+        st["rating_n"] = int(st.get("rating_n") or 0) + 1
+        keys = st.setdefault("_keys", set())
+        key = str(film_key or "")
+        if key not in keys:
+            keys.add(key)
+            st["rated"] += 1
 
     def apply_meta(buckets_fn, row, meta):
         for c in meta.get("countries") or []:
@@ -550,9 +568,12 @@ def aggregate_person_stats(
     for _, row in rated_rows.iterrows():
         meta = cache.get(_cache_key(row)) or {}
         rating = row.get("Rating")
+        film_key = row.get("_film_key") if hasattr(row, "get") else None
+        if not film_key:
+            film_key = _cache_key(row)
 
         def rating_only(bucket, name, _row):
-            bump_rating(bucket, name, rating)
+            bump_rating(bucket, name, rating, film_key)
 
         apply_meta(rating_only, row, meta)
 
@@ -623,7 +644,7 @@ def rank_genres(
     min_rated=MIN_RATED_FOR_TOP,
 ):
     """Genre tops: catalog hits; avg from ratings.csv ∪ diary joined to catalog."""
-    stats = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0})
+    stats = defaultdict(lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0})
     for _, row in catalog.iterrows():
         for g in row.get("Genre list") or []:
             if g:
@@ -646,13 +667,21 @@ def rank_genres(
             continue
         if not (r > 0):
             continue
+        film_key = row.get("_film_key") if hasattr(row, "get") else None
+        if not film_key:
+            film_key = _cache_key(row)
+        film_key = str(film_key)
         genres = row.get("Genre list") or genre_by_key.get(_cache_key(row)) or []
         for g in genres:
             if not g:
                 continue
             st = stats[g]
             st["rating_sum"] += r
-            st["rated"] += 1
+            st["rating_n"] = int(st.get("rating_n") or 0) + 1
+            keys = st.setdefault("_keys", set())
+            if film_key not in keys:
+                keys.add(film_key)
+                st["rated"] += 1
     by_count, by_rating, by_rating_worst = _paired_ranks(
         stats,
         min_count=1,
@@ -1196,6 +1225,7 @@ def main():
         date_from=opts.date_from,
         date_to=opts.date_to,
         include_undated=opts.include_undated,
+        include_rewatch_in_averages=opts.include_rewatch_in_averages,
     )
     if opts.has_window and diary.empty:
         print("No diary entries with a watch date in the selected range.", file=sys.stderr)
@@ -1207,7 +1237,7 @@ def main():
     progress = TelegramProgress(TG_TOKEN, TG_CHAT)
     print(
         f"Enriching {total} unique title and year pairs on TMDB…"
-        f" (watched-only: {len(watched_only)}, rated films: {len(film_ratings)})"
+        f" (watched-only: {len(watched_only)}, rated films: {unique_rated_film_count(film_ratings)})"
     )
     progress.update(0, total, force=True)
     done = 0
@@ -1571,6 +1601,7 @@ def main():
         "min_person_count": int(opts.min_rated),
         "min_rated_for_top": int(opts.min_rated),
         "top_n": int(opts.top_n),
+        "include_rewatch_in_averages": bool(opts.include_rewatch_in_averages),
         "include_usa": bool(opts.include_usa),
         "include_english": bool(opts.include_english),
         "include_drama": bool(opts.include_drama),

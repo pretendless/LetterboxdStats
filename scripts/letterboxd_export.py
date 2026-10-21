@@ -6,11 +6,15 @@ Catalog = diary ∪ watched-only films for date-insensitive stats.
 Film match across files uses Name + Year — diary Letterboxd URIs point at
 diary entries, watched/ratings URIs at film pages, so URI identity does not align.
 
-Ratings for averages / «выше оценка» (one Rating per Name+Year):
+Ratings for averages / «выше оценка» (default: one Rating per Name+Year):
   1) If any diary row has a Rating → latest diary Watched Date with a Rating,
   2) Else → ratings.csv (rated without a diary entry).
 Never prefer ratings.csv over a diary rating. Never use an older diary rating
 when a newer diary rating exists. watched.csv has no Rating column.
+
+Optional include_rewatch_in_averages: every rated diary row contributes (rewatches
+included); ratings.csv still fills films with no diary Rating. Threshold gates
+stay on unique rated films (Name+Year), not diary-row count.
 """
 
 from __future__ import annotations
@@ -201,6 +205,25 @@ def union_catalog(diary: pd.DataFrame, watched: pd.DataFrame) -> tuple[pd.DataFr
     return catalog, only
 
 
+def _ratings_csv_gap_rows(
+    ratings: pd.DataFrame | None, diary_keys: set[str]
+) -> pd.DataFrame | None:
+    """ratings.csv rows for films that have no diary Rating (one per Name+Year)."""
+    if ratings is None or ratings.empty or "Rating" not in ratings.columns:
+        return None
+    r = ratings[ratings["Rating"].notna()].copy()
+    if r.empty:
+        return None
+    r["_film_key"] = film_name_year_key(r)
+    r = r.groupby("_film_key", dropna=False, as_index=False).head(1)
+    if diary_keys:
+        r = r[~r["_film_key"].isin(diary_keys)].copy()
+    if r.empty:
+        return None
+    r["source"] = "ratings"
+    return r
+
+
 def merged_film_ratings(ratings: pd.DataFrame | None, diary: pd.DataFrame) -> pd.DataFrame:
     """One row per Name+Year with Rating.
 
@@ -217,16 +240,9 @@ def merged_film_ratings(ratings: pd.DataFrame | None, diary: pd.DataFrame) -> pd
         diary_keys = set(d["_film_key"].tolist())
         parts.append(d)
 
-    if ratings is not None and not ratings.empty and "Rating" in ratings.columns:
-        r = ratings[ratings["Rating"].notna()].copy()
-        if not r.empty:
-            r["_film_key"] = film_name_year_key(r)
-            r = r.groupby("_film_key", dropna=False, as_index=False).head(1)
-            if diary_keys:
-                r = r[~r["_film_key"].isin(diary_keys)].copy()
-            if not r.empty:
-                r["source"] = "ratings"
-                parts.append(r)
+    gap = _ratings_csv_gap_rows(ratings, diary_keys)
+    if gap is not None:
+        parts.append(gap)
 
     if not parts:
         return _empty_ratings_frame()
@@ -236,6 +252,68 @@ def merged_film_ratings(ratings: pd.DataFrame | None, diary: pd.DataFrame) -> pd
         out["_film_key"] = film_name_year_key(out)
     # Keep helper key for joins; callers may drop.
     return out
+
+
+def diary_rated_views_plus_gaps(
+    ratings: pd.DataFrame | None, diary: pd.DataFrame
+) -> pd.DataFrame:
+    """Every rated diary row (rewatches included) plus ratings.csv gaps.
+
+    Films with at least one diary Rating contribute every rated diary view.
+    ratings.csv fills only films that never have a diary Rating (same gap rule
+    as merged_film_ratings). Unrated diary rows are skipped.
+    """
+    parts: list[pd.DataFrame] = []
+    diary_keys: set[str] = set()
+
+    if diary is not None and not diary.empty and "Rating" in diary.columns:
+        d = diary[diary["Rating"].notna()].copy()
+        if not d.empty:
+            d["Rating"] = pd.to_numeric(d["Rating"], errors="coerce")
+            d = d[d["Rating"].notna() & (d["Rating"] > 0)].copy()
+        if not d.empty:
+            d["_film_key"] = film_name_year_key(d)
+            d["source"] = "diary"
+            diary_keys = set(d["_film_key"].tolist())
+            parts.append(d)
+
+    gap = _ratings_csv_gap_rows(ratings, diary_keys)
+    if gap is not None:
+        parts.append(gap)
+
+    if not parts:
+        return _empty_ratings_frame()
+
+    out = pd.concat(parts, ignore_index=True, sort=False)
+    if "_film_key" not in out.columns:
+        out["_film_key"] = film_name_year_key(out)
+    return out
+
+
+def ratings_for_averages(
+    ratings: pd.DataFrame | None,
+    diary: pd.DataFrame,
+    *,
+    include_rewatch_in_averages: bool = False,
+) -> pd.DataFrame:
+    """Rating rows for qualitative / average charts.
+
+    Default (False): one row per Name+Year via merged_film_ratings.
+    True: each rated diary row contributes; ratings.csv fills non-diary gaps.
+    """
+    if include_rewatch_in_averages:
+        return diary_rated_views_plus_gaps(ratings, diary)
+    return merged_film_ratings(ratings, diary)
+
+
+def unique_rated_film_count(film_ratings: pd.DataFrame | None) -> int:
+    """How many distinct Name+Year keys have a rating (threshold / summary)."""
+    if film_ratings is None or film_ratings.empty:
+        return 0
+    work = film_ratings
+    if "_film_key" not in work.columns:
+        return int(film_name_year_key(work).nunique())
+    return int(work["_film_key"].nunique())
 
 
 def ratings_for_catalog(catalog: pd.DataFrame, film_ratings: pd.DataFrame) -> pd.DataFrame:
@@ -303,6 +381,7 @@ def scope_letterboxd_frames(
     date_from: str | None = None,
     date_to: str | None = None,
     include_undated: bool = False,
+    include_rewatch_in_averages: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Return (diary, catalog, watched_only, film_ratings).
 
@@ -310,16 +389,27 @@ def scope_letterboxd_frames(
 
     Custom inclusive window:
       diary = rows whose Watched Date falls on date_from..date_to.
-      Ratings = latest in-range diary rating, else ratings.csv, for those films.
+      Ratings = ratings_for_averages over the in-range diary (and ratings.csv gaps).
       include_undated False (default): drop watched/ratings films with no in-range diary row.
       include_undated True: also keep films that have **no diary date at all**
       (watched.csv / ratings.csv). Their Watched Date stays empty, so weekday /
       month / year stacks (diary only) skip them; catalog and TMDB stats see them.
       A film that has diary dates outside the window is not "undated" and stays out.
+
+    include_rewatch_in_averages False (default): one rating per Name+Year.
+    True: each rated diary row contributes to average charts; threshold still
+    uses unique rated films elsewhere.
     """
     if not date_from or not date_to:
         catalog, only = union_catalog(diary, watched)
-        return diary, catalog, only, merged_film_ratings(ratings, diary)
+        return (
+            diary,
+            catalog,
+            only,
+            ratings_for_averages(
+                ratings, diary, include_rewatch_in_averages=include_rewatch_in_averages
+            ),
+        )
 
     start = pd.Timestamp(date_from).normalize()
     end_excl = pd.Timestamp(date_to).normalize() + pd.Timedelta(days=1)
@@ -340,7 +430,9 @@ def scope_letterboxd_frames(
     allowed = _film_keys(diary_win)
     if include_undated:
         allowed |= _film_keys(only)
-    film_ratings = merged_film_ratings(ratings, diary_win)
+    film_ratings = ratings_for_averages(
+        ratings, diary_win, include_rewatch_in_averages=include_rewatch_in_averages
+    )
     if film_ratings is not None and not film_ratings.empty:
         if "_film_key" not in film_ratings.columns:
             film_ratings = film_ratings.copy()
@@ -355,11 +447,13 @@ def load_export(
     date_from: str | None = None,
     date_to: str | None = None,
     include_undated: bool = False,
+    include_rewatch_in_averages: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Return (diary, catalog, watched_only, film_ratings).
 
-    film_ratings = diary latest-rated ∪ ratings.csv gaps (diary wins).
-    Optional inclusive watch window — see scope_letterboxd_frames.
+    film_ratings = ratings_for_averages (merged unique by default, or all rated
+    diary rows when include_rewatch_in_averages). Optional inclusive watch
+    window — see scope_letterboxd_frames.
     """
     diary = load_diary(zip_path, require_dates=True)
     watched = load_watched(zip_path)
@@ -371,4 +465,5 @@ def load_export(
         date_from=date_from,
         date_to=date_to,
         include_undated=include_undated,
+        include_rewatch_in_averages=include_rewatch_in_averages,
     )

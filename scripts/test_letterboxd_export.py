@@ -27,11 +27,15 @@ from letterboxd_export import (
     load_export,
     load_ratings,
     merged_film_ratings,
+    ratings_for_averages,
     scope_letterboxd_frames,
+    unique_rated_film_count,
 )
 from letterboxd_genre_charts import (
     _filter_entity_names,
     _filter_genre_names,
+    _mean_from_stats,
+    _rank_named,
     build_search_keyword_lists,
     film_search_match_sites,
     format_search_rating_slot,
@@ -218,6 +222,74 @@ def test_diary_latest_beats_older_diary_and_ratings_csv() -> None:
     assert float(merged.iloc[0]["Rating"]) == 3.0
     assert merged.iloc[0]["source"] == "diary"
     assert float(latest_rated_union(diary, None, ratings=ratings).iloc[0]["Rating"]) == 3.0
+
+
+def test_rewatch_in_averages_mean_and_unique_threshold() -> None:
+    """Yes: each rated diary row contributes; threshold still unique films."""
+    diary = pd.DataFrame(
+        [
+            {
+                "Name": "Ocean's Eleven",
+                "Year": 2001,
+                "Rating": 5.0,
+                "Watched Date": pd.Timestamp("2013-02-12"),
+            },
+            {
+                "Name": "Ocean's Eleven",
+                "Year": 2001,
+                "Rating": 3.0,
+                "Watched Date": pd.Timestamp("2016-02-12"),
+            },
+            {
+                "Name": "Other",
+                "Year": 2000,
+                "Rating": 4.0,
+                "Watched Date": pd.Timestamp("2015-01-01"),
+            },
+            {
+                "Name": "Third",
+                "Year": 1999,
+                "Rating": 2.0,
+                "Watched Date": pd.Timestamp("2015-02-01"),
+            },
+        ]
+    )
+    ratings = pd.DataFrame(
+        [{"Name": "Gap Only", "Year": 1990, "Rating": 4.5, "source": "ratings"}]
+    )
+    merged = ratings_for_averages(ratings, diary, include_rewatch_in_averages=False)
+    assert unique_rated_film_count(merged) == 4
+    assert len(merged) == 4
+    ocean = merged[merged["Name"] == "Ocean's Eleven"].iloc[0]
+    assert float(ocean["Rating"]) == 3.0
+
+    views = ratings_for_averages(ratings, diary, include_rewatch_in_averages=True)
+    assert unique_rated_film_count(views) == 4
+    assert len(views) == 5  # two Ocean rows + Other + Third + Gap Only
+    ocean_views = views[views["Name"] == "Ocean's Eleven"]
+    assert len(ocean_views) == 2
+    assert round(float(ocean_views["Rating"].mean()), 2) == 4.0
+
+    # Entity with one unique film rated twice: mean 4.0, rated=1 (under gate T=3).
+    st = {
+        "Director X": {
+            "count": 2,
+            "rating_sum": 8.0,
+            "rated": 1,
+            "rating_n": 2,
+        }
+    }
+    assert _mean_from_stats(st["Director X"]) == 4.0
+    gated = _rank_named(st, by_avg=True, min_rated=3, limit=8)
+    assert gated == []
+    open_gate = _rank_named(st, by_avg=True, min_rated=1, limit=8)
+    assert open_gate[0]["avg"] == 4.0
+    assert open_gate[0]["rated"] == 1
+
+    opts = read_chart_options({"LETTERBOXD_INCLUDE_REWATCH_IN_AVERAGES": "true"})
+    assert opts.include_rewatch_in_averages is True
+    opts_off = read_chart_options({})
+    assert opts_off.include_rewatch_in_averages is False
 
 
 def test_diary_wins_over_ratings_csv() -> None:
@@ -469,6 +541,7 @@ def main() -> int:
         test_viewing_pace_is_monthly_not_yearly()
         test_peak_viewing_day_from_diary()
         test_diary_latest_beats_older_diary_and_ratings_csv()
+        test_rewatch_in_averages_mean_and_unique_threshold()
         test_diary_wins_over_ratings_csv()
         test_diary_fallback_when_no_ratings_csv(tmp)
         test_watch_window_keeps_undated_out_unless_asked()

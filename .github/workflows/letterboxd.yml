@@ -28,6 +28,11 @@ on:
         required: false
         default: "3"
         type: string
+      include_rewatch_in_averages:
+        description: Count each rated diary row (incl. rewatches) in average charts (true/false; default false = one rating per film)
+        required: false
+        default: "false"
+        type: string
       include_usa:
         description: Include USA in country tops (true/false)
         required: false
@@ -97,6 +102,7 @@ jobs:
           JOB_ID: ${{ inputs.job_id }}
           LETTERBOXD_TOP_N: ${{ inputs.top_n }}
           LETTERBOXD_MIN_RATED: ${{ inputs.min_rated }}
+          LETTERBOXD_INCLUDE_REWATCH_IN_AVERAGES: ${{ inputs.include_rewatch_in_averages }}
           LETTERBOXD_INCLUDE_USA: ${{ inputs.include_usa }}
           LETTERBOXD_INCLUDE_ENGLISH: ${{ inputs.include_english }}
           LETTERBOXD_INCLUDE_DRAMA: ${{ inputs.include_drama }}

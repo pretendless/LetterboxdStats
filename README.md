@@ -56,15 +56,26 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 | Command | What it does |
 | --- | --- |
-| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. |
+| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, whether rewatches count in averages, optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. |
 | `/start letterboxd` | The same wizard. This is what `https://t.me/lebxdbot?start=letterboxd` opens. |
 | `/stop` | Clears the wizard. If a chart run is already in GitHub Actions, it stops that run. |
 
 Dates are month before year. `2021-06.2022` means 2021-01-01 through 2022-06-30. A year is that whole year. A month is `06-2012` or `June 2012`. A day is `15-06-2012` or `15.06.2012`.
 
-## Customize which rows appear
+## Customize averages and which rows appear
 
-On **Customize**, after top size and the rating-count threshold, the wizard asks whether to remove some rows from the **watch-count** tops.
+On **Customize**, after top size and the rating-count threshold, the wizard asks whether **previous / rewatch diary views** should count in average ratings.
+
+| Choice | What happens |
+| --- | --- |
+| **No** (default) | One rating per unique film (Name+Year): latest diary rating, else `ratings.csv`. Rewatches do not inflate averages; they clutter the statistics. |
+| **Yes** | Each **rated diary row** contributes to qualitative means (including rewatches). Same spirit as the tip mean on **Most often in the diary**, applied to Average rating by …, higher/lower rating tops, colored averages on count bars, decade/year averages, and the diary summary mean. |
+
+The rating-count **threshold** still needs that many **unique rated films** (Name+Year), not rated diary rows. Count / watch bar **lengths** stay diary-hit counts; only how the **mean** is computed changes when Yes.
+
+**Most often in the diary** always uses all rated diary rows for its tip mean — this setting does not change that. **Search-keyword** film lists always list every view’s rating slot; the toggle does not change those lists. Watch-time average charts that already mean over each rated diary row in its watch bucket stay as they are.
+
+Next, the wizard asks whether to remove some rows from the **watch-count** tops.
 
 | Choice | What happens |
 | --- | --- |
@@ -83,7 +94,7 @@ These exclusions apply only to **count / watches** tops (genres, countries, dire
 
 **Search keywords** are a separate optional step after exclusions (or after answering No to remove rows). They do not hide chart rows. If you add any, then **after every chart PNG** the bot sends a text list per search keyword: every catalog film (same period / undated rules as the charts) where that keyword is a case-insensitive substring of film metadata — genre, director, top-5 billed actor, studio, country, language, or **release year**. The list is split into sections headed by match site (that fixed order); under each header films are numbered `1.`, `2.`, … and a film that matches several fields appears under each. Line shape: `1. Name (Year): 5, —, 3.5` (colon before ratings; `—` only for empty watch slots). Diary watches are oldest→newest by Watched Date; a diary row without Rating falls back to `ratings.csv` for that title, else `—`. A film with no diary rows (watched-only / ratings-only) gets one slot: `ratings.csv` or `—`. Empty sections are omitted. Skip or add none → no lists. Cap is the same as exclude keywords (20 words, 40 characters each).
 
-Bar and column charts label each bar with the **count** and the **average rating** (a dash when the average is below the threshold or missing). Exceptions: the Letterboxd rating distribution in extra stats shows each bucket’s **percent of all ratings on that chart** (bold, two decimal places) plus the absolute count in parentheses (`NN.NN% (count)`; the rating is already the x-axis); Viewing pace and other non-bar pace charts stay unlabeled. Scatter/dot **Average rating by …** charts put the mean above the marker and the rated-film count in parentheses below it. **Most often in the diary** keeps diary-row counts, but its average tip is the mean over all rated diary watches of that film (including rewatches) — the only chart that does not use the unique Name+Year rating.
+Bar and column charts label each bar with the **count** and the **average rating** (a dash when the average is below the threshold or missing). Exceptions: the Letterboxd rating distribution in extra stats shows each bucket’s **percent of all ratings on that chart** (bold, two decimal places) plus the absolute count in parentheses (`NN.NN% (count)`; the rating is already the x-axis); Viewing pace and other non-bar pace charts stay unlabeled. Scatter/dot **Average rating by …** charts put the mean above the marker and the rated-film count in parentheses below it. **Most often in the diary** keeps diary-row counts, and its average tip is always the mean over all rated diary watches of that film (including rewatches), independent of the customize toggle.
 
 ## Charts
 
@@ -103,7 +114,7 @@ Description (what Telegram shows on an unused/empty chat, and “What can this b
 
 > Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export.
 >
-> /start, then the ZIP. Next, keep the usual chart set or choose your own: top size from 1 to 100, a rating-count threshold for average tops, optional exclusions from count tops, and a watch period. /stop leaves the questions. A chart run that has already started stops too.
+> /start, then the ZIP. Next, keep the usual chart set or choose your own: top size from 1 to 100, a rating-count threshold for average tops, whether rewatches count in averages, optional exclusions from count tops, and a watch period. /stop leaves the questions. A chart run that has already started stops too.
 >
 > Author:
 > https://www.last.fm/user/pretendless
