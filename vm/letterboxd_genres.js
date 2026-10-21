@@ -211,7 +211,7 @@ export function letterboxdPromptText() {
   return (
     "Send the Letterboxd export ZIP as one document.\n\n" +
     "Letterboxd → Settings → Import & Export → Export Your Data.\n" +
-    "The archive needs diary.csv; watched.csv and ratings.csv are used in the catalog and averages. Cancel with /stop."
+    "The archive must include diary.csv. watched.csv and ratings.csv are used for the catalog and averages when present. Cancel with /stop."
   );
 }
 
