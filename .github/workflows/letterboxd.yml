@@ -38,6 +38,16 @@ on:
         required: false
         default: "true"
         type: string
+      include_drama:
+        description: Include Drama in genre charts (true/false)
+        required: false
+        default: "true"
+        type: string
+      include_comedy:
+        description: Include Comedy in genre charts (true/false)
+        required: false
+        default: "true"
+        type: string
       date_from:
         description: Inclusive watch-date start YYYY-MM-DD (empty = full span)
         required: false
@@ -79,6 +89,8 @@ jobs:
           LETTERBOXD_MIN_RATED: ${{ inputs.min_rated }}
           LETTERBOXD_INCLUDE_USA: ${{ inputs.include_usa }}
           LETTERBOXD_INCLUDE_ENGLISH: ${{ inputs.include_english }}
+          LETTERBOXD_INCLUDE_DRAMA: ${{ inputs.include_drama }}
+          LETTERBOXD_INCLUDE_COMEDY: ${{ inputs.include_comedy }}
           LETTERBOXD_DATE_FROM: ${{ inputs.date_from }}
           LETTERBOXD_DATE_TO: ${{ inputs.date_to }}
           LETTERBOXD_INCLUDE_UNDATED: ${{ inputs.include_undated }}

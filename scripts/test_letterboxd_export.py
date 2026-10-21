@@ -28,8 +28,14 @@ from letterboxd_export import (
     merged_film_ratings,
     scope_letterboxd_frames,
 )
-from letterboxd_genre_charts import _filter_entity_names
-from letterboxd_options import format_count_avg_label, is_english_language, is_usa_country
+from letterboxd_genre_charts import _filter_entity_names, _filter_genre_names
+from letterboxd_options import (
+    format_count_avg_label,
+    is_comedy_genre,
+    is_drama_genre,
+    is_english_language,
+    is_usa_country,
+)
 
 
 def _write_zip(
@@ -316,6 +322,17 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert not is_english_language("fr")
     assert _filter_entity_names("countries", ["France", "USA"], include_usa=False) == ["France"]
     assert _filter_entity_names("languages", ["en", "ja"], include_english=False) == ["ja"]
+    assert is_drama_genre("Drama")
+    assert is_drama_genre("drama")
+    assert not is_drama_genre("Comedy")
+    assert is_comedy_genre("Comedy")
+    assert not is_comedy_genre("Thriller")
+    assert _filter_genre_names(
+        ["Drama", "Comedy", "Thriller"], include_drama=False, include_comedy=False
+    ) == ["Thriller"]
+    assert _filter_genre_names(["Drama", "Action"], include_drama=False) == ["Action"]
+    assert _filter_genre_names(["Comedy", "Horror"], include_comedy=False) == ["Horror"]
+    assert _filter_genre_names(["Drama", "Comedy"]) == ["Drama", "Comedy"]
 
 
 def main() -> int:

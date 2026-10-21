@@ -5,12 +5,13 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 
-const GENRE_PNGS = [
-  "genre_counts_by_viewing_year.png",
+// Genre PNGs: watches → higher rating → (lower rating) → release decade → watch year.
+export const GENRE_PNGS = [
   "watches_by_genre.png",
   "average_rating_by_genre.png",
   "worst_average_rating_by_genre.png",
   "genre_by_release_decade.png",
+  "genre_counts_by_viewing_year.png",
   "watches_by_country.png",
   "average_rating_by_country.png",
   "worst_average_rating_by_country.png",

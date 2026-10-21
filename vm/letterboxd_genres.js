@@ -107,6 +107,8 @@ export function defaultLetterboxdOptions() {
     minRated: LETTERBOXD_MIN_RATED_DEFAULT,
     includeUSA: true,
     includeEnglish: true,
+    includeDrama: true,
+    includeComedy: true,
     dateFrom: "",
     dateTo: "",
     includeUndated: false,
@@ -130,6 +132,8 @@ export function normalizeLetterboxdOptions(options) {
     minRated: clampInt(src.minRated, LETTERBOXD_MIN_RATED_MIN, LETTERBOXD_MIN_RATED_MAX, LETTERBOXD_MIN_RATED_DEFAULT),
     includeUSA: src.includeUSA == null ? true : Boolean(src.includeUSA),
     includeEnglish: src.includeEnglish == null ? true : Boolean(src.includeEnglish),
+    includeDrama: src.includeDrama == null ? true : Boolean(src.includeDrama),
+    includeComedy: src.includeComedy == null ? true : Boolean(src.includeComedy),
     dateFrom: windowOk ? dateFrom : "",
     dateTo: windowOk ? dateTo : "",
     includeUndated: windowOk ? Boolean(src.includeUndated) : false,
@@ -147,6 +151,8 @@ export function encodeAwaitLetterboxd(state = {}) {
   if (state.minRated != null) out.minRated = state.minRated;
   if (state.includeUSA != null) out.includeUSA = Boolean(state.includeUSA);
   if (state.includeEnglish != null) out.includeEnglish = Boolean(state.includeEnglish);
+  if (state.includeDrama != null) out.includeDrama = Boolean(state.includeDrama);
+  if (state.includeComedy != null) out.includeComedy = Boolean(state.includeComedy);
   if (state.dateFrom) out.dateFrom = String(state.dateFrom);
   if (state.dateTo) out.dateTo = String(state.dateTo);
   if (state.includeUndated != null) out.includeUndated = Boolean(state.includeUndated);
@@ -172,6 +178,8 @@ export function decodeAwaitLetterboxd(raw) {
       minRated: parsed.minRated == null ? null : parsed.minRated,
       includeUSA: parsed.includeUSA == null ? null : Boolean(parsed.includeUSA),
       includeEnglish: parsed.includeEnglish == null ? null : Boolean(parsed.includeEnglish),
+      includeDrama: parsed.includeDrama == null ? null : Boolean(parsed.includeDrama),
+      includeComedy: parsed.includeComedy == null ? null : Boolean(parsed.includeComedy),
       dateFrom: String(parsed.dateFrom || ""),
       dateTo: String(parsed.dateTo || ""),
       includeUndated: parsed.includeUndated == null ? null : Boolean(parsed.includeUndated),
@@ -243,6 +251,7 @@ export function letterboxdAckText(jobId, options) {
     "(calendar, extra stats, genres).\n\n" +
     `Tops: ${opts.topN}. Threshold: ${opts.minRated}. ` +
     `USA: ${opts.includeUSA ? "yes" : "no"}. English: ${opts.includeEnglish ? "yes" : "no"}. ` +
+    `Drama: ${opts.includeDrama ? "yes" : "no"}. Comedy: ${opts.includeComedy ? "yes" : "no"}. ` +
     `Period: ${period}.` +
     undated +
     `\n\nid: ${jobId}`
@@ -632,6 +641,24 @@ function promptFor(step, state, now = new Date()) {
       reply_markup: letterboxdYesNoKeyboard("lb:en"),
     };
   }
+  if (step === "drama") {
+    return {
+      text: choicePrompt(
+        "Show Drama in the genre tops?",
+        "Drama often takes the first rows. No removes it from the genre charts.",
+      ),
+      reply_markup: letterboxdYesNoKeyboard("lb:drama"),
+    };
+  }
+  if (step === "comedy") {
+    return {
+      text: choicePrompt(
+        "Show Comedy in the genre tops?",
+        "Comedy is often near the top. No removes it from the genre charts.",
+      ),
+      reply_markup: letterboxdYesNoKeyboard("lb:com"),
+    };
+  }
   if (step === "period") {
     return {
       text: choicePrompt(
@@ -692,6 +719,8 @@ export function parseLetterboxdCallback(data) {
   if (match) return { step: "min_rated", value: Number(match[1]) };
   if (raw === "lb:usa:1" || raw === "lb:usa:0") return { step: "usa", value: raw.endsWith("1") };
   if (raw === "lb:en:1" || raw === "lb:en:0") return { step: "english", value: raw.endsWith("1") };
+  if (raw === "lb:drama:1" || raw === "lb:drama:0") return { step: "drama", value: raw.endsWith("1") };
+  if (raw === "lb:com:1" || raw === "lb:com:0") return { step: "comedy", value: raw.endsWith("1") };
   if (raw === "lb:span") return { step: "period", choice: "full" };
   if (raw === "lb:rng") return { step: "period", choice: "custom" };
   if (raw === "lb:y:1" || raw === "lb:y:3" || raw === "lb:y:5") {
@@ -796,7 +825,17 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
   if (step === "english") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
     if (value == null) return retry(state, "Need yes or no. The report has not started.");
-    return go({ ...state, includeEnglish: value }, "period", now);
+    return go({ ...state, includeEnglish: value }, "drama", now);
+  }
+  if (step === "drama") {
+    const value = kind === "callback" ? input.value : parseYesNoText(input.text);
+    if (value == null) return retry(state, "Need yes or no. The report has not started.");
+    return go({ ...state, includeDrama: value }, "comedy", now);
+  }
+  if (step === "comedy") {
+    const value = kind === "callback" ? input.value : parseYesNoText(input.text);
+    if (value == null) return retry(state, "Need yes or no. The report has not started.");
+    return go({ ...state, includeComedy: value }, "period", now);
   }
   if (step === "period") {
     const choice = kind === "callback" ? input.choice : parsePeriodText(input.text);
@@ -866,6 +905,8 @@ export function buildLetterboxdDispatch({ repo, workflow, ref, jobId, chatId, fi
         min_rated: String(opts.minRated),
         include_usa: opts.includeUSA ? "true" : "false",
         include_english: opts.includeEnglish ? "true" : "false",
+        include_drama: opts.includeDrama ? "true" : "false",
+        include_comedy: opts.includeComedy ? "true" : "false",
         date_from: opts.dateFrom,
         date_to: opts.dateTo,
         include_undated: opts.includeUndated ? "true" : "false",
