@@ -1002,14 +1002,14 @@ def chart_decade_rating(
     liked_keys=None,
     top_n: int = TOP_N_DEFAULT,
 ) -> None:
-    """Extra stats: release-decade catalog counts + diary rating distribution.
+    """Extra stats: release-decade catalog counts + rating distribution.
 
     Top panel unit: catalog hits (every diary row + one watched-only film per
     Name+Year). Dated rows stack by watch year; undated catalog rows use the
     ``No date`` segment. Tip mean and ♥ use catalog-scoped ratings / likes.
 
-    Bottom panel stays diary-dated rated entries stacked by watch year (needs a
-    real watch date for the stack color).
+    Bottom panel: rated diary rows stacked by watch year, plus undated rated
+    catalog entries (ratings.csv / watched-only rated) under ``No date``.
     """
     diary = df.copy()
     cat = (catalog if catalog is not None else diary).copy()
@@ -1094,22 +1094,71 @@ def chart_decade_rating(
                     if label in means.index:
                         decade_avgs[i] = f"{float(means.loc[label]):.2f}"
 
-    # --- Bottom: Rating distribution (diary-dated only) ---
+    # --- Bottom: Rating distribution (dated diary + undated rated catalog) ---
     diary = diary.copy()
-    diary["watch_year"] = diary["Watched Date"].dt.year
-    diary = diary[diary["watch_year"].notna()].copy()
+    if "Watched Date" in diary.columns:
+        diary["watch_year"] = diary["Watched Date"].dt.year
+    else:
+        diary["watch_year"] = np.nan
     if not diary.empty:
-        diary["watch_year"] = diary["watch_year"].astype(int)
-    if not diary.empty and "Rating" in diary.columns:
-        diary["rating_bin"] = diary["Rating"].map(round_rating)
         diary["_film_key"] = film_name_year_key(diary)
-    elif not diary.empty:
-        diary["rating_bin"] = np.nan
-        diary["_film_key"] = film_name_year_key(diary)
+        if "Rating" in diary.columns:
+            diary["rating_bin"] = diary["Rating"].map(round_rating)
+        else:
+            diary["rating_bin"] = np.nan
 
-    rating_years = sorted(diary["watch_year"].unique().tolist()) if not diary.empty else []
+    rating_lookup: dict[str, float] = {}
+    if film_ratings is not None and not film_ratings.empty:
+        fr = film_ratings.copy()
+        if "_film_key" not in fr.columns:
+            fr["_film_key"] = film_name_year_key(fr)
+        for _, rrow in fr.iterrows():
+            key = str(rrow["_film_key"])
+            if key in rating_lookup:
+                continue
+            if pd.notna(rrow.get("Rating")):
+                try:
+                    rating_lookup[key] = float(rrow["Rating"])
+                except (TypeError, ValueError):
+                    pass
+
+    rating_pairs: list[tuple[int, float, str]] = []
+    diary_keys: set[str] = set()
+    if not diary.empty:
+        diary_keys = {str(k) for k in diary["_film_key"].tolist()}
+        for _, row in diary.iterrows():
+            rating = row.get("rating_bin")
+            if rating is None or (isinstance(rating, float) and np.isnan(rating)):
+                continue
+            if rating not in RATING_BINS:
+                continue
+            if pd.notna(row.get("watch_year")):
+                try:
+                    year_key = int(row["watch_year"])
+                except (TypeError, ValueError):
+                    year_key = UNDATED_WATCH_YEAR
+            else:
+                year_key = UNDATED_WATCH_YEAR
+            rating_pairs.append((year_key, float(rating), str(row["_film_key"])))
+
+    # Watched-only / ratings-only undated catalog: one rated entry under No date.
+    for _, row in cat.iterrows():
+        film_key = str(row["_film_key"])
+        if film_key in diary_keys:
+            continue
+        if pd.notna(row.get("_watch_year")):
+            continue
+        rating_val = row.get("Rating") if pd.notna(row.get("Rating")) else rating_lookup.get(film_key)
+        rating = round_rating(rating_val)
+        if rating is None or rating not in RATING_BINS:
+            continue
+        rating_pairs.append((UNDATED_WATCH_YEAR, float(rating), film_key))
+
+    dated_rating_years = sorted({y for y, _r, _k in rating_pairs if y != UNDATED_WATCH_YEAR})
+    has_rating_undated = any(y == UNDATED_WATCH_YEAR for y, _r, _k in rating_pairs)
+    rating_years = dated_rating_years + ([UNDATED_WATCH_YEAR] if has_rating_undated else [])
     if not rating_years:
-        # Keep a drawable bottom axis when diary has no dated ratings.
+        # Keep a drawable bottom axis when there are no rated entries.
         rating_years = [y for y in decade_years if y != UNDATED_WATCH_YEAR] or list(decade_years)
     rating_colors_map = year_colors(rating_years)
     rating_year_index = {y: i for i, y in enumerate(rating_years)}
@@ -1117,17 +1166,19 @@ def chart_decade_rating(
     rating_matrix = np.zeros((len(rating_years), len(RATING_BINS)), dtype=float)
     rating_index = {r: i for i, r in enumerate(RATING_BINS)}
     rating_keys = {r: set() for r in RATING_BINS}
-    for _, row in diary.iterrows():
-        rating = row.get("rating_bin")
-        if rating not in rating_index:
+    for year_key, rating, film_key in rating_pairs:
+        if year_key not in rating_year_index or rating not in rating_index:
             continue
-        wy = int(row["watch_year"])
-        if wy not in rating_year_index:
-            continue
-        rating_matrix[rating_year_index[wy], rating_index[rating]] += 1
-        rating_keys[rating].add(str(row["_film_key"]))
+        rating_matrix[rating_year_index[year_key], rating_index[rating]] += 1
+        rating_keys[rating].add(film_key)
 
     rating_liked = [count_liked_among_keys(rating_keys[r], liked) for r in RATING_BINS]
+
+    # Legend covers both panels: show No date when either stack uses it.
+    legend_years = list(decade_years)
+    if has_rating_undated and UNDATED_WATCH_YEAR not in legend_years:
+        legend_years = legend_years + [UNDATED_WATCH_YEAR]
+    legend_palette = watch_year_palette(legend_years)
 
     fig, axes = plt.subplots(2, 1, figsize=(15 if most_liked else 14, 10), sharey=False)
     fig.suptitle("Letterboxd extra stats", fontsize=14, y=0.98)
@@ -1162,7 +1213,7 @@ def chart_decade_rating(
     right_frac = 0.78 if most_liked else 0.88
     fig.tight_layout(rect=[0, 0, right_frac, 0.96])
     draw_watch_year_most_liked_panel(
-        fig, axes[0], decade_years, decade_palette, most_liked, fontsize=8, title_fontsize=9
+        fig, axes[0], legend_years, legend_palette, most_liked, fontsize=8, title_fontsize=9
     )
     _place_count_avg_above_totals(
         fig,

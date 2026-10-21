@@ -49,7 +49,7 @@ def test_display_lang():
 
 
 def test_no_date_legend_swatch_is_logo_gray_gradient():
-    """Watch-year legend paints No date as a horizontal logo-charcoal gradient."""
+    """Watch-year legend paints No date as a vertical (logo-native) charcoal gradient."""
     import matplotlib.pyplot as plt
     import matplotlib.colors as mcolors
     from matplotlib.lines import Line2D
@@ -58,10 +58,14 @@ def test_no_date_legend_swatch_is_logo_gray_gradient():
         UNDATED_GRADIENT_LEFT_HEX,
         UNDATED_GRADIENT_RIGHT_HEX,
         UNDATED_LEGEND_EDGE,
+        UNDATED_LOGO_BOTTOM_HEX,
+        UNDATED_LOGO_TOP_HEX,
         UNDATED_WATCH_YEAR,
         UNDATED_WATCH_YEAR_RGBA,
         UndatedLegendProxy,
-        undated_horizontal_colormap,
+        paint_undated_hbar_segments,
+        paint_undated_vbar_segments,
+        undated_charcoal_colormap,
         undated_legend_handle,
         undated_legend_handler_map,
     )
@@ -70,9 +74,11 @@ def test_no_date_legend_swatch_is_logo_gray_gradient():
     palette = watch_year_palette(years)
     assert palette[UNDATED_WATCH_YEAR] == UNDATED_WATCH_YEAR_RGBA
     assert palette[UNDATED_WATCH_YEAR] != (1.0, 1.0, 1.0, 1.0)
-    cmap = undated_horizontal_colormap()
-    assert mcolors.to_hex(cmap(0.0)).lower() == UNDATED_GRADIENT_LEFT_HEX.lower()
-    assert mcolors.to_hex(cmap(1.0)).lower() == UNDATED_GRADIENT_RIGHT_HEX.lower()
+    cmap = undated_charcoal_colormap()
+    assert mcolors.to_hex(cmap(0.0)).lower() == UNDATED_LOGO_TOP_HEX.lower()
+    assert mcolors.to_hex(cmap(1.0)).lower() == UNDATED_LOGO_BOTTOM_HEX.lower()
+    assert UNDATED_GRADIENT_LEFT_HEX == UNDATED_LOGO_TOP_HEX
+    assert UNDATED_GRADIENT_RIGHT_HEX == UNDATED_LOGO_BOTTOM_HEX
 
     handler = undated_legend_handler_map()[UndatedLegendProxy]
     artists = handler.create_artists(
@@ -80,8 +86,42 @@ def test_no_date_legend_swatch_is_logo_gray_gradient():
     )
     fills = [a for a in artists if isinstance(a, Rectangle) and a.get_edgecolor()[3] == 0.0]
     assert len(fills) >= 2
-    assert mcolors.to_hex(fills[0].get_facecolor()).lower() == UNDATED_GRADIENT_LEFT_HEX.lower()
-    assert mcolors.to_hex(fills[-1].get_facecolor()).lower() == UNDATED_GRADIENT_RIGHT_HEX.lower()
+    # Vertical swatch: first strip is logo top, last is logo bottom.
+    assert mcolors.to_hex(fills[0].get_facecolor()).lower() == UNDATED_LOGO_TOP_HEX.lower()
+    assert mcolors.to_hex(fills[-1].get_facecolor()).lower() == UNDATED_LOGO_BOTTOM_HEX.lower()
+    # Strips stack along y (logo-native), not along x.
+    assert fills[0].get_width() == fills[-1].get_width()
+    assert fills[0].get_y() > fills[-1].get_y()
+
+    fig_v, ax_v = plt.subplots(figsize=(3, 2))
+    try:
+        # Vertical column: gradient runs top→bottom (varying y, full width).
+        paint_undated_vbar_segments(
+            ax_v, x=[0.0], bottoms=[0.0], heights=[2.0], width=0.8, n_stops=4
+        )
+        v_fills = list(ax_v.patches)
+        assert len(v_fills) == 4
+        assert mcolors.to_hex(v_fills[0].get_facecolor()).lower() == UNDATED_LOGO_TOP_HEX.lower()
+        assert mcolors.to_hex(v_fills[-1].get_facecolor()).lower() == UNDATED_LOGO_BOTTOM_HEX.lower()
+        assert abs(v_fills[0].get_width() - v_fills[-1].get_width()) < 1e-9
+        assert v_fills[0].get_y() > v_fills[-1].get_y()
+    finally:
+        plt.close(fig_v)
+
+    fig_h, ax_h = plt.subplots(figsize=(3, 2))
+    try:
+        # Horizontal bar: gradient runs left→right (varying x, full height).
+        paint_undated_hbar_segments(
+            ax_h, y=[0.0], lefts=[0.0], widths=[2.0], height=0.8, n_stops=4
+        )
+        h_fills = list(ax_h.patches)
+        assert len(h_fills) == 4
+        assert mcolors.to_hex(h_fills[0].get_facecolor()).lower() == UNDATED_LOGO_TOP_HEX.lower()
+        assert mcolors.to_hex(h_fills[-1].get_facecolor()).lower() == UNDATED_LOGO_BOTTOM_HEX.lower()
+        assert abs(h_fills[0].get_height() - h_fills[-1].get_height()) < 1e-9
+        assert h_fills[0].get_x() < h_fills[-1].get_x()
+    finally:
+        plt.close(fig_h)
 
     fig, ax = plt.subplots(figsize=(4, 2))
     try:
@@ -631,6 +671,9 @@ def test_non_date_count_charts_include_watched_only(tmp_path: Path | None = None
 
     def grab_decade(fig, dest, **kwargs):
         decade_captured["texts"] = [t.get_text() for t in fig.axes[0].texts]
+        decade_captured["rating_texts"] = [t.get_text() for t in fig.axes[1].texts]
+        # Bottom panel must stack the watched-only rated film under No date.
+        decade_captured["rating_patches"] = list(fig.axes[1].patches)
         real_decade_save(fig, dest, **kwargs)
 
     cal.save_dark_figure = grab_decade
@@ -647,6 +690,13 @@ def test_non_date_count_charts_include_watched_only(tmp_path: Path | None = None
 
     assert "2" in decade_captured["texts"]
     assert "3.50" in decade_captured["texts"]
+    # Rating distribution: dated 4.0 + undated watched-only 3.0 → 50% each; tips include both.
+    rating_texts = decade_captured["rating_texts"]
+    assert "50.00%" in rating_texts
+    assert "(1)" in rating_texts
+    assert sum(1 for t in rating_texts if t == "50.00%") >= 2
+    # No date charcoal segments are painted as many thin patches (not one solid bar).
+    assert len(decade_captured["rating_patches"]) > 2
 
     genre_captured: dict = {}
     release_captured: dict = {}
@@ -987,6 +1037,75 @@ def test_letterboxd_rating_distribution_percent_tips(
     assert any("." in t or t == "—" for t in decade_texts)
 
 
+def test_rating_distribution_includes_undated_no_date(
+    tmp_path: Path | None = None,
+):
+    """Bottom panel stacks undated rated catalog under No date; tips and legend update."""
+    import letterboxd_calendar_charts as cal
+    import re
+    from letterboxd_export import film_name_year_key
+    from letterboxd_palette import UNDATED_WATCH_YEAR_LABEL
+
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-rating-undated")
+    out.mkdir(parents=True, exist_ok=True)
+
+    diary = pd.DataFrame(
+        [
+            {
+                "Name": "Dated",
+                "Year": 2010,
+                "Rating": 4.0,
+                "Watched Date": "2020-05-01",
+            }
+        ]
+    )
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+    watched_only = pd.DataFrame(
+        [{"Name": "Undated Rated", "Year": 2012, "Rating": 4.0}]
+    )
+    catalog = pd.concat([diary, watched_only], ignore_index=True, sort=False)
+    film_ratings = pd.DataFrame(
+        [
+            {"Name": "Dated", "Year": 2010, "Rating": 4.0},
+            {"Name": "Undated Rated", "Year": 2012, "Rating": 4.0},
+        ]
+    )
+    film_ratings["_film_key"] = film_name_year_key(film_ratings)
+
+    captured: dict = {}
+    real_save = cal.save_dark_figure
+
+    def grab(fig, dest, **kwargs):
+        captured["rating_texts"] = [t.get_text() for t in fig.axes[1].texts]
+        leg = fig.axes[0].get_legend()
+        captured["legend"] = (
+            [t.get_text() for t in leg.get_texts()] if leg is not None else []
+        )
+        real_save(fig, dest, **kwargs)
+
+    cal.save_dark_figure = grab
+    try:
+        cal.chart_decade_rating(
+            diary,
+            out / "extra_stats_decade_rating.png",
+            catalog=catalog,
+            film_ratings=film_ratings,
+            top_n=5,
+        )
+    finally:
+        cal.save_dark_figure = real_save
+
+    # Two rated entries in the 4.0 bin → 100.00% (2); undated doubles the count.
+    pct_re = re.compile(r"^\d+\.\d{2}%$")
+    count_re = re.compile(r"^\(\d+\)$")
+    pcts = [t for t in captured["rating_texts"] if pct_re.fullmatch(t)]
+    counts = [t for t in captured["rating_texts"] if count_re.fullmatch(t)]
+    assert "100.00%" in pcts
+    assert "(2)" in counts
+    assert sum(int(t.strip("()")) for t in counts) == 2
+    assert UNDATED_WATCH_YEAR_LABEL in captured["legend"]
+
+
 def test_top_rewatches_avg_is_diary_row_mean(tmp_path: Path | None = None):
     """Most often in the diary: tip mean uses every rated diary row, not latest/merged."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-rewatch-diary-mean")
@@ -1270,6 +1389,7 @@ if __name__ == "__main__":
     test_watch_time_charts_label_every_position()
     test_percent_shares_two_decimals()
     test_letterboxd_rating_distribution_percent_tips()
+    test_rating_distribution_includes_undated_no_date()
     test_top_rewatches_avg_is_diary_row_mean()
     test_views_count_bars_show_avg_or_dash()
     test_stacked_count_hbar_long_names()
