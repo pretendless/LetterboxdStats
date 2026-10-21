@@ -72,20 +72,20 @@ One palette, `palette_color` in `scripts/letterboxd_palette.py`. It is a smooth 
 - 0 deep purple `#5922BF` = RGB (89, 34, 191)
 - 0.15 blue `#3FB7EB` = RGB (63, 183, 235)
 - 0.3 green `#03E53E` = RGB (3, 229, 62)
-- 0.7 orange `#FC7A02` = RGB (252, 122, 2)
+- 0.8 orange `#FC7A02` = RGB (252, 122, 2)
 - 1 deep burgundy `#890E3A` = RGB (137, 14, 58)
 
 The three middle knots are the measured logo circles (median sRGB of each non-overlapping interior: 12px erosion, then a center disk). Their positions are `LOGO_BLUE_T`, `LOGO_GREEN_T`, `LOGO_ORANGE_T`; the uneven spacing is deliberate so the scale is not homogeneous. The ends are `END_PURPLE_RGB` and `END_BURGUNDY_RGB`: darker than the logo colors (OKLab L 0.44 and 0.41) but still at least 2.2:1 on black. A knot returns those bytes exactly. Each segment is the straight OKLab line between its knots, so lightness does not jump.
 
 Never use hue bands, hard cuts, holds, or easing.
 
-A rating maps with `t = 1 − (rating − 0.5) / 4.5` (`RATING_VMIN = 0.5`, `RATING_VMAX = 5.0`), clamped to 0–1. So 5 is deep purple, 0.5 is deep burgundy, 4.325 is logo blue, 3.65 is green, and 1.85 is logo orange. This reversal is only the rating map. Discrete series below still start at the purple side.
+A rating maps with `t = 1 − (rating − 0.5) / 4.5` (`RATING_VMIN = 0.5`, `RATING_VMAX = 5.0`), clamped to 0–1. So 5 is deep purple, 0.5 is deep burgundy, 4.325 is logo blue, 3.65 is green, and 1.4 is logo orange. This reversal is only the rating map. Discrete series below still start at the purple side.
 
 Discrete ordered series (watch years, ranked genres), earliest or lowest first, use `categorical_positions`. This is the permanent rule:
 
 - N = 1 → `[0.3]`, exact logo green
-- N = 2 → `[0.15, 0.7]`, exact logo blue and orange
-- N = 3 → `[0.15, 0.3, 0.7]`, the three logo colors
+- N = 2 → `[0.15, 0.8]`, exact logo blue and orange
+- N = 3 → `[0.15, 0.3, 0.8]`, the three logo colors
 - N ≥ 4 → even bin midpoints `t_i = (i + 0.5) / N` for `i = 0 .. N−1`
 
 Four or more values sample the full 0–1 palette. There is no quadratic bend and no snap onto the logo knots. N = 4 is `[0.125, 0.375, 0.625, 0.875]`. N = 7 is `[0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5] / 7`.
