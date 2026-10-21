@@ -38,7 +38,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from letterboxd_export import (  # noqa: E402
+    film_name_year_key,
     load_export,
+    load_ratings,
     ratings_for_catalog,
 )
 from letterboxd_options import (  # noqa: E402
@@ -715,15 +717,117 @@ def film_search_match_sites(meta, release_year_values, keyword: str) -> list[str
     ]
 
 
-def build_search_keyword_lists(catalog, cache, keywords) -> list[dict]:
+def format_search_rating_slot(value) -> str:
+    """Star value for one watch slot, or em dash when missing (same as chart tips)."""
+    if value is None:
+        return "—"
+    try:
+        if pd.isna(value):
+            return "—"
+    except (TypeError, ValueError):
+        pass
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    if not (num > 0):
+        return "—"
+    if float(num).is_integer():
+        return str(int(num))
+    # Letterboxd half-stars: keep one decimal when needed (3.5), drop junk.
+    text = f"{num:.2f}".rstrip("0").rstrip(".")
+    return text or "—"
+
+
+def ratings_csv_lookup(ratings_csv) -> dict[str, float]:
+    """Name|||Year → rating from ratings.csv only (one value per film)."""
+    if ratings_csv is None or getattr(ratings_csv, "empty", True):
+        return {}
+    if "Rating" not in ratings_csv.columns:
+        return {}
+    work = ratings_csv[ratings_csv["Rating"].notna()].copy()
+    if work.empty:
+        return {}
+    work = work.copy()
+    work["_film_key"] = film_name_year_key(work)
+    out: dict[str, float] = {}
+    for _, row in work.iterrows():
+        key = str(row["_film_key"])
+        if key in out:
+            continue
+        try:
+            out[key] = float(row["Rating"])
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def watch_rating_slots_for_film(name, year, diary, ratings_by_key) -> list[str]:
+    """One rating/dash per watch for this Name+Year.
+
+    Diary rows (scoped to the run): oldest→newest by Watched Date (stable
+    mergesort, same spirit as latest-rated helpers). Per slot: that row's
+    Rating if set, else ratings.csv for the film, else ``—``.
+
+    No diary rows (watched-only / ratings-only catalog entry): exactly one
+    slot — ratings.csv if present, else ``—``. Do not add a watched.csv slot
+    on top of diary rows.
+    """
+    key_year = ""
+    if year is not None and str(year).strip() != "":
+        try:
+            key_year = str(int(year))
+        except (TypeError, ValueError):
+            key_year = str(year).strip()
+    film_key = f"{str(name or '').strip()}|||{key_year}"
+    fallback = None
+    if isinstance(ratings_by_key, dict) and film_key in ratings_by_key:
+        fallback = ratings_by_key[film_key]
+
+    subset = None
+    if diary is not None and not getattr(diary, "empty", True):
+        work = diary.copy()
+        work["_film_key"] = film_name_year_key(work)
+        subset = work[work["_film_key"] == film_key]
+        if not subset.empty and "Watched Date" in subset.columns:
+            subset = subset.sort_values("Watched Date", kind="mergesort", na_position="last")
+
+    if subset is not None and not subset.empty:
+        slots: list[str] = []
+        for _, row in subset.iterrows():
+            rating = row.get("Rating") if hasattr(row, "get") else row["Rating"]
+            if rating is not None and pd.notna(rating):
+                slots.append(format_search_rating_slot(rating))
+            elif fallback is not None:
+                slots.append(format_search_rating_slot(fallback))
+            else:
+                slots.append("—")
+        return slots
+
+    if fallback is not None:
+        return [format_search_rating_slot(fallback)]
+    return ["—"]
+
+
+def build_search_keyword_lists(
+    catalog,
+    cache,
+    keywords,
+    *,
+    diary=None,
+    ratings_csv=None,
+) -> list[dict]:
     """Film lists per search keyword over the same catalog the charts use.
 
-    Each entry: ``{keyword, films: [{name, year, matched: [...]}]}``.
-    Films are unique Name+Year, sorted by year then name. Empty keywords → [].
+    Each entry: ``{keyword, films: [{name, year, matched: [...], ratings: [...]}]}``.
+    ``ratings`` has one value per watch (diary order oldest→newest, or one
+    watched-only slot). Films are unique Name+Year, sorted by year then name.
+    Empty keywords → [].
     """
     words = [str(w).strip() for w in (keywords or ()) if str(w).strip()]
     if not words or catalog is None or getattr(catalog, "empty", True):
         return []
+    ratings_by_key = ratings_csv_lookup(ratings_csv)
     films = catalog.drop_duplicates(subset=["Name", "Year"]).copy()
     rows = []
     for _, row in films.iterrows():
@@ -745,6 +849,7 @@ def build_search_keyword_lists(catalog, cache, keywords) -> list[dict]:
                 "year": year_int,
                 "meta": meta,
                 "year_values": year_values,
+                "ratings": watch_rating_slots_for_film(name, year_int, diary, ratings_by_key),
             }
         )
     rows.sort(
@@ -766,6 +871,7 @@ def build_search_keyword_lists(catalog, cache, keywords) -> list[dict]:
                     "name": item["name"],
                     "year": item["year"],
                     "matched": sites,
+                    "ratings": list(item["ratings"]),
                 }
             )
         out.append({"keyword": word, "films": matched_films})
@@ -1486,7 +1592,14 @@ def main():
         encoding="utf-8",
     )
 
-    search_lists = build_search_keyword_lists(catalog, cache, opts.search_keywords)
+    ratings_csv = load_ratings(sys.argv[1])
+    search_lists = build_search_keyword_lists(
+        catalog,
+        cache,
+        opts.search_keywords,
+        diary=diary,
+        ratings_csv=ratings_csv,
+    )
     if search_lists:
         write_search_keyword_lists(Path("search_keyword_lists.json"), search_lists)
         genre_summary["search_keyword_film_counts"] = {
