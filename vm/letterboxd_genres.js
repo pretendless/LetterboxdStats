@@ -309,29 +309,99 @@ export function letterboxdInvalidZipText() {
 /** @deprecated use letterboxdInvalidZipText */
 export const genresInvalidZipText = letterboxdInvalidZipText;
 
-export function letterboxdAckText(jobId, options) {
+function formatKeywordSummaryList(words) {
+  return words.length ? words.map((word) => `"${word}"`).join(", ") : "none";
+}
+
+/** Compact settings paragraph used in the ZIP ack and Paste settings mode. */
+export function formatLetterboxdSettingsSummary(options) {
   const opts = normalizeLetterboxdOptions(options);
   const period = opts.dateFrom ? `${opts.dateFrom} — ${opts.dateTo}` : "full";
   const undated = opts.dateFrom
     ? `\nNo diary date: ${opts.includeUndated ? "yes" : "no"}.`
     : "";
-  const keywords = opts.excludeKeywords.length
-    ? opts.excludeKeywords.map((word) => `"${word}"`).join(", ")
-    : "none";
-  const search = opts.searchKeywords.length
-    ? opts.searchKeywords.map((word) => `"${word}"`).join(", ")
-    : "none";
   return (
-    "ZIP received. Building Letterboxd charts with GitHub Actions — PNGs will arrive in this chat " +
-    "(calendar, extra stats, genres).\n\n" +
     `Tops: ${opts.topN}. Threshold: ${opts.minRated}. ` +
     `Rewatches in averages: ${opts.includeRewatchInAverages ? "yes" : "no"}. ` +
     `USA: ${opts.includeUSA ? "yes" : "no"}. English: ${opts.includeEnglish ? "yes" : "no"}. ` +
     `Drama: ${opts.includeDrama ? "yes" : "no"}. Comedy: ${opts.includeComedy ? "yes" : "no"}. ` +
-    `Keyword exclusions: ${keywords}. ` +
-    `Search keywords: ${search}. ` +
+    `Keyword exclusions: ${formatKeywordSummaryList(opts.excludeKeywords)}. ` +
+    `Search keywords: ${formatKeywordSummaryList(opts.searchKeywords)}. ` +
     `Period: ${period}.` +
-    undated +
+    undated
+  );
+}
+
+const SETTINGS_SUMMARY_RE =
+  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*USA:\s*(yes|no)\.\s*English:\s*(yes|no)\.\s*Drama:\s*(yes|no)\.\s*Comedy:\s*(yes|no)\.\s*Keyword exclusions:\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Search keywords:\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
+
+const NO_DIARY_DATE_RE = /No diary date:\s*(yes|no)\./i;
+
+function parseQuotedKeywordList(raw) {
+  const value = String(raw || "").trim();
+  if (!value || /^none$/i.test(value)) return [];
+  const words = [];
+  const re = /"([^"]*)"/g;
+  let match;
+  while ((match = re.exec(value))) {
+    words.push(match[1]);
+  }
+  return words;
+}
+
+/**
+ * Locate and parse a settings summary paragraph (from formatLetterboxdSettingsSummary)
+ * inside arbitrary surrounding text. Returns normalized options, or null.
+ */
+export function parseLetterboxdSettingsSummary(text) {
+  const src = String(text || "");
+  const match = src.match(SETTINGS_SUMMARY_RE);
+  if (!match) return null;
+  const topN = Number(match[1]);
+  const minRated = Number(match[2]);
+  if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
+  if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
+  if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
+
+  const yesNo = (value) => String(value).toLowerCase() === "yes";
+  const periodRaw = String(match[10] || "").trim();
+  let dateFrom = "";
+  let dateTo = "";
+  let includeUndated = false;
+  if (!/^full$/i.test(periodRaw)) {
+    const dates = periodRaw.match(/(\d{4}-\d{2}-\d{2})\s*[—–-]\s*(\d{4}-\d{2}-\d{2})/);
+    if (!dates || dates[2] < dates[1]) return null;
+    dateFrom = dates[1];
+    dateTo = dates[2];
+    const afterPeriod = src.slice((match.index || 0) + match[0].length);
+    const undated = afterPeriod.match(NO_DIARY_DATE_RE);
+    if (undated) includeUndated = yesNo(undated[1]);
+  }
+
+  return normalizeLetterboxdOptions({
+    topN,
+    minRated,
+    includeRewatchInAverages: yesNo(match[3]),
+    includeUSA: yesNo(match[4]),
+    includeEnglish: yesNo(match[5]),
+    includeDrama: yesNo(match[6]),
+    includeComedy: yesNo(match[7]),
+    excludeKeywords: parseQuotedKeywordList(match[8]),
+    searchKeywords: parseQuotedKeywordList(match[9]),
+    dateFrom,
+    dateTo,
+    includeUndated,
+  });
+}
+
+export const LETTERBOXD_PASTE_SETTINGS_RETRY =
+  'Could not find or parse a settings summary in that message. Paste the paragraph that starts with Tops: and ends with Period:. The report has not started.';
+
+export function letterboxdAckText(jobId, options) {
+  return (
+    "ZIP received. Building Letterboxd charts with GitHub Actions — PNGs will arrive in this chat " +
+    "(calendar, extra stats, genres).\n\n" +
+    formatLetterboxdSettingsSummary(options) +
     `\n\nid: ${jobId}`
   );
 }
@@ -579,7 +649,10 @@ function withDefaultButton(rows, label, data) {
 
 export function letterboxdModeKeyboard() {
   return {
-    inline_keyboard: [[button("✅ Default", "lb:def"), button("Customize", "lb:cus")]],
+    inline_keyboard: [
+      [button("✅ Default", "lb:def"), button("Customize", "lb:cus")],
+      [button("Paste settings", "lb:paste")],
+    ],
   };
 }
 
@@ -685,7 +758,7 @@ export function letterboxdModePrompt() {
     text: [
       "<b>How should the charts be built?</b>",
       "",
-      "ZIP received. Default builds the usual set right away. Customize sets the top size, threshold, whether rewatches count in averages, optional exclusions, optional search keywords, and dates.",
+      "ZIP received. Default builds the usual set right away. Customize sets the top size, threshold, whether rewatches count in averages, optional exclusions, optional search keywords, and dates. Paste settings reuses a previous Tops: … Period: summary.",
       "",
       "Buttons below, or reply with text. Cancel with /stop.",
     ].join("\n"),
@@ -693,8 +766,21 @@ export function letterboxdModePrompt() {
   };
 }
 
+export function letterboxdPasteSettingsPrompt() {
+  return {
+    text: [
+      "<b>Paste your settings summary</b>",
+      "",
+      "Paste a previous settings paragraph — the one that starts with Tops: and ends with Period: (and No diary date: when the period is a range). Extra text around it is fine.",
+      "",
+      "Cancel with /stop.",
+    ].join("\n"),
+  };
+}
+
 function promptFor(step, state, now = new Date()) {
   if (step === "mode") return letterboxdModePrompt();
+  if (step === "paste_settings") return letterboxdPasteSettingsPrompt();
   if (step === "top_n") {
     return {
       text: wizardPrompt(
@@ -874,6 +960,7 @@ export function parseLetterboxdCallback(data) {
   const raw = String(data || "");
   if (raw === "lb:def") return { step: "mode", choice: "defaults" };
   if (raw === "lb:cus") return { step: "mode", choice: "custom" };
+  if (raw === "lb:paste") return { step: "mode", choice: "paste" };
   let match = raw.match(/^lb:n:(10|20|30|50)$/);
   if (match) return { step: "top_n", value: Number(match[1]) };
   match = raw.match(/^lb:m:(3|5|10)$/);
@@ -904,6 +991,7 @@ function parseModeText(text) {
   const t = normReply(text);
   if (["по умолчанию", "умолчанию", "default", "defaults"].includes(t)) return "defaults";
   if (["настроить", "настройка", "customize", "custom"].includes(t)) return "custom";
+  if (["paste settings", "paste", "from summary", "paste summary"].includes(t)) return "paste";
   return "";
 }
 
@@ -971,7 +1059,16 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
     const choice = kind === "callback" ? input.choice : parseModeText(input.text);
     if (choice === "defaults") return finish(state, defaultLetterboxdOptions());
     if (choice === "custom") return go(state, "top_n", now);
-    return retry(state, "Need \"default\" or \"customize\". The report has not started.");
+    if (choice === "paste") return go(state, "paste_settings", now);
+    return retry(state, 'Need "default", "customize", or "paste settings". The report has not started.');
+  }
+  if (step === "paste_settings") {
+    if (kind === "callback") {
+      return retry(state, LETTERBOXD_PASTE_SETTINGS_RETRY, now);
+    }
+    const parsed = parseLetterboxdSettingsSummary(input.text);
+    if (!parsed) return retry(state, LETTERBOXD_PASTE_SETTINGS_RETRY, now);
+    return finish(state, parsed);
   }
   if (step === "top_n") {
     const value = kind === "callback" ? input.value : parseBounded(input.text, LETTERBOXD_TOP_N_MIN, LETTERBOXD_TOP_N_MAX);

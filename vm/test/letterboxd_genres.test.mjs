@@ -7,18 +7,22 @@ import {
   encodeAwaitLetterboxd,
   isZipDocument,
   letterboxdAckText,
+  LETTERBOXD_PASTE_SETTINGS_RETRY,
   normalizeTelegramFileId,
   letterboxdMinKeyboard,
   letterboxdModeKeyboard,
   letterboxdModePrompt,
+  letterboxdPasteSettingsPrompt,
   letterboxdPeriodKeyboard,
   letterboxdTopKeyboard,
   letterboxdKeywordsKeyboard,
   letterboxdSearchKeywordsKeyboard,
   letterboxdUndatedKeyboard,
   letterboxdYesNoKeyboard,
+  formatLetterboxdSettingsSummary,
   parseLetterboxdCallback,
   parseLetterboxdCommand,
+  parseLetterboxdSettingsSummary,
   parseStartCommand,
   parseWatchBound,
   parseWatchInterval,
@@ -151,11 +155,14 @@ test("wizard prompts are html, with a default line and examples", () => {
   const mode = letterboxdModePrompt();
   assert.match(mode.text, /<b>How should the charts be built\?<\/b>/);
   assert.match(mode.text, /Default builds the usual set/);
+  assert.match(mode.text, /Paste settings reuses/);
   assert.match(mode.text, /Buttons below, or reply with text/);
   assert.doesNotMatch(mode.text, /For example:/);
   assert.doesNotMatch(mode.text, /Default: default/);
   assert.equal(mode.reply_markup.inline_keyboard[0][0].callback_data, "lb:def");
   assert.equal(mode.reply_markup.inline_keyboard[0][1].callback_data, "lb:cus");
+  assert.equal(mode.reply_markup.inline_keyboard[1][0].callback_data, "lb:paste");
+  assert.equal(mode.reply_markup.inline_keyboard[1][0].text, "Paste settings");
   const now = new Date("2026-10-20T00:00:00Z");
   const range = advanceLetterboxdWizard(
     { step: "period", fileId: "BQACAgIAAxkBAAI1234567890" },
@@ -348,6 +355,7 @@ test("search keyword step accumulates words until Done", () => {
 test("every wizard keyboard has a one-tap default button", () => {
   const last = (keyboard) => keyboard.inline_keyboard.at(-1)[0].text;
   assert.equal(letterboxdModeKeyboard().inline_keyboard[0][0].text, "✅ Default");
+  assert.equal(letterboxdModeKeyboard().inline_keyboard[1][0].text, "Paste settings");
   assert.equal(last(letterboxdTopKeyboard()), "✅ Default (20)");
   assert.equal(last(letterboxdMinKeyboard()), "✅ Default (3)");
   assert.equal(last(letterboxdYesNoKeyboard("lb:rew", "no")), "Default: no");
@@ -395,6 +403,137 @@ test("ack summary lists rewatch averages USA English Drama Comedy exclude and se
   assert.match(text, /Search keywords: "Elijah Wood"/);
   const defaults = letterboxdAckText("lb-2", {});
   assert.match(defaults, /Rewatches in averages: no/);
+});
+
+test("settings summary parser finds paragraph in noisy text and round-trips", () => {
+  const options = {
+    topN: 30,
+    minRated: 5,
+    includeRewatchInAverages: true,
+    includeUSA: false,
+    includeEnglish: true,
+    includeDrama: false,
+    includeComedy: true,
+    excludeKeywords: ["Wood", "2001"],
+    searchKeywords: ["Elijah Wood"],
+    dateFrom: "2021-01-01",
+    dateTo: "2022-06-30",
+    includeUndated: true,
+  };
+  const summary = formatLetterboxdSettingsSummary(options);
+  assert.match(summary, /^Tops: 30\. Threshold: 5\./);
+  assert.match(summary, /Period: 2021-01-01 — 2022-06-30\./);
+  assert.match(summary, /No diary date: yes\./);
+  const noisy =
+    "Here is my old ack:\n\nZIP received. Building…\n\n" +
+    summary +
+    "\n\nid: lb-old\n\nPlease reuse.";
+  const parsed = parseLetterboxdSettingsSummary(noisy);
+  assert.deepEqual(parsed, {
+    topN: 30,
+    minRated: 5,
+    includeRewatchInAverages: true,
+    includeUSA: false,
+    includeEnglish: true,
+    includeDrama: false,
+    includeComedy: true,
+    excludeKeywords: ["Wood", "2001"],
+    searchKeywords: ["Elijah Wood"],
+    dateFrom: "2021-01-01",
+    dateTo: "2022-06-30",
+    includeUndated: true,
+  });
+  assert.equal(formatLetterboxdSettingsSummary(parsed), summary);
+
+  const fullLine =
+    "Tops: 20. Threshold: 3. Rewatches in averages: no. USA: yes. English: yes. " +
+    "Drama: yes. Comedy: yes. Keyword exclusions: none. Search keywords: none. Period: full.";
+  assert.deepEqual(parseLetterboxdSettingsSummary(`noise ${fullLine} trailing`), {
+    topN: 20,
+    minRated: 3,
+    includeRewatchInAverages: false,
+    includeUSA: true,
+    includeEnglish: true,
+    includeDrama: true,
+    includeComedy: true,
+    excludeKeywords: [],
+    searchKeywords: [],
+    dateFrom: "",
+    dateTo: "",
+    includeUndated: false,
+  });
+});
+
+test("settings summary parser rejects missing or malformed text", () => {
+  assert.equal(parseLetterboxdSettingsSummary(""), null);
+  assert.equal(parseLetterboxdSettingsSummary("Tops: 20. Period: full."), null);
+  assert.equal(
+    parseLetterboxdSettingsSummary(
+      "Tops: 999. Threshold: 3. Rewatches in averages: no. USA: yes. English: yes. " +
+        "Drama: yes. Comedy: yes. Keyword exclusions: none. Search keywords: none. Period: full.",
+    ),
+    null,
+  );
+  assert.equal(
+    parseLetterboxdSettingsSummary(
+      "Tops: 20. Threshold: 3. Rewatches in averages: maybe. USA: yes. English: yes. " +
+        "Drama: yes. Comedy: yes. Keyword exclusions: none. Search keywords: none. Period: full.",
+    ),
+    null,
+  );
+});
+
+test("paste settings mode asks for summary then finishes with parsed options", () => {
+  const fileId = "BQACAgIAAxkBAAI1234567890";
+  assert.equal(parseLetterboxdCallback("lb:paste").choice, "paste");
+  const ask = advanceLetterboxdWizard(
+    { step: "mode", fileId },
+    { kind: "callback", step: "mode", choice: "paste" },
+  );
+  assert.equal(ask.state.step, "paste_settings");
+  assert.match(ask.messages[0].text, /<b>Paste your settings summary<\/b>/);
+  assert.equal(ask.messages[0].text, letterboxdPasteSettingsPrompt().text);
+
+  const bad = advanceLetterboxdWizard(ask.state, { kind: "text", text: "not a summary" });
+  assert.equal(bad.state.step, "paste_settings");
+  assert.equal(bad.dispatch, undefined);
+  assert.equal(bad.messages[0].text, LETTERBOXD_PASTE_SETTINGS_RETRY);
+
+  const summary = formatLetterboxdSettingsSummary({
+    topN: 10,
+    minRated: 10,
+    includeRewatchInAverages: false,
+    includeUSA: true,
+    includeEnglish: false,
+    includeDrama: true,
+    includeComedy: false,
+    excludeKeywords: [],
+    searchKeywords: ["noir"],
+    dateFrom: "",
+    dateTo: "",
+  });
+  const ok = advanceLetterboxdWizard(
+    ask.state,
+    { kind: "text", text: `Copied from last run:\n${summary}\nThanks` },
+  );
+  assert.equal(ok.clear, true);
+  assert.deepEqual(ok.dispatch, {
+    fileId,
+    options: {
+      topN: 10,
+      minRated: 10,
+      includeRewatchInAverages: false,
+      includeUSA: true,
+      includeEnglish: false,
+      includeDrama: true,
+      includeComedy: false,
+      excludeKeywords: [],
+      searchKeywords: ["noir"],
+      dateFrom: "",
+      dateTo: "",
+      includeUndated: false,
+    },
+  });
 });
 
 test("genre PNG send order puts watches before rating before decade before watch year", () => {
