@@ -1,5 +1,7 @@
 // @lebxdbot BotFather profile. Setup bot writes these. The display name is set in BotFather.
 // The empty-chat Start button is Telegram's own control. Nothing here sets it.
+// DESCRIPTION (≤512) is what Telegram shows on an unused/empty chat card ("What can this bot do?").
+// ABOUT (≤120) is the short profile / share line — product naming only; full contact URLs do not fit with it.
 // Description and /start use different sentences. Search words: Letterboxd, charts, export.
 
 export const ABOUT =
