@@ -92,9 +92,9 @@ Description (what Telegram shows on an unused/empty chat, and “What can this b
 > https://vk.com/prtds
 > https://t.me/prtdz
 
-Short description (profile page / shared-link blurb only, ≤120 chars — not the empty-chat card; no long URLs here):
+Short description (profile page / shared-link blurb only, ≤120 chars — not the empty-chat card; compact handles here, full https URLs in the long description):
 
-> Letterboxd Stats. Charts from a Letterboxd export. /start opens the wizard.
+> Letterboxd Stats. Contact: last.fm/pretendless, vk.com/prtds, t.me/prtdz
 
 Commands: start — Start a Letterboxd chart report. stop — Cancel the wizard or a running report.
 
