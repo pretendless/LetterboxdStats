@@ -359,12 +359,23 @@ test("profile card is English, within Telegram limits, and distinct from /start"
   assert.equal(start.includes(DESCRIPTION), false);
   assert.equal(ABOUT.includes(start), false);
   assert.equal(DESCRIPTION.includes(ABOUT), false);
+  assert.equal(
+    ABOUT,
+    "Letterboxd Stats. Charts from a Letterboxd export. /start opens the wizard. Contact: @prtdz",
+  );
   for (const word of ["Letterboxd", "charts", "export"]) {
     assert.match(ABOUT, new RegExp(word, "i"));
     assert.match(DESCRIPTION, new RegExp(word, "i"));
   }
   assert.doesNotMatch(`${ABOUT}\n${DESCRIPTION}`, /[А-Яа-яЁё]/);
   assert.match(DESCRIPTION, /\/start[\s\S]*ZIP file[\s\S]*defaults/);
+  assert.match(DESCRIPTION, /^Author:$/m);
+  assert.doesNotMatch(DESCRIPTION, /Author \/ contact/);
+  assert.match(DESCRIPTION, /https:\/\/www\.last\.fm\/user\/pretendless/);
+  assert.match(DESCRIPTION, /https:\/\/vk\.com\/prtds/);
+  assert.match(DESCRIPTION, /https:\/\/t\.me\/prtdz/);
+  assert.doesNotMatch(ABOUT, /https?:\/\//);
+  assert.match(ABOUT, /Contact: @prtdz/);
   assert.deepEqual(
     BOT_COMMANDS.map((item) => item.command),
     ["start", "stop"],

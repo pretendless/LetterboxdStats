@@ -76,7 +76,7 @@ An empty chat shows the description below, with Telegram's own Start button unde
 
 **Setup bot** writes the description, the short description, and the `/start` and `/stop` menu. The display name stays whatever BotFather already has. Run **Setup bot** once after this is on `main`. It does not publish the worker and it does not register the webhook.
 
-Description (empty chat, and “What can this bot do?”):
+Description (what Telegram shows on an unused/empty chat, and “What can this bot do?”):
 
 > Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export.
 >
@@ -86,10 +86,15 @@ Description (empty chat, and “What can this bot do?”):
 > /start
 > ZIP file
 > defaults
+>
+> Author:
+> https://www.last.fm/user/pretendless
+> https://vk.com/prtds
+> https://t.me/prtdz
 
-Short description (profile page, and the text sent with a shared link):
+Short description (profile page / shared-link blurb only, ≤120 chars — not the empty-chat card; one Telegram contact here, full https URLs in the long description):
 
-> Letterboxd Stats. Charts from a Letterboxd export. /start opens the wizard.
+> Letterboxd Stats. Charts from a Letterboxd export. /start opens the wizard. Contact: @prtdz
 
 Commands: start — Start a Letterboxd chart report. stop — Cancel the wizard or a running report.
 

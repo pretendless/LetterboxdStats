@@ -1,9 +1,11 @@
 // @lebxdbot BotFather profile. Setup bot writes these. The display name is set in BotFather.
 // The empty-chat Start button is Telegram's own control. Nothing here sets it.
+// DESCRIPTION (≤512) is what Telegram shows on an unused/empty chat card ("What can this bot do?").
+// ABOUT (≤120) is the short profile / share line (product sentence + one Telegram contact; full https URLs are in DESCRIPTION).
 // Description and /start use different sentences. Search words: Letterboxd, charts, export.
 
 export const ABOUT =
-  "Letterboxd Stats. Charts from a Letterboxd export. /start opens the wizard.";
+  "Letterboxd Stats. Charts from a Letterboxd export. /start opens the wizard. Contact: @prtdz";
 
 export const DESCRIPTION =
   "Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export.\n" +
@@ -15,7 +17,12 @@ export const DESCRIPTION =
   "Example:\n" +
   "/start\n" +
   "ZIP file\n" +
-  "defaults";
+  "defaults\n" +
+  "\n" +
+  "Author:\n" +
+  "https://www.last.fm/user/pretendless\n" +
+  "https://vk.com/prtds\n" +
+  "https://t.me/prtdz";
 
 export const BOT_COMMANDS = [
   { command: "start", description: "Start a Letterboxd chart report" },

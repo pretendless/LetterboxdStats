@@ -9,6 +9,7 @@ This file is for Cursor agents working in this repository. It is not user-facing
 - Webhook: `POST https://t2t-box.prtndz.workers.dev/lebxd`
 - Workflow **Set webhook** registers that URL
 - Workflow **Setup bot** writes the English description (empty-chat card), short description (profile), and `/start` `/stop` menu. It does not set the webhook, the display name, or the Start button. The Start button is Telegram's own control on an empty chat; a tap sends `/start`.
+- Description copy lives in `worker/bot_profile.mjs`. `DESCRIPTION` (≤ 512) is the empty-chat / “What can this bot do?” card and ends with an `Author:` block of full https links (not labeled contact). `ABOUT` (≤ 120) is the short profile / share line: product sentence plus `Contact: @prtdz` only. After merge, the user must run **Setup bot** for Telegram to pick up the text.
 
 ## Cloudflare worker
 
