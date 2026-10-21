@@ -83,8 +83,8 @@ def test_ranked_hbar_grows_taller_with_n(tmp_path: Path | None = None) -> None:
 def test_categorical_palette_samples_quartile_ranks():
     """One to three values are logo knots. Four or more are even midpoints."""
     assert categorical_positions(1) == [0.3]
-    assert categorical_positions(2) == [0.2, 0.7]
-    assert categorical_positions(3) == [0.2, 0.3, 0.7]
+    assert categorical_positions(2) == [0.15, 0.7]
+    assert categorical_positions(3) == [0.15, 0.3, 0.7]
     assert categorical_positions(4) == [0.125, 0.375, 0.625, 0.875]
     assert categorical_positions(7) == [(i + 0.5) / 7 for i in range(7)]
     cases = {1: [2024], 2: [2023, 2024], 3: [2022, 2023, 2024]}
@@ -97,7 +97,7 @@ def test_categorical_palette_samples_quartile_ranks():
             assert np.allclose(colors[i], palette[year])
     # Earliest of three years is logo blue; latest is logo orange.
     three = watch_year_palette([2022, 2023, 2024])
-    assert np.allclose(three[2022], palette_color(0.2))
+    assert np.allclose(three[2022], palette_color(0.15))
     assert np.allclose(three[2024], palette_color(0.7))
     # Rating colors stay a continuous map of the numeric value.
     assert np.allclose(rating_color(RATING_VMIN), rating_colormap()(0.0))

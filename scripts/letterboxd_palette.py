@@ -3,12 +3,12 @@
 Every data color comes from ``palette_color``. The three logo circles are
 fixed anchors (median sRGB of each non-overlapping interior):
 
-- 0.2 blue ``#3FB7EB``
+- 0.15 blue ``#3FB7EB``
 - 0.3 green ``#03E53E``
 - 0.7 orange ``#FC7A02``
 
 ``palette_color`` is piecewise-linear in OKLab ``(L, a, b)`` between five
-knots: deep purple ``#5922BF`` at 0, the three logo colors at 0.2 / 0.3 /
+knots: deep purple ``#5922BF`` at 0, the three logo colors at 0.15 / 0.3 /
 0.7, and deep burgundy ``#890E3A`` at 1. The uneven spacing gives each
 segment a different length so the scale is not uniform. There is no hold,
 hue band, or ease: each segment is the straight OKLab line, so lightness
@@ -52,7 +52,7 @@ LOGO_GREEN_HEX = "#03E53E"
 LOGO_ORANGE_HEX = "#FC7A02"
 
 # Palette positions of the logo knots.
-LOGO_BLUE_T = 0.2
+LOGO_BLUE_T = 0.15
 LOGO_GREEN_T = 0.3
 LOGO_ORANGE_T = 0.7
 PALETTE_KNOTS = (0.0, LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T, 1.0)
@@ -230,8 +230,8 @@ def categorical_positions(n: int) -> list[float]:
     Lowest or earliest is first.
 
     - N = 1 → ``[0.3]`` (logo green).
-    - N = 2 → ``[0.2, 0.7]`` (logo blue, logo orange).
-    - N = 3 → ``[0.2, 0.3, 0.7]`` (logo blue, green, orange).
+    - N = 2 → ``[0.15, 0.7]`` (logo blue, logo orange).
+    - N = 3 → ``[0.15, 0.3, 0.7]`` (logo blue, green, orange).
     - N ≥ 4 → even bin midpoints ``t_i = (i + 0.5) / N``. These cover the
       full 0–1 palette. They are not bent, and they are not snapped to the
       logo knots.
@@ -367,7 +367,7 @@ def rating_color(
     """Map a Letterboxd rating onto the full 0–1 palette.
 
     0.5 → t = 0 (purple) and 5 → t = 1 (burgundy). The logo anchors sit
-    inside that range at 0.2 / 0.3 / 0.7.
+    inside that range at 0.15 / 0.3 / 0.7.
     """
     return palette_color(_rating_t(avg, vmin, vmax))
 
