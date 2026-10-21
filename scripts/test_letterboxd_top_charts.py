@@ -659,10 +659,22 @@ def test_watch_time_charts_label_every_position(tmp_path: Path | None = None):
         assert _rgba(text.get_color()) == _rgba(FG)
 
 
-def test_letterboxd_rating_distribution_omits_rating_label(
+def test_integer_percent_shares_sum_to_100():
+    import letterboxd_calendar_charts as cal
+
+    assert cal.integer_percent_shares([]) == []
+    assert cal.integer_percent_shares([0, 0, 0]) == [0, 0, 0]
+    assert cal.integer_percent_shares([2, 1, 1]) == [50, 25, 25]
+    # Largest remainder: 1/3 each → 34 + 33 + 33 (earlier index wins the leftover).
+    assert cal.integer_percent_shares([1, 1, 1]) == [34, 33, 33]
+    assert sum(cal.integer_percent_shares([1, 1, 1, 1])) == 100
+    assert sum(cal.integer_percent_shares([7, 1, 1, 1])) == 100
+
+
+def test_letterboxd_rating_distribution_percent_tips(
     tmp_path: Path | None = None,
 ):
-    """extra_stats Rating distribution: count only — bin value is not an end label."""
+    """extra_stats Rating distribution: tip is % of chart total — not star rating."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-rating-dist")
     out.mkdir(parents=True, exist_ok=True)
     diary = pd.DataFrame(
@@ -693,7 +705,11 @@ def test_letterboxd_rating_distribution_omits_rating_label(
 
     rating_texts = captured["rating_texts"]
     assert rating_texts
-    assert all(t.isdigit() for t in rating_texts)
+    assert all(t.endswith("%") for t in rating_texts)
+    assert all(t[:-1].isdigit() for t in rating_texts)
+    # 2×4.0, 1×5.0, 1×3.0 → 50% / 25% / 25%; empty bins 0%.
+    assert set(rating_texts) == {"0%", "25%", "50%"}
+    assert sum(int(t[:-1]) for t in rating_texts) == 100
     assert "4.00" not in rating_texts
     assert "5.00" not in rating_texts
     assert "3.00" not in rating_texts
@@ -825,7 +841,8 @@ if __name__ == "__main__":
     test_count_bars_drop_n_and_style_mean()
     test_release_year_count_label_omits_n()
     test_watch_time_charts_label_every_position()
-    test_letterboxd_rating_distribution_omits_rating_label()
+    test_integer_percent_shares_sum_to_100()
+    test_letterboxd_rating_distribution_percent_tips()
     test_views_count_bars_show_avg_or_dash()
     test_stacked_count_hbar_long_names()
     print("ok")

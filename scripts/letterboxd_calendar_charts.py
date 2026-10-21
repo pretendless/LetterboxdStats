@@ -327,18 +327,54 @@ def stacked_counts(ax, categories: list[str], years: list[int], matrix: np.ndarr
     return bottom
 
 
-def _place_count_avg_above_totals(fig, ax, totals, avg_labels, *, y_pad, fontsize=7) -> None:
+def integer_percent_shares(counts) -> list[int]:
+    """Whole-percent shares that sum to 100 (largest-remainder method).
+
+    Each value is ``floor(100 * count / total)``; the leftover percentage points
+    (``100 - sum(floors)``) go one each to the buckets with the largest
+    fractional remainders (ties broken by earlier index). Empty totals yield
+    all zeros. Used for Letterboxd rating distribution tip labels.
+    """
+    values = [float(c) for c in counts]
+    n = len(values)
+    total = sum(values)
+    if n == 0:
+        return []
+    if total <= 0:
+        return [0] * n
+    exact = [100.0 * v / total for v in values]
+    floors = [int(x) for x in exact]
+    leftover = 100 - sum(floors)
+    order = sorted(
+        range(n),
+        key=lambda i: (-(exact[i] - floors[i]), i),
+    )
+    out = floors[:]
+    for i in order[:leftover]:
+        out[i] += 1
+    return out
+
+
+def _place_count_avg_above_totals(
+    fig, ax, totals, avg_labels, *, y_pad, fontsize=7, tip_labels=None
+) -> None:
     """Count + mean centered above each stacked column total.
 
-    Pass ``avg_labels=None`` for count-only (Letterboxd rating distribution:
-    the bin is already on the x-axis, so the rating must not repeat as an end label).
+    Pass ``avg_labels=None`` for a single tip label per column (default: count).
+    Pass ``tip_labels`` to override that tip text (Letterboxd rating distribution:
+    percent of all rated entries on the chart; the bin is already the x-axis).
     """
     if avg_labels is None:
-        for xi, total in zip(range(len(totals)), totals):
+        labels = (
+            list(tip_labels)
+            if tip_labels is not None
+            else [str(int(total)) for total in totals]
+        )
+        for xi, total, text in zip(range(len(totals)), totals, labels):
             ax.text(
                 xi,
                 float(total) + y_pad,
-                str(int(total)),
+                text,
                 ha="center",
                 va="bottom",
                 fontsize=fontsize,
@@ -797,8 +833,9 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
     )
     axes[1].set_title("Rating distribution — color is watch year")
     axes[1].set_xlabel("Letterboxd rating")
-    # Exception: do not label the bin value again — it is already the x-axis.
-    # Count above each stack stays; average/rating end labels are omitted.
+    # Tip = share of all rated entries on this chart (not the bin / not count).
+    # Whole percents via largest remainder so labeled values sum to 100%.
+    rating_pct_labels = [f"{p}%" for p in integer_percent_shares(rating_totals)]
     rating_max = float(rating_totals.max()) if len(rating_totals) else 1.0
     axes[1].set_ylim(0, rating_max * 1.18 if rating_max else 1.0)
 
@@ -808,7 +845,12 @@ def chart_decade_rating(df: pd.DataFrame, path: Path) -> None:
         fig, axes[0], decade_totals, decade_avgs, y_pad=decade_max * 0.02
     )
     _place_count_avg_above_totals(
-        fig, axes[1], rating_totals, None, y_pad=rating_max * 0.02
+        fig,
+        axes[1],
+        rating_totals,
+        None,
+        y_pad=rating_max * 0.02,
+        tip_labels=rating_pct_labels,
     )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
