@@ -87,7 +87,7 @@ Description (what Telegram shows on an unused/empty chat, and “What can this b
 > ZIP file
 > defaults
 >
-> Author / contact:
+> Author:
 > https://www.last.fm/user/pretendless
 > https://vk.com/prtds
 > https://t.me/prtdz

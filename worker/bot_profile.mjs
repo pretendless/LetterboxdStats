@@ -19,7 +19,7 @@ export const DESCRIPTION =
   "ZIP file\n" +
   "defaults\n" +
   "\n" +
-  "Author / contact:\n" +
+  "Author:\n" +
   "https://www.last.fm/user/pretendless\n" +
   "https://vk.com/prtds\n" +
   "https://t.me/prtdz";

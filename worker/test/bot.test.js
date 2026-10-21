@@ -369,7 +369,8 @@ test("profile card is English, within Telegram limits, and distinct from /start"
   }
   assert.doesNotMatch(`${ABOUT}\n${DESCRIPTION}`, /[А-Яа-яЁё]/);
   assert.match(DESCRIPTION, /\/start[\s\S]*ZIP file[\s\S]*defaults/);
-  assert.match(DESCRIPTION, /Author \/ contact:/);
+  assert.match(DESCRIPTION, /^Author:$/m);
+  assert.doesNotMatch(DESCRIPTION, /Author \/ contact/);
   assert.match(DESCRIPTION, /https:\/\/www\.last\.fm\/user\/pretendless/);
   assert.match(DESCRIPTION, /https:\/\/vk\.com\/prtds/);
   assert.match(DESCRIPTION, /https:\/\/t\.me\/prtdz/);
