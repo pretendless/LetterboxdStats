@@ -462,16 +462,17 @@ test("search keyword HTML lists sections by match site with watch ratings", () =
   assert.match(chunks[0], /<b>Search keyword: Elijah Wood<\/b>/);
   assert.match(chunks[0], /2 films/);
   // Sections in fixed order; genre before actor. Eternal appears under both.
-  // Heart after year before colon only when liked (likes/films.csv).
+  // ♥ (U+2665) after year before colon only when liked (likes/films.csv).
   assert.match(
     chunks[0],
     /<b>genre<\/b>\n1\. Eternal Sunshine of the Spotless Mind \(2004\): 5, —/,
   );
   assert.match(
     chunks[0],
-    /<b>actor<\/b>\n1\. The Lord of the Rings: The Fellowship of the Ring \(2001\) ❤: 5\n2\. Eternal Sunshine of the Spotless Mind \(2004\): 5, —/,
+    /<b>actor<\/b>\n1\. The Lord of the Rings: The Fellowship of the Ring \(2001\) ♥: 5\n2\. Eternal Sunshine of the Spotless Mind \(2004\): 5, —/,
   );
-  assert.doesNotMatch(chunks[0], /\(2004\) ❤/);
+  assert.doesNotMatch(chunks[0], /\(2004\) ♥/);
+  assert.doesNotMatch(chunks[0], /❤|❤️/);
   // No inline match-site parentheses on film lines.
   assert.doesNotMatch(chunks[0], /\(2001\) \(actor\)/);
   assert.doesNotMatch(chunks[0], /\(2004\) \(actor/);
