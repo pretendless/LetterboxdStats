@@ -28,9 +28,9 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 *Directors with the lowest average rating. A bar too short for 15 letters shows the first 15 and an ellipsis.*
 
-![Twenty directors from a 4.80 average down to 1.00, on one smooth scale from burgundy to purple](docs/images/directors-higher-rating-20.png)
+![Twenty directors from a 4.80 average down to 1.00, on one smooth scale from purple to burgundy](docs/images/directors-higher-rating-20.png)
 
-*A top 20 across the rating scale: one smooth blend from burgundy at the top, through logo orange, green, and blue, to purple at 1.0. The three shortest bars show 15 letters and an ellipsis past the bar, with the same gap before the rating as after a normal bar.*
+*A top 20 across the rating scale: one smooth blend from purple at 4.80, through logo blue, green, and orange, to burgundy at 1.00. The three shortest bars show 15 letters and an ellipsis past the bar, with the same gap before the rating as after a normal bar.*
 
 ![Line chart of average rating by month, with a colored dot on each month](docs/images/average-rating-by-month.png)
 
@@ -66,7 +66,7 @@ Dates are month before year. `2021-06.2022` means 2021-01-01 through 2022-06-30.
 
 The report is a set of PNG charts in the chat: calendar (watches, pace, weekdays), extra stats, and TMDB tops for genres, countries of origin, directors, actors, original language, and studios. A rating bar ends with a bold colored average and a regular parenthetical count. A name stays inside its bar and is shortened with an ellipsis only when it does not fit. A bar too short for 15 characters shows the first 15 characters and an ellipsis, running past the end of the bar.
 
-Every chart uses one palette. The anchors are the three logo circles, measured from the non-overlapping interior of each circle: blue `#3FB7EB` at 0.2, green `#03E53E` at 0.4, and orange `#FC7A02` at 0.7. The blend is a straight line in OKLab between five knots: deep purple `#5922BF` at 0, those three logo colors, and deep burgundy `#890E3A` at 1. The uneven spacing keeps the scale from looking uniform. A rating uses the whole range: 0.5 maps to 0 and 5 maps to 1. An ordered series (watch years, ranked genres), earliest or lowest first, is logo green for one value, logo blue and orange for two, and the three logo colors for three. Four or more values use the even bin midpoints `(i + 0.5) / N`, across the whole palette, with no bend toward the logo colors. Four values are 0.125, 0.375, 0.625, and 0.875. Seven values are 0.5/7, 1.5/7, 2.5/7, 3.5/7, 4.5/7, 5.5/7, and 6.5/7.
+Every chart uses one palette. The anchors are the three logo circles, measured from the non-overlapping interior of each circle: blue `#3FB7EB` at 0.15, green `#03E53E` at 0.3, and orange `#FC7A02` at 0.7. The blend is a straight line in OKLab between five knots: deep purple `#5922BF` at 0, those three logo colors, and deep burgundy `#890E3A` at 1. The uneven spacing keeps the scale from looking uniform. A rating uses the whole range in reverse: 5 maps to 0 (deep purple) and 0.5 maps to 1 (deep burgundy). An ordered series (watch years, ranked genres), earliest or lowest first, is logo green for one value, logo blue and orange for two, and the three logo colors for three. Four or more values use the even bin midpoints `(i + 0.5) / N`, across the whole palette, with no bend toward the logo colors. Four values are 0.125, 0.375, 0.625, and 0.875. Seven values are 0.5/7, 1.5/7, 2.5/7, 3.5/7, 4.5/7, 5.5/7, and 6.5/7.
 
 Example title: Studios — lower rating (at least 3 rated films).
 

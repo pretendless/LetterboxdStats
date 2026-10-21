@@ -18,7 +18,6 @@ from letterboxd_palette import (
     palette_color,
     rating_color,
     rating_colormap,
-    srgb_to_oklab,
     watch_year_palette,
 )
 from PIL import Image
@@ -82,9 +81,9 @@ def test_ranked_hbar_grows_taller_with_n(tmp_path: Path | None = None) -> None:
 
 def test_categorical_palette_samples_quartile_ranks():
     """One to three values are logo knots. Four or more are even midpoints."""
-    assert categorical_positions(1) == [0.4]
-    assert categorical_positions(2) == [0.2, 0.7]
-    assert categorical_positions(3) == [0.2, 0.4, 0.7]
+    assert categorical_positions(1) == [0.3]
+    assert categorical_positions(2) == [0.15, 0.7]
+    assert categorical_positions(3) == [0.15, 0.3, 0.7]
     assert categorical_positions(4) == [0.125, 0.375, 0.625, 0.875]
     assert categorical_positions(7) == [(i + 0.5) / 7 for i in range(7)]
     cases = {1: [2024], 2: [2023, 2024], 3: [2022, 2023, 2024]}
@@ -97,42 +96,38 @@ def test_categorical_palette_samples_quartile_ranks():
             assert np.allclose(colors[i], palette[year])
     # Earliest of three years is logo blue; latest is logo orange.
     three = watch_year_palette([2022, 2023, 2024])
-    assert np.allclose(three[2022], palette_color(0.2))
+    assert np.allclose(three[2022], palette_color(0.15))
     assert np.allclose(three[2024], palette_color(0.7))
     # Rating colors stay a continuous map of the numeric value.
     assert np.allclose(rating_color(RATING_VMIN), rating_colormap()(0.0))
     assert np.allclose(rating_color(RATING_VMAX), rating_colormap()(1.0))
-    assert np.allclose(rating_color(RATING_VMIN), palette_color(0.0))
-    assert np.allclose(rating_color(RATING_VMAX), palette_color(1.0))
+    assert np.allclose(rating_color(RATING_VMIN), palette_color(1.0))
+    assert np.allclose(rating_color(RATING_VMAX), palette_color(0.0))
 
 
 def test_rating_colormap_is_blue_green_red():
     cmap = rating_colormap()
     low = cmap(0.0)
-    mid = cmap(0.5)
+    mid = cmap(1.0 - 0.3)
     high = cmap(1.0)
-    # low: blue dominates red
-    assert low[2] > low[0]
-    # mid: green dominates
+    # low rating: burgundy, red dominates blue
+    assert low[0] > low[2]
+    # logo green sits on the reversed scale: green dominates
     assert mid[1] > mid[0] and mid[1] > mid[2]
-    # high: red dominates blue
-    assert high[0] > high[2]
-    # not a pale peach mid (coolwarm mid ≈ white/cream)
-    assert not (mid[0] > 0.85 and mid[1] > 0.85 and mid[2] > 0.85)
+    # high rating: purple, blue dominates red
+    assert high[2] > high[0]
+    # not a pale peach (coolwarm mid ≈ white/cream)
+    for sample in (mid, cmap(0.5)):
+        assert not (sample[0] > 0.85 and sample[1] > 0.85 and sample[2] > 0.85)
 
 
 def test_rating_color_fixed_scale_separates_high_band():
-    """3.6 vs 4.5 must not collapse into the same flesh band."""
-    a = rating_color(3.6, vmin=RATING_VMIN, vmax=RATING_VMAX)
-    b = rating_color(4.5, vmin=RATING_VMIN, vmax=RATING_VMAX)
-    # Distinct colors. Burgundy is darker than orange, so the red byte can fall
-    # while the color still moves toward red in OKLab.
-    dist = sum(abs(x - y) for x, y in zip(a[:3], b[:3]))
+    """3.6 vs 4.5 stay apart, and the higher rating moves toward purple."""
+    lower = rating_color(3.6, vmin=RATING_VMIN, vmax=RATING_VMAX)
+    higher = rating_color(4.5, vmin=RATING_VMIN, vmax=RATING_VMAX)
+    dist = sum(abs(x - y) for x, y in zip(lower[:3], higher[:3]))
     assert dist > 0.15
-    lab_a = srgb_to_oklab(*a[:3])
-    lab_b = srgb_to_oklab(*b[:3])
-    assert lab_b[1] > lab_a[1]
-    assert lab_b[2] < lab_a[2]
+    assert higher[2] > lower[2]
 
 
 def test_release_year_charts(tmp_path: Path | None = None):
@@ -481,9 +476,9 @@ def test_count_avg_text_style_colors_mean_only():
     assert _rgba(dash["color"]) == _rgba(FG)
     assert low["path_effects"] and high["path_effects"]
     assert dash["path_effects"] is None
-    # 1.94 is between logo blue and green; 4.80 is near burgundy, so redder.
-    assert high["color"][0] > high["color"][2]
-    assert high["color"][0] > low["color"][0]
+    # 4.80 is near purple; 1.94 is toward orange, so the low rating is redder.
+    assert high["color"][2] > high["color"][0]
+    assert low["color"][0] > high["color"][0]
 
 
 def test_count_bars_drop_n_and_style_mean(tmp_path: Path | None = None):

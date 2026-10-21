@@ -3,12 +3,12 @@
 Every data color comes from ``palette_color``. The three logo circles are
 fixed anchors (median sRGB of each non-overlapping interior):
 
-- 0.2 blue ``#3FB7EB``
-- 0.4 green ``#03E53E``
+- 0.15 blue ``#3FB7EB``
+- 0.3 green ``#03E53E``
 - 0.7 orange ``#FC7A02``
 
 ``palette_color`` is piecewise-linear in OKLab ``(L, a, b)`` between five
-knots: deep purple ``#5922BF`` at 0, the three logo colors at 0.2 / 0.4 /
+knots: deep purple ``#5922BF`` at 0, the three logo colors at 0.15 / 0.3 /
 0.7, and deep burgundy ``#890E3A`` at 1. The uneven spacing gives each
 segment a different length so the scale is not uniform. There is no hold,
 hue band, or ease: each segment is the straight OKLab line, so lightness
@@ -52,8 +52,8 @@ LOGO_GREEN_HEX = "#03E53E"
 LOGO_ORANGE_HEX = "#FC7A02"
 
 # Palette positions of the logo knots.
-LOGO_BLUE_T = 0.2
-LOGO_GREEN_T = 0.4
+LOGO_BLUE_T = 0.15
+LOGO_GREEN_T = 0.3
 LOGO_ORANGE_T = 0.7
 PALETTE_KNOTS = (0.0, LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T, 1.0)
 
@@ -229,9 +229,9 @@ def categorical_positions(n: int) -> list[float]:
 
     Lowest or earliest is first.
 
-    - N = 1 → ``[0.4]`` (logo green).
-    - N = 2 → ``[0.2, 0.7]`` (logo blue, logo orange).
-    - N = 3 → ``[0.2, 0.4, 0.7]`` (logo blue, green, orange).
+    - N = 1 → ``[0.3]`` (logo green).
+    - N = 2 → ``[0.15, 0.7]`` (logo blue, logo orange).
+    - N = 3 → ``[0.15, 0.3, 0.7]`` (logo blue, green, orange).
     - N ≥ 4 → even bin midpoints ``t_i = (i + 0.5) / N``. These cover the
       full 0–1 palette. They are not bent, and they are not snapped to the
       logo knots.
@@ -290,7 +290,11 @@ _CMAP = None
 
 
 def rating_colormap():
-    """Colormap of ``palette_color`` for colorbars and ScalarMappable."""
+    """Rating colorbar map: low ratings are burgundy, high ratings are purple.
+
+    A normalized 0 is palette t = 1 and a normalized 1 is palette t = 0.
+    Ordered series do not use this map.
+    """
     global _CMAP
     if _CMAP is not None:
         return _CMAP
@@ -305,10 +309,12 @@ def rating_colormap():
         def _init(self):
             lut = np.zeros((self.N + 3, 4), dtype=float)
             last = max(1, self.N - 1)
+            # Normalized 0 is the low rating (burgundy) and 1 is the high
+            # rating (purple). The palette knots themselves are not reversed.
             for index in range(self.N):
-                lut[index] = palette_color(index / last)
-            lut[self.N] = palette_color(0.0)
-            lut[self.N + 1] = palette_color(1.0)
+                lut[index] = palette_color(1.0 - index / last)
+            lut[self.N] = palette_color(1.0)
+            lut[self.N + 1] = palette_color(0.0)
             lut[self.N + 2] = (0.0, 0.0, 0.0, 0.0)
             self._lut = lut
             self._isinit = True
@@ -325,7 +331,7 @@ def rating_colormap():
                 if not np.isfinite(value):
                     out[index] = (0.0, 0.0, 0.0, 0.0)
                 else:
-                    out[index] = palette_color(float(value))
+                    out[index] = palette_color(1.0 - float(value))
             if alpha is not None:
                 out[:, 3] = np.asarray(alpha, dtype=float).reshape(-1)
             if bytes:
@@ -353,10 +359,11 @@ def _rating_t(avg: float, vmin: float, vmax: float) -> float:
     span = max(1e-6, float(vmax) - float(vmin))
     t = (value - float(vmin)) / span
     if t < 0.0:
-        return 0.0
-    if t > 1.0:
-        return 1.0
-    return t
+        t = 0.0
+    elif t > 1.0:
+        t = 1.0
+    # High ratings sit at the purple end. The knot order is unchanged.
+    return 1.0 - t
 
 
 def rating_color(
@@ -364,10 +371,11 @@ def rating_color(
     vmin: float = RATING_VMIN,
     vmax: float = RATING_VMAX,
 ) -> tuple:
-    """Map a Letterboxd rating onto the full 0–1 palette.
+    """Map a Letterboxd rating onto the full 0–1 palette, reversed.
 
-    0.5 → t = 0 (purple) and 5 → t = 1 (burgundy). The logo anchors sit
-    inside that range at 0.2 / 0.4 / 0.7.
+    0.5 → t = 1 (burgundy) and 5 → t = 0 (purple). With
+    ``t = 1 − (rating − 0.5) / 4.5``, logo orange is 1.85, green is 3.65,
+    and logo blue is 4.325. Ordered series do not use this reversal.
     """
     return palette_color(_rating_t(avg, vmin, vmax))
 
