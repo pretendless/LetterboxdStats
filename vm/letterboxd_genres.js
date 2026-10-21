@@ -109,6 +109,7 @@ export function defaultLetterboxdOptions() {
   return {
     topN: LETTERBOXD_TOP_N_DEFAULT,
     minRated: LETTERBOXD_MIN_RATED_DEFAULT,
+    includeRewatchInAverages: false,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -178,6 +179,7 @@ export function normalizeLetterboxdOptions(options) {
   return {
     topN: clampInt(src.topN, LETTERBOXD_TOP_N_MIN, LETTERBOXD_TOP_N_MAX, LETTERBOXD_TOP_N_DEFAULT),
     minRated: clampInt(src.minRated, LETTERBOXD_MIN_RATED_MIN, LETTERBOXD_MIN_RATED_MAX, LETTERBOXD_MIN_RATED_DEFAULT),
+    includeRewatchInAverages: src.includeRewatchInAverages == null ? false : Boolean(src.includeRewatchInAverages),
     includeUSA: src.includeUSA == null ? true : Boolean(src.includeUSA),
     includeEnglish: src.includeEnglish == null ? true : Boolean(src.includeEnglish),
     includeDrama: src.includeDrama == null ? true : Boolean(src.includeDrama),
@@ -199,6 +201,9 @@ export function encodeAwaitLetterboxd(state = {}) {
   if (state.fileId) out.fileId = String(state.fileId);
   if (state.topN != null) out.topN = state.topN;
   if (state.minRated != null) out.minRated = state.minRated;
+  if (state.includeRewatchInAverages != null) {
+    out.includeRewatchInAverages = Boolean(state.includeRewatchInAverages);
+  }
   if (state.includeUSA != null) out.includeUSA = Boolean(state.includeUSA);
   if (state.includeEnglish != null) out.includeEnglish = Boolean(state.includeEnglish);
   if (state.includeDrama != null) out.includeDrama = Boolean(state.includeDrama);
@@ -232,6 +237,8 @@ export function decodeAwaitLetterboxd(raw) {
       fileId: String(parsed.fileId || ""),
       topN: parsed.topN == null ? null : parsed.topN,
       minRated: parsed.minRated == null ? null : parsed.minRated,
+      includeRewatchInAverages:
+        parsed.includeRewatchInAverages == null ? null : Boolean(parsed.includeRewatchInAverages),
       includeUSA: parsed.includeUSA == null ? null : Boolean(parsed.includeUSA),
       includeEnglish: parsed.includeEnglish == null ? null : Boolean(parsed.includeEnglish),
       includeDrama: parsed.includeDrama == null ? null : Boolean(parsed.includeDrama),
@@ -318,6 +325,7 @@ export function letterboxdAckText(jobId, options) {
     "ZIP received. Building Letterboxd charts with GitHub Actions — PNGs will arrive in this chat " +
     "(calendar, extra stats, genres).\n\n" +
     `Tops: ${opts.topN}. Threshold: ${opts.minRated}. ` +
+    `Rewatches in averages: ${opts.includeRewatchInAverages ? "yes" : "no"}. ` +
     `USA: ${opts.includeUSA ? "yes" : "no"}. English: ${opts.includeEnglish ? "yes" : "no"}. ` +
     `Drama: ${opts.includeDrama ? "yes" : "no"}. Comedy: ${opts.includeComedy ? "yes" : "no"}. ` +
     `Keyword exclusions: ${keywords}. ` +
@@ -677,7 +685,7 @@ export function letterboxdModePrompt() {
     text: [
       "<b>How should the charts be built?</b>",
       "",
-      "ZIP received. Default builds the usual set right away. Customize sets the top size, threshold, optional exclusions, optional search keywords, and dates.",
+      "ZIP received. Default builds the usual set right away. Customize sets the top size, threshold, whether rewatches count in averages, optional exclusions, optional search keywords, and dates.",
       "",
       "Buttons below, or reply with text. Cancel with /stop.",
     ].join("\n"),
@@ -707,6 +715,15 @@ function promptFor(step, state, now = new Date()) {
         "3",
       ),
       reply_markup: letterboxdMinKeyboard(),
+    };
+  }
+  if (step === "rewatch_avg") {
+    return {
+      text: choicePrompt(
+        "Count previous watches in averages?",
+        "No — one rating per unique film (Name+Year). Rewatches do not inflate averages; they clutter the statistics. Default. Yes — each rated diary row contributes (including rewatches). Most often in the diary always counts rewatches for its tip average; this setting does not change that. Search-keyword film lists still show every view. Bar lengths stay watch counts; only the mean changes. The threshold still uses unique rated films.",
+      ),
+      reply_markup: letterboxdYesNoKeyboard("lb:rew", "no"),
     };
   }
   if (step === "exclusions") {
@@ -861,6 +878,7 @@ export function parseLetterboxdCallback(data) {
   if (match) return { step: "top_n", value: Number(match[1]) };
   match = raw.match(/^lb:m:(3|5|10)$/);
   if (match) return { step: "min_rated", value: Number(match[1]) };
+  if (raw === "lb:rew:1" || raw === "lb:rew:0") return { step: "rewatch_avg", value: raw.endsWith("1") };
   if (raw === "lb:excl:1" || raw === "lb:excl:0") return { step: "exclusions", value: raw.endsWith("1") };
   if (raw === "lb:usa:1" || raw === "lb:usa:0") return { step: "usa", value: raw.endsWith("1") };
   if (raw === "lb:en:1" || raw === "lb:en:0") return { step: "english", value: raw.endsWith("1") };
@@ -963,7 +981,12 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
   if (step === "min_rated") {
     const value = kind === "callback" ? input.value : parseBounded(input.text, LETTERBOXD_MIN_RATED_MIN, LETTERBOXD_MIN_RATED_MAX);
     if (value == null) return retry(state, "Need a number from 1 to 50. Buttons: 3, 5, 10. The report has not started.");
-    return go({ ...state, minRated: value }, "exclusions", now);
+    return go({ ...state, minRated: value }, "rewatch_avg", now);
+  }
+  if (step === "rewatch_avg") {
+    const value = kind === "callback" ? input.value : parseYesNoText(input.text);
+    if (value == null) return retry(state, "Need yes or no. The report has not started.");
+    return go({ ...state, includeRewatchInAverages: value }, "exclusions", now);
   }
   if (step === "exclusions") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
@@ -1157,6 +1180,7 @@ export function buildLetterboxdDispatch({ repo, workflow, ref, jobId, chatId, fi
         file_id: file,
         top_n: String(opts.topN),
         min_rated: String(opts.minRated),
+        include_rewatch_in_averages: opts.includeRewatchInAverages ? "true" : "false",
         include_usa: opts.includeUSA ? "true" : "false",
         include_english: opts.includeEnglish ? "true" : "false",
         include_drama: opts.includeDrama ? "true" : "false",

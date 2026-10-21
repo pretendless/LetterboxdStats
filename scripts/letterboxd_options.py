@@ -2,12 +2,17 @@
 
 Wizard defaults (also the GitHub Actions defaults):
   top_n=20 (allowed 1–100), min_rated=3 (allowed 1–50),
+  include_rewatch_in_averages=False (unique-film means),
   include USA, include English, include Drama, include Comedy,
   no custom keyword exclusions, no search keywords,
   full diary span, undated films only on the full span.
 
 Optional keyword exclusions (and the nested USA/English/Drama/Comedy path)
 apply only to quantitative / count tops — never to average-rating tops.
+
+include_rewatch_in_averages only changes qualitative means (each rated diary
+row vs one rating per Name+Year). Threshold gates stay on unique rated films.
+Most often in the diary and search-keyword lists are unaffected.
 
 Optional search keywords are separate: after all chart PNGs, each keyword
 gets a Telegram film list where the substring matches film metadata
@@ -244,6 +249,7 @@ def rated_gate_phrase(min_rated: int) -> str:
 class ChartOptions:
     top_n: int = TOP_N_DEFAULT
     min_rated: int = MIN_RATED_DEFAULT
+    include_rewatch_in_averages: bool = False
     include_usa: bool = True
     include_english: bool = True
     include_drama: bool = True
@@ -283,6 +289,9 @@ def read_chart_options(env: dict | None = None) -> ChartOptions:
     return ChartOptions(
         top_n=clamp_top_n(src.get("LETTERBOXD_TOP_N")),
         min_rated=clamp_min_rated(src.get("LETTERBOXD_MIN_RATED")),
+        include_rewatch_in_averages=parse_bool_flag(
+            src.get("LETTERBOXD_INCLUDE_REWATCH_IN_AVERAGES"), False
+        ),
         include_usa=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_USA"), True),
         include_english=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_ENGLISH"), True),
         include_drama=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_DRAMA"), True),

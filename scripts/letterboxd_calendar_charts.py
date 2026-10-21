@@ -107,14 +107,23 @@ def format_ru_calendar_date(ts) -> str:
 
 
 def release_year_avg_lookup(rated_rows: pd.DataFrame | None) -> dict[str, tuple]:
-    """Year string → (mean, unique rated films), including years under the gate."""
+    """Year string → (mean, unique rated films), including years under the gate.
+
+    Mean uses every rating row (rewatches inflate the mean when the averages
+    frame includes them). ``rated`` stays unique Name+Year count for the gate.
+    """
     if rated_rows is None or rated_rows.empty or "Year" not in rated_rows.columns:
         return {}
     work = rated_rows[rated_rows["Year"].notna() & rated_rows["Rating"].notna()].copy()
     if work.empty:
         return {}
     work["release_year"] = work["Year"].astype(int)
-    grouped = work.groupby("release_year")["Rating"].agg(avg="mean", rated="count")
+    if "_film_key" not in work.columns:
+        work["_film_key"] = film_name_year_key(work)
+    grouped = work.groupby("release_year").agg(
+        avg=("Rating", "mean"),
+        rated=("_film_key", "nunique"),
+    )
     out: dict[str, tuple] = {}
     for year, row in grouped.iterrows():
         rated_n = int(row["rated"])
@@ -187,11 +196,17 @@ def build_diary_summary(
     favorite_month = MONTHS[fav_m_i - 1] if fav_m_i is not None else None
     favorite_month_count = int(month_counts.iloc[0]) if len(month_counts) else 0
 
-    # Averages / mode: ratings.csv ∪ diary fallback (unique films).
+    # Averages / mode: ratings frame (unique films by default; rewatch rows when opted in).
     rated = catalog_rated["Rating"] if not catalog_rated.empty else pd.Series(dtype=float)
-    rated_count = int(len(rated))
+    if catalog_rated is not None and not catalog_rated.empty:
+        if "_film_key" in catalog_rated.columns:
+            rated_count = int(catalog_rated["_film_key"].nunique())
+        else:
+            rated_count = int(film_name_year_key(catalog_rated).nunique())
+    else:
+        rated_count = 0
     rated_share = round(rated_count / unique_films, 4) if unique_films else 0.0
-    rating_avg = round(float(rated.mean()), 2) if rated_count else None
+    rating_avg = round(float(rated.mean()), 2) if len(rated) else None
     rating_mode = None
     rating_mode_count = 0
     if rated_count:
@@ -237,9 +252,12 @@ def build_diary_summary(
         if not latest_release.empty and "Year" in latest_release.columns:
             latest_release = latest_release[latest_release["Year"].notna()].copy()
             latest_release["release_year"] = latest_release["Year"].astype(int)
-            # rated = unique films after ratings.csv merge (Name+Year), not diary rows.
-            rated_by_year = latest_release.groupby("release_year")["Rating"].agg(
-                avg="mean", rated="count"
+            if "_film_key" not in latest_release.columns:
+                latest_release["_film_key"] = film_name_year_key(latest_release)
+            # rated = unique films (Name+Year); mean may include rewatch diary rows.
+            rated_by_year = latest_release.groupby("release_year").agg(
+                avg=("Rating", "mean"),
+                rated=("_film_key", "nunique"),
             )
             for year, row in rated_by_year.iterrows():
                 rated_n = int(row["rated"])
@@ -1198,12 +1216,14 @@ def chart_average_rating_by_release_decade(
     work = work[work["Year"].notna()].copy()
     if work.empty:
         return False
+    if "_film_key" not in work.columns:
+        work["_film_key"] = film_name_year_key(work)
     work["decade"] = work["Year"].map(release_decade_label)
     work = work[work["decade"].notna()]
     if work.empty:
         return False
 
-    grouped = work.groupby("decade")["Rating"].agg(["mean", "count"])
+    grouped = work.groupby("decade").agg(mean=("Rating", "mean"), count=("_film_key", "nunique"))
     grouped = grouped[grouped["count"] >= 1].copy()
     if grouped.empty:
         return False
@@ -1228,8 +1248,9 @@ def diary_row_rating_means(df: pd.DataFrame) -> dict[str, float]:
 
     Unlike ``merged_film_ratings`` / latest-per-film, rewatches and prior views
     each contribute. Unrated rows are skipped for the mean (they still count
-    toward diary frequency elsewhere). Only the Most often in the diary chart
-    uses this; other charts keep unique-film rating semantics.
+    toward diary frequency elsewhere). Most often in the diary always uses this
+    (independent of include_rewatch_in_averages). Other charts use unique-film
+    means unless that toggle is on.
     """
     if df is None or df.empty or "Rating" not in df.columns:
         return {}
@@ -1397,6 +1418,7 @@ def main(argv: list[str] | None = None) -> int:
             date_from=opts.date_from,
             date_to=opts.date_to,
             include_undated=opts.include_undated,
+            include_rewatch_in_averages=opts.include_rewatch_in_averages,
         )
         if opts.has_window and diary.empty:
             print(
@@ -1452,6 +1474,7 @@ def main(argv: list[str] | None = None) -> int:
         summary["date_from"] = opts.date_from or ""
         summary["date_to"] = opts.date_to or ""
         summary["include_undated"] = bool(opts.include_undated and opts.has_window)
+        summary["include_rewatch_in_averages"] = bool(opts.include_rewatch_in_averages)
         summary["watch_time_grain"] = grain
         summary["exclude_keywords"] = list(opts.exclude_keywords or ())
         year_avgs = release_year_avg_lookup(ratings_for_catalog(catalog, film_ratings))

@@ -91,6 +91,10 @@ Discrete ordered series (watch years, ranked genres), earliest or lowest first, 
 
 Four or more values sample the full 0–1 palette. There is no quadratic bend and no snap onto the logo knots. N = 4 is `[0.125, 0.375, 0.625, 0.875]`. N = 7 is `[0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5] / 7`.
 
+## Rewatch averages toggle
+
+Wizard / Actions / `ChartOptions.include_rewatch_in_averages` (env `LETTERBOXD_INCLUDE_REWATCH_IN_AVERAGES`). Default **false**: `merged_film_ratings` (one Name+Year). **true**: each rated diary row contributes via `ratings_for_averages` / `diary_rated_views_plus_gaps`. Threshold gates and `(n)` unique-film counts stay on unique rated films. Most often in the diary and search-keyword lists ignore this flag. Do not edit the vendored `tg2tm/` wizard for this.
+
 ## Rating-bar labels
 
 In `chart_rating_hbar` (`scripts/letterboxd_top_charts.py`), `SHORT_BAR_NAME_CHARS` is 15.
