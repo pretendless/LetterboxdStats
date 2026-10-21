@@ -55,11 +55,14 @@ from letterboxd_palette import (  # noqa: E402
     LOGO_BLUE_T,
     LOGO_ORANGE_T,
     MARKER_EDGE,
+    UNDATED_LEGEND_EDGE,
     UNDATED_WATCH_YEAR,
     apply_dark_chart_theme,
+    is_undated_watch_year,
     palette_color,
     save_dark_figure,
     style_axes,
+    watch_year_legend_label,
     watch_year_palette,
 )
 from letterboxd_top_charts import (  # noqa: E402
@@ -545,10 +548,24 @@ def _place_count_avg_above_totals(
 
 
 def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Watch year"):
-    handles = [plt.Rectangle((0, 0), 1, 1, color=colors[y]) for y in years]
+    handles = []
+    for y in years:
+        if is_undated_watch_year(y):
+            handles.append(
+                plt.Rectangle(
+                    (0, 0),
+                    1,
+                    1,
+                    facecolor=colors[y],
+                    edgecolor=UNDATED_LEGEND_EDGE,
+                    linewidth=0.8,
+                )
+            )
+        else:
+            handles.append(plt.Rectangle((0, 0), 1, 1, color=colors[y]))
     leg = fig.legend(
         handles,
-        [str(y) for y in years],
+        [watch_year_legend_label(y) for y in years],
         title=title,
         loc="center left",
         bbox_to_anchor=(0.92, 0.5),

@@ -30,7 +30,9 @@ from letterboxd_palette import (
     HALO,
     ON_BAR,
     RATING_COLORBAR_LABEL,
+    UNDATED_LEGEND_EDGE,
     UNDATED_WATCH_YEAR,
+    is_undated_watch_year,
     rating_color,
     rating_colormap,
     rating_colors,
@@ -237,10 +239,24 @@ def _fit_text_to_data_width(
 
 def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Watch year"):
     """Legacy fig-level Watch year legend (no Most liked). Prefer ``draw_side_panel``."""
-    handles = [plt.Rectangle((0, 0), 1, 1, color=colors[y]) for y in years]
+    handles = []
+    for y in years:
+        if is_undated_watch_year(y):
+            handles.append(
+                plt.Rectangle(
+                    (0, 0),
+                    1,
+                    1,
+                    facecolor=colors[y],
+                    edgecolor=UNDATED_LEGEND_EDGE,
+                    linewidth=0.8,
+                )
+            )
+        else:
+            handles.append(plt.Rectangle((0, 0), 1, 1, color=colors[y]))
     leg = fig.legend(
         handles,
-        [str(y) for y in years],
+        [watch_year_legend_label(y) for y in years],
         title=title,
         loc="center left",
         bbox_to_anchor=(0.92, 0.5),
@@ -319,22 +335,27 @@ def draw_watch_year_most_liked_panel(
         return
 
     # Watch year as a real legend (swatches + labels), anchored top of the gutter.
+    # No date is white; give its swatch a thin rim so it reads on the black surface.
     leg = None
     if year_list:
-        handles = [
-            Line2D(
-                [0],
-                [0],
-                marker="s",
-                color="none",
-                markerfacecolor=palette[y],
-                markeredgecolor="none",
-                markersize=7,
-                label=watch_year_legend_label(y),
+        handles = []
+        for y in year_list:
+            if y not in palette:
+                continue
+            undated = is_undated_watch_year(y)
+            handles.append(
+                Line2D(
+                    [0],
+                    [0],
+                    marker="s",
+                    color="none",
+                    markerfacecolor=palette[y],
+                    markeredgecolor=UNDATED_LEGEND_EDGE if undated else "none",
+                    markeredgewidth=0.8 if undated else 0.0,
+                    markersize=7,
+                    label=watch_year_legend_label(y),
+                )
             )
-            for y in year_list
-            if y in palette
-        ]
         ncol = 1 if len(handles) <= 14 else 2
         leg = ax.legend(
             handles=handles,
