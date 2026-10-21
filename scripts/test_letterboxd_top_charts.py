@@ -657,24 +657,29 @@ def test_watch_time_charts_label_every_position(tmp_path: Path | None = None):
     for text in rated_counts:
         assert text.get_fontweight() == "normal"
         assert _rgba(text.get_color()) == _rgba(FG)
+    # Mean above the marker, ``(n)`` below — not a side-by-side pair.
+    mean_by_x = {round(t.get_position()[0], 6): t for t in means}
+    count_by_x = {round(t.get_position()[0], 6): t for t in rated_counts}
+    assert set(mean_by_x) == set(count_by_x)
+    for x_key in mean_by_x:
+        assert mean_by_x[x_key].get_position()[1] > count_by_x[x_key].get_position()[1]
 
 
-def test_integer_percent_shares_sum_to_100():
+def test_percent_shares_two_decimals():
     import letterboxd_calendar_charts as cal
 
-    assert cal.integer_percent_shares([]) == []
-    assert cal.integer_percent_shares([0, 0, 0]) == [0, 0, 0]
-    assert cal.integer_percent_shares([2, 1, 1]) == [50, 25, 25]
-    # Largest remainder: 1/3 each → 34 + 33 + 33 (earlier index wins the leftover).
-    assert cal.integer_percent_shares([1, 1, 1]) == [34, 33, 33]
-    assert sum(cal.integer_percent_shares([1, 1, 1, 1])) == 100
-    assert sum(cal.integer_percent_shares([7, 1, 1, 1])) == 100
+    assert cal.percent_shares([]) == []
+    assert cal.percent_shares([0, 0, 0]) == [0.0, 0.0, 0.0]
+    assert cal.percent_shares([2, 1, 1]) == [50.0, 25.0, 25.0]
+    # Accurate shares, ordinary 2-decimal rounding — not largest-remainder.
+    assert cal.percent_shares([1, 1, 1]) == [33.33, 33.33, 33.33]
+    assert cal.percent_shares([1, 2, 3]) == [16.67, 33.33, 50.0]
 
 
 def test_letterboxd_rating_distribution_percent_tips(
     tmp_path: Path | None = None,
 ):
-    """extra_stats Rating distribution: tip is % of chart total — not star rating."""
+    """extra_stats Rating distribution: bold ``NN.NN%`` + ``(count)`` — not star rating."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-rating-dist")
     out.mkdir(parents=True, exist_ok=True)
     diary = pd.DataFrame(
@@ -688,12 +693,13 @@ def test_letterboxd_rating_distribution_percent_tips(
     diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
 
     import letterboxd_calendar_charts as cal
+    import re
 
     captured: dict = {}
     real_save = cal.save_dark_figure
 
     def grab(fig, dest, **kwargs):
-        captured["rating_texts"] = [t.get_text() for t in fig.axes[1].texts]
+        captured["rating_artists"] = list(fig.axes[1].texts)
         captured["decade_texts"] = [t.get_text() for t in fig.axes[0].texts]
         real_save(fig, dest, **kwargs)
 
@@ -703,16 +709,25 @@ def test_letterboxd_rating_distribution_percent_tips(
     finally:
         cal.save_dark_figure = real_save
 
-    rating_texts = captured["rating_texts"]
-    assert rating_texts
-    assert all(t.endswith("%") for t in rating_texts)
-    assert all(t[:-1].isdigit() for t in rating_texts)
-    # 2×4.0, 1×5.0, 1×3.0 → 50% / 25% / 25%; empty bins 0%.
-    assert set(rating_texts) == {"0%", "25%", "50%"}
-    assert sum(int(t[:-1]) for t in rating_texts) == 100
-    assert "4.00" not in rating_texts
-    assert "5.00" not in rating_texts
-    assert "3.00" not in rating_texts
+    artists = captured["rating_artists"]
+    assert artists
+    pct_re = re.compile(r"^\d+\.\d{2}%$")
+    count_re = re.compile(r"^\(\d+\)$")
+    pcts = [t for t in artists if pct_re.fullmatch(t.get_text())]
+    counts = [t for t in artists if count_re.fullmatch(t.get_text())]
+    assert len(pcts) == len(counts) == len(artists) // 2
+    # 2×4.0, 1×5.0, 1×3.0 → 50.00% (2) / 25.00% (1) / 25.00% (1); empty 0.00% (0).
+    assert {t.get_text() for t in pcts} == {"0.00%", "25.00%", "50.00%"}
+    assert {t.get_text() for t in counts} == {"(0)", "(1)", "(2)"}
+    assert sum(int(t.get_text().strip("()")) for t in counts) == 4
+    for text in pcts:
+        assert text.get_fontweight() == "bold"
+        assert _rgba(text.get_color()) == _rgba(FG)
+    for text in counts:
+        assert text.get_fontweight() == "normal"
+        assert _rgba(text.get_color()) == _rgba(FG)
+    # Star ratings must not appear as tip text (percent + count only).
+    assert not any(t.get_text() in {"4.00", "5.00", "3.00"} for t in artists)
     # Decade panel still carries count + mean.
     decade_texts = captured["decade_texts"]
     assert any(t.isdigit() for t in decade_texts)
@@ -841,7 +856,7 @@ if __name__ == "__main__":
     test_count_bars_drop_n_and_style_mean()
     test_release_year_count_label_omits_n()
     test_watch_time_charts_label_every_position()
-    test_integer_percent_shares_sum_to_100()
+    test_percent_shares_two_decimals()
     test_letterboxd_rating_distribution_percent_tips()
     test_views_count_bars_show_avg_or_dash()
     test_stacked_count_hbar_long_names()
