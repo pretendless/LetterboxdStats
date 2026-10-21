@@ -55,13 +55,16 @@ from letterboxd_palette import (  # noqa: E402
     LOGO_BLUE_T,
     LOGO_ORANGE_T,
     MARKER_EDGE,
-    UNDATED_LEGEND_EDGE,
     UNDATED_WATCH_YEAR,
     apply_dark_chart_theme,
     is_undated_watch_year,
+    paint_undated_hbar_segments,
+    paint_undated_vbar_segments,
     palette_color,
     save_dark_figure,
     style_axes,
+    undated_legend_handle,
+    undated_legend_handler_map,
     watch_year_legend_label,
     watch_year_palette,
 )
@@ -353,9 +356,15 @@ def stacked_counts(ax, categories: list[str], years: list[int], matrix: np.ndarr
     """matrix shape: (len(years), len(categories)). Returns stack totals per category."""
     bottom = np.zeros(len(categories))
     x = np.arange(len(categories))
+    bar_w = 0.82
     for yi, year in enumerate(years):
         vals = matrix[yi]
-        ax.bar(x, vals, bottom=bottom, color=colors[year], width=0.82, edgecolor="none")
+        if is_undated_watch_year(year):
+            paint_undated_vbar_segments(
+                ax, x=x, bottoms=bottom, heights=vals, width=bar_w
+            )
+        else:
+            ax.bar(x, vals, bottom=bottom, color=colors[year], width=bar_w, edgecolor="none")
         bottom += vals
     ax.set_xticks(x)
     ax.set_xticklabels(categories, rotation=45 if len(categories) > 8 else 0, ha="right" if len(categories) > 8 else "center")
@@ -551,16 +560,7 @@ def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Wat
     handles = []
     for y in years:
         if is_undated_watch_year(y):
-            handles.append(
-                plt.Rectangle(
-                    (0, 0),
-                    1,
-                    1,
-                    facecolor=colors[y],
-                    edgecolor=UNDATED_LEGEND_EDGE,
-                    linewidth=0.8,
-                )
-            )
+            handles.append(undated_legend_handle())
         else:
             handles.append(plt.Rectangle((0, 0), 1, 1, color=colors[y]))
     leg = fig.legend(
@@ -573,6 +573,7 @@ def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Wat
         fontsize=8,
         title_fontsize=9,
         labelcolor=FG,
+        handler_map=undated_legend_handler_map(),
     )
     if leg is not None and leg.get_title() is not None:
         leg.get_title().set_color(FG)
@@ -1657,9 +1658,13 @@ def chart_top_rewatches(
     fig, ax = plt.subplots(figsize=(fig_w, max(4, len(labels) * 0.42)))
     y = np.arange(len(labels))
     left = np.zeros(len(labels))
+    bar_h = 0.72
     for yi, year in enumerate(years):
         vals = matrix[yi]
-        ax.barh(y, vals, left=left, color=colors[year], height=0.72, edgecolor="none")
+        if is_undated_watch_year(year):
+            paint_undated_hbar_segments(ax, y=y, lefts=left, widths=vals, height=bar_h)
+        else:
+            ax.barh(y, vals, left=left, color=colors[year], height=bar_h, edgecolor="none")
         left += vals
     ax.set_yticks(y)
     ax.set_yticklabels(labels)

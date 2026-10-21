@@ -30,15 +30,17 @@ from letterboxd_palette import (
     HALO,
     ON_BAR,
     RATING_COLORBAR_LABEL,
-    UNDATED_LEGEND_EDGE,
     UNDATED_WATCH_YEAR,
     is_undated_watch_year,
+    paint_undated_hbar_segments,
     rating_color,
     rating_colormap,
     rating_colors,
     rating_norm,
     save_dark_figure,
     style_axes,
+    undated_legend_handle,
+    undated_legend_handler_map,
     watch_year_legend_label,
     watch_year_palette,
 )
@@ -242,16 +244,7 @@ def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Wat
     handles = []
     for y in years:
         if is_undated_watch_year(y):
-            handles.append(
-                plt.Rectangle(
-                    (0, 0),
-                    1,
-                    1,
-                    facecolor=colors[y],
-                    edgecolor=UNDATED_LEGEND_EDGE,
-                    linewidth=0.8,
-                )
-            )
+            handles.append(undated_legend_handle())
         else:
             handles.append(plt.Rectangle((0, 0), 1, 1, color=colors[y]))
     leg = fig.legend(
@@ -264,6 +257,7 @@ def add_watch_year_legend(fig, years: list[int], colors: dict, title: str = "Wat
         fontsize=8,
         title_fontsize=9,
         labelcolor=FG,
+        handler_map=undated_legend_handler_map(),
     )
     if leg is not None and leg.get_title() is not None:
         leg.get_title().set_color(FG)
@@ -335,30 +329,33 @@ def draw_watch_year_most_liked_panel(
         return
 
     # Watch year as a real legend (swatches + labels), anchored top of the gutter.
-    # No date is white; give its swatch a thin rim so it reads on the black surface.
+    # No date uses the horizontal logo-charcoal gradient swatch (not a year color).
     leg = None
     if year_list:
         handles = []
         for y in year_list:
             if y not in palette:
                 continue
-            undated = is_undated_watch_year(y)
-            handles.append(
-                Line2D(
-                    [0],
-                    [0],
-                    marker="s",
-                    color="none",
-                    markerfacecolor=palette[y],
-                    markeredgecolor=UNDATED_LEGEND_EDGE if undated else "none",
-                    markeredgewidth=0.8 if undated else 0.0,
-                    markersize=7,
-                    label=watch_year_legend_label(y),
+            if is_undated_watch_year(y):
+                handles.append(undated_legend_handle())
+            else:
+                handles.append(
+                    Line2D(
+                        [0],
+                        [0],
+                        marker="s",
+                        color="none",
+                        markerfacecolor=palette[y],
+                        markeredgecolor="none",
+                        markeredgewidth=0.0,
+                        markersize=7,
+                    )
                 )
-            )
+        labels = [watch_year_legend_label(y) for y in year_list if y in palette]
         ncol = 1 if len(handles) <= 14 else 2
         leg = ax.legend(
             handles=handles,
+            labels=labels,
             title="Watch year",
             loc="upper left",
             bbox_to_anchor=(1.02, 1.0),
@@ -372,6 +369,7 @@ def draw_watch_year_most_liked_panel(
             handleheight=0.7,
             columnspacing=0.8,
             labelspacing=0.28,
+            handler_map=undated_legend_handler_map(),
         )
         if leg is not None and leg.get_title() is not None:
             leg.get_title().set_color(FG)
@@ -570,10 +568,16 @@ def chart_stacked_count_hbar(
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     y = np.arange(n)
     left_stack = np.zeros(n)
+    bar_h = 0.86
     for yi, year in enumerate(years):
         vals = matrix[yi]
         # Thick bars → small gap between rows.
-        ax.barh(y, vals, left=left_stack, color=palette[year], height=0.86, edgecolor="none")
+        if is_undated_watch_year(year):
+            paint_undated_hbar_segments(
+                ax, y=y, lefts=left_stack, widths=vals, height=bar_h
+            )
+        else:
+            ax.barh(y, vals, left=left_stack, color=palette[year], height=bar_h, edgecolor="none")
         left_stack += vals
     ax.set_yticks(y)
     ax.set_yticklabels(labels)

@@ -18,12 +18,14 @@ exactly.
 Ordered series (earliest or lowest first) use the logo knots for one, two,
 and three values. Four or more use even bin midpoints and do not snap to the
 logo. See ``categorical_positions``. Watch-year stacks paint **No date**
-(``UNDATED_WATCH_YEAR``) white — outside that ordered series.
+(``UNDATED_WATCH_YEAR``) with the logo-background charcoal gradient, rotated
+90° to left→right — outside that ordered series.
 """
 
 from __future__ import annotations
 
 import math
+from typing import Any
 
 # Dark chart surface
 BG = "#000000"
@@ -267,14 +269,171 @@ def categorical_colors(n: int, cmap=None) -> list[tuple]:
 
 # Sentinel stack segment for catalog rows with no Watched Date (watched-only).
 # Real Letterboxd watch years are four-digit; 0 never collides. Ordered last in
-# the legend so dated years stay earliest→latest. Painted white — not a sample
-# on the purple→burgundy year colormap (see ``UNDATED_WATCH_YEAR_RGBA``).
+# the legend so dated years stay earliest→latest. Not a sample on the
+# purple→burgundy year colormap — logo charcoal gradient instead (see below).
 UNDATED_WATCH_YEAR = 0
 UNDATED_WATCH_YEAR_LABEL = "No date"
-# Pure white stack / legend fill. Not from ``palette_color``.
-UNDATED_WATCH_YEAR_RGBA = (1.0, 1.0, 1.0, 1.0)
-# Thin swatch rim so white stays visible on the black chart surface.
+# Logo app-icon background charcoal (away from orange/green/blue circles).
+# On the logo the blend is vertical top→bottom; No date stack fills rotate
+# that pair 90° to a horizontal left→right gradient (not a year-palette slot).
+UNDATED_LOGO_TOP_HEX = "#2C3440"
+UNDATED_LOGO_BOTTOM_HEX = "#14181C"
+UNDATED_GRADIENT_LEFT_HEX = UNDATED_LOGO_TOP_HEX
+UNDATED_GRADIENT_RIGHT_HEX = UNDATED_LOGO_BOTTOM_HEX
+# Solid mid-charcoal for palette dict / callers that need one RGBA (not the
+# stack fill — stacks and legend swatches use the horizontal gradient).
+_UNDATED_MID_RGB = tuple(
+    (int(UNDATED_GRADIENT_LEFT_HEX[i : i + 2], 16) + int(UNDATED_GRADIENT_RIGHT_HEX[i : i + 2], 16)) // 2
+    for i in (1, 3, 5)
+)
+UNDATED_WATCH_YEAR_RGBA = (
+    _UNDATED_MID_RGB[0] / 255.0,
+    _UNDATED_MID_RGB[1] / 255.0,
+    _UNDATED_MID_RGB[2] / 255.0,
+    1.0,
+)
+# Thin swatch rim so the dark charcoal gradient stays visible on black.
 UNDATED_LEGEND_EDGE = LEGEND_EDGE
+
+_UNDATED_CMAP = None
+
+
+def undated_horizontal_colormap():
+    """Left→right LinearSegmentedColormap: logo top charcoal → logo bottom."""
+    global _UNDATED_CMAP
+    if _UNDATED_CMAP is not None:
+        return _UNDATED_CMAP
+    from matplotlib.colors import LinearSegmentedColormap
+
+    _UNDATED_CMAP = LinearSegmentedColormap.from_list(
+        "undated_no_date",
+        [UNDATED_GRADIENT_LEFT_HEX, UNDATED_GRADIENT_RIGHT_HEX],
+        N=256,
+    )
+    return _UNDATED_CMAP
+
+
+def paint_undated_hbar_segments(ax, *, y, lefts, widths, height: float, n_stops: int = 64) -> None:
+    """Fill horizontal-bar No date segments with a left→right charcoal gradient."""
+    from matplotlib.patches import Rectangle
+
+    cmap = undated_horizontal_colormap()
+    half = float(height) / 2.0
+    last = max(n_stops - 1, 1)
+    for yi, left, width in zip(y, lefts, widths):
+        w = float(width)
+        if w <= 0:
+            continue
+        x0 = float(left)
+        y0 = float(yi) - half
+        for j in range(n_stops):
+            ax.add_patch(
+                Rectangle(
+                    (x0 + w * j / n_stops, y0),
+                    w / n_stops,
+                    float(height),
+                    facecolor=cmap(j / last),
+                    edgecolor="none",
+                    linewidth=0,
+                    clip_on=True,
+                )
+            )
+
+
+def paint_undated_vbar_segments(ax, *, x, bottoms, heights, width: float, n_stops: int = 64) -> None:
+    """Fill vertical-bar No date segments with a left→right charcoal gradient."""
+    from matplotlib.patches import Rectangle
+
+    cmap = undated_horizontal_colormap()
+    half = float(width) / 2.0
+    last = max(n_stops - 1, 1)
+    for xi, bottom, height in zip(x, bottoms, heights):
+        h = float(height)
+        if h <= 0:
+            continue
+        x0 = float(xi) - half
+        y0 = float(bottom)
+        for j in range(n_stops):
+            ax.add_patch(
+                Rectangle(
+                    (x0 + float(width) * j / n_stops, y0),
+                    float(width) / n_stops,
+                    h,
+                    facecolor=cmap(j / last),
+                    edgecolor="none",
+                    linewidth=0,
+                    clip_on=True,
+                )
+            )
+
+
+class UndatedLegendProxy:
+    """Legend handle proxy; rendered via ``undated_legend_handler_map``."""
+
+
+_UNDATED_HANDLER = None
+
+
+def undated_legend_handle() -> UndatedLegendProxy:
+    """Proxy for Watch year legend entries that paint the No date gradient."""
+    return UndatedLegendProxy()
+
+
+def undated_legend_handler_map() -> dict[Any, Any]:
+    """``handler_map`` fragment so legend renders ``UndatedLegendProxy`` as a gradient."""
+    global _UNDATED_HANDLER
+    if _UNDATED_HANDLER is not None:
+        return {UndatedLegendProxy: _UNDATED_HANDLER}
+
+    from matplotlib.legend_handler import HandlerBase
+    from matplotlib.patches import Rectangle
+
+    class HandlerUndatedGradient(HandlerBase):
+        """Horizontal logo-charcoal gradient + thin rim."""
+
+        def create_artists(
+            self,
+            legend,
+            orig_handle,
+            xdescent,
+            ydescent,
+            width,
+            height,
+            fontsize,
+            trans,
+        ):
+            del legend, orig_handle, fontsize
+            cmap = undated_horizontal_colormap()
+            n = 32
+            last = max(n - 1, 1)
+            artists = []
+            for i in range(n):
+                artists.append(
+                    Rectangle(
+                        (xdescent + width * i / n, ydescent),
+                        width / n,
+                        height,
+                        transform=trans,
+                        facecolor=cmap(i / last),
+                        edgecolor="none",
+                        linewidth=0,
+                    )
+                )
+            artists.append(
+                Rectangle(
+                    (xdescent, ydescent),
+                    width,
+                    height,
+                    transform=trans,
+                    facecolor="none",
+                    edgecolor=UNDATED_LEGEND_EDGE,
+                    linewidth=0.8,
+                )
+            )
+            return artists
+
+    _UNDATED_HANDLER = HandlerUndatedGradient()
+    return {UndatedLegendProxy: _UNDATED_HANDLER}
 
 
 def watch_year_legend_label(year: int) -> str:
@@ -301,8 +460,9 @@ def watch_year_palette(all_watch_years) -> dict[int, tuple]:
 
     Dated years alone drive ``categorical_positions`` / ``categorical_colors``.
     ``UNDATED_WATCH_YEAR`` (watched-only / no diary date) is ordered last in
-    the returned mapping for legend order, but always white — it does not take
-    a slot on the purple→burgundy year scale.
+    the returned mapping for legend order, but uses the logo charcoal mid
+    RGBA as a solid stand-in — it does not take a slot on the purple→burgundy
+    year scale. Stack drawing and legend swatches use the horizontal gradient.
     """
     raw = {int(y) for y in (all_watch_years or []) if y is not None}
     has_undated = UNDATED_WATCH_YEAR in raw
