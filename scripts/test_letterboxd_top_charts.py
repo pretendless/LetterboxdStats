@@ -82,10 +82,10 @@ def test_ranked_hbar_grows_taller_with_n(tmp_path: Path | None = None) -> None:
 
 def test_categorical_palette_samples_quartile_ranks():
     """Ordered series bend quartile ranks; ratings keep the full 0–1 range."""
-    assert categorical_positions(1) == [0.5]
-    assert categorical_positions(2) == [0.25, 0.75]
-    assert categorical_positions(3) == [0.25, 0.5, 0.75]
-    assert categorical_positions(7) == [0.0625, 0.25, 0.4375, 0.5, 0.5625, 0.75, 0.9375]
+    assert categorical_positions(1) == [0.4]
+    assert categorical_positions(2) == [0.2, 0.7]
+    assert categorical_positions(3) == [0.2, 0.4, 0.7]
+    assert np.allclose(categorical_positions(7), [0.05, 0.2, 0.35, 0.4, 0.475, 0.7, 0.925])
     cases = {1: [2024], 2: [2023, 2024], 3: [2022, 2023, 2024]}
     for n, years in cases.items():
         palette = watch_year_palette(years)
@@ -96,8 +96,8 @@ def test_categorical_palette_samples_quartile_ranks():
             assert np.allclose(colors[i], palette[year])
     # Earliest of three years is logo blue; latest is logo orange.
     three = watch_year_palette([2022, 2023, 2024])
-    assert np.allclose(three[2022], palette_color(0.25))
-    assert np.allclose(three[2024], palette_color(0.75))
+    assert np.allclose(three[2022], palette_color(0.2))
+    assert np.allclose(three[2024], palette_color(0.7))
     # Rating colors stay a continuous map of the numeric value.
     assert np.allclose(rating_color(RATING_VMIN), rating_colormap()(0.0))
     assert np.allclose(rating_color(RATING_VMAX), rating_colormap()(1.0))

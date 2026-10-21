@@ -69,29 +69,29 @@ Leave the vendored `tg2tm/` wizard as it is until a separate cutover. Do not rem
 
 One palette, `palette_color` in `scripts/letterboxd_palette.py`. It is a smooth piecewise-linear interpolation in OKLab `(L, a, b)` through five knots:
 
-- 0 purple `#7729FF`
-- 0.25 blue `#3FB7EB` = RGB (63, 183, 235)
-- 0.50 green `#03E53E` = RGB (3, 229, 62)
-- 0.75 orange `#FC7A02` = RGB (252, 122, 2)
-- 1 burgundy `#A90048`
+- 0 deep purple `#5922BF` = RGB (89, 34, 191)
+- 0.2 blue `#3FB7EB` = RGB (63, 183, 235)
+- 0.4 green `#03E53E` = RGB (3, 229, 62)
+- 0.7 orange `#FC7A02` = RGB (252, 122, 2)
+- 1 deep burgundy `#890E3A` = RGB (137, 14, 58)
 
-The three middle knots are the measured logo circles (median sRGB of each non-overlapping interior: 12px erosion, then a center disk). A knot returns those bytes exactly. Each segment is the straight OKLab line between its knots, so lightness does not jump.
+The three middle knots are the measured logo circles (median sRGB of each non-overlapping interior: 12px erosion, then a center disk). Their positions are `LOGO_BLUE_T`, `LOGO_GREEN_T`, `LOGO_ORANGE_T`; the uneven spacing is deliberate so the scale is not homogeneous. The ends are `END_PURPLE_RGB` and `END_BURGUNDY_RGB`: darker than the logo colors (OKLab L 0.44 and 0.41) but still at least 2.2:1 on black. A knot returns those bytes exactly. Each segment is the straight OKLab line between its knots, so lightness does not jump.
 
 Never use hue bands, hard cuts, holds, or easing.
 
-A rating maps with `t = (rating − 0.5) / 4.5` (`RATING_VMIN = 0.5`, `RATING_VMAX = 5.0`). So 1.625 is logo blue, 2.75 is green, and 3.875 is logo orange.
+A rating maps with `t = (rating − 0.5) / 4.5` (`RATING_VMIN = 0.5`, `RATING_VMAX = 5.0`). So 1.4 is logo blue, 2.3 is green, and 3.65 is logo orange.
 
 Discrete ordered series (watch years, ranked genres), earliest or lowest first, use `bend_rank` on raw rank `q = (i+1)/(N+1)`:
 
-- N = 1 → `[0.5]`
-- N = 2 → `[0.25, 0.75]`
-- N ≥ 3 → piecewise quadratic on `q`, knots fixed:
-  - `[0, 0.25]`: `u = q/0.25`, `t = 0.25 u²` (pull toward 0)
-  - `[0.25, 0.5]`: `u = (q−0.25)/0.25`, `t = 0.25 + 0.25 (1−(1−u)²)` (pull toward green)
-  - `[0.5, 0.75]`: `u = (q−0.5)/0.25`, `t = 0.5 + 0.25 u²` (pull toward green)
-  - `[0.75, 1]`: `u = (q−0.75)/0.25`, `t = 1 − 0.25 (1−u)²` (pull toward 1)
+- N = 1 → `[0.4]`
+- N = 2 → `[0.2, 0.7]`
+- N ≥ 3 → raw quartiles 0, 0.25, 0.5, 0.75, 1 land on the knots 0, 0.2, 0.4, 0.7, 1. Inside each quartile `u = (q − q0)/0.25` and `[t0, t1]` is the matching knot interval:
+  - `[0, 0.25]`: `t = t0 + (t1−t0) u²` (pull toward 0)
+  - `[0.25, 0.5]`: `t = t0 + (t1−t0) (1−(1−u)²)` (pull toward green)
+  - `[0.5, 0.75]`: `t = t0 + (t1−t0) u²` (pull toward green)
+  - `[0.75, 1]`: `t = t0 + (t1−t0) (1−(1−u)²)` (pull toward 1)
 
-N = 3 is blue, green, orange. N = 7 is `[0.0625, 0.25, 0.4375, 0.5, 0.5625, 0.75, 0.9375]` (items 2, 4, and 6 are the logo colors).
+N = 3 is blue, green, orange. N = 7 is `[0.05, 0.2, 0.35, 0.4, 0.475, 0.7, 0.925]` (items 2, 4, and 6 are the logo colors).
 
 ## Rating-bar labels
 

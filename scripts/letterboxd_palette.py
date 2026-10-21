@@ -3,16 +3,17 @@
 Every data color comes from ``palette_color``. The three logo circles are
 fixed anchors (median sRGB of each non-overlapping interior):
 
-- 0.25 blue ``#3FB7EB``
-- 0.50 green ``#03E53E``
-- 0.75 orange ``#FC7A02``
+- 0.2 blue ``#3FB7EB``
+- 0.4 green ``#03E53E``
+- 0.7 orange ``#FC7A02``
 
 ``palette_color`` is piecewise-linear in OKLab ``(L, a, b)`` between five
-knots: purple ``#7729FF`` at 0, the three logo colors at 0.25 / 0.50 / 0.75,
-and burgundy ``#A90048`` at 1. The ends are the three-step chords past the
-logo colors. There is no hold, hue band, or ease: each segment is the
-straight OKLab line, so lightness does not jump at a knot. The logo knots
-and the two ends return their bytes exactly.
+knots: deep purple ``#5922BF`` at 0, the three logo colors at 0.2 / 0.4 /
+0.7, and deep burgundy ``#890E3A`` at 1. The uneven spacing gives each
+segment a different length so the scale is not uniform. There is no hold,
+hue band, or ease: each segment is the straight OKLab line, so lightness
+does not jump at a knot. The logo knots and the two ends return their bytes
+exactly.
 
 Ordered series (earliest or lowest first) bend quartile ranks with a
 piecewise quadratic so the logo knots stay put. See ``categorical_positions``.
@@ -42,17 +43,26 @@ ON_BAR = "#FFFFFF"
 # A 12px erosion drops the white overlap lenses and the fringe; the median
 # is then taken on a disk at the circle center (1808 px). Both central
 # samples of every channel were this same integer, so the hex is exact.
-LOGO_BLUE_RGB = (63, 183, 235)  # #3FB7EB at t = 0.25
-LOGO_GREEN_RGB = (3, 229, 62)  # #03E53E at t = 0.50
-LOGO_ORANGE_RGB = (252, 122, 2)  # #FC7A02 at t = 0.75
+LOGO_BLUE_RGB = (63, 183, 235)  # #3FB7EB
+LOGO_GREEN_RGB = (3, 229, 62)  # #03E53E
+LOGO_ORANGE_RGB = (252, 122, 2)  # #FC7A02
 LOGO_BLUE_HEX = "#3FB7EB"
 LOGO_GREEN_HEX = "#03E53E"
 LOGO_ORANGE_HEX = "#FC7A02"
 
-# How far t=0 and t=1 sit past the outer logo colors, in anchor steps
-# (one step is Δt = 0.25, the old ends ``2B−G`` / ``2O−G``). Three steps
-# is where the gamut-mapped chord reads as purple and burgundy.
-OUTER_CHORD_STEPS = 3.0
+# Palette positions of the logo knots.
+LOGO_BLUE_T = 0.2
+LOGO_GREEN_T = 0.4
+LOGO_ORANGE_T = 0.7
+PALETTE_KNOTS = (0.0, LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T, 1.0)
+
+# Palette ends. OKLab L 0.44 / C 0.22 / h 290° and L 0.41 / C 0.155 / h 8°:
+# darker than the logo colors so the scale deepens at both ends, but still
+# at least 2.2:1 against the black chart surface.
+END_PURPLE_RGB = (89, 34, 191)  # #5922BF at t = 0
+END_BURGUNDY_RGB = (137, 14, 58)  # #890E3A at t = 1
+END_PURPLE_HEX = "#5922BF"
+END_BURGUNDY_HEX = "#890E3A"
 
 # Björn Ottosson, OKLab (https://bottosson.github.io/posts/oklab/).
 _M1 = (
@@ -154,37 +164,20 @@ def _rgba_bytes(rgb: tuple[int, int, int]) -> tuple[float, float, float, float]:
     return (rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0, 1.0)
 
 
-def _chord_end(
-    anchor: tuple[float, float, float],
-    green: tuple[float, float, float],
-    steps: float,
-) -> tuple[float, float, float]:
-    """OKLab point ``steps`` anchor-widths past ``anchor``, away from green."""
-    return tuple(anchor[i] + steps * (anchor[i] - green[i]) for i in range(3))
-
-
 _STOPS: tuple | None = None
 
 
 def _palette_stops():
-    """Knots (t, rgb bytes, OKLab of those bytes), including extrapolated ends."""
+    """Knots (t, rgb bytes, OKLab of those bytes)."""
     global _STOPS
     if _STOPS is not None:
         return _STOPS
-    blue = _oklab_of_bytes(LOGO_BLUE_RGB)
-    green = _oklab_of_bytes(LOGO_GREEN_RGB)
-    orange = _oklab_of_bytes(LOGO_ORANGE_RGB)
-    # Same chord as blue←green and green→orange, extended past the logo
-    # colors and pulled back into sRGB. One step is still light blue / neon
-    # red; OUTER_CHORD_STEPS reaches purple and burgundy.
-    end0 = _quantize_srgb(oklab_to_srgb(*_chord_end(blue, green, OUTER_CHORD_STEPS)))
-    end1 = _quantize_srgb(oklab_to_srgb(*_chord_end(orange, green, OUTER_CHORD_STEPS)))
     raw = (
-        (0.0, end0),
-        (0.25, LOGO_BLUE_RGB),
-        (0.5, LOGO_GREEN_RGB),
-        (0.75, LOGO_ORANGE_RGB),
-        (1.0, end1),
+        (0.0, END_PURPLE_RGB),
+        (LOGO_BLUE_T, LOGO_BLUE_RGB),
+        (LOGO_GREEN_T, LOGO_GREEN_RGB),
+        (LOGO_ORANGE_T, LOGO_ORANGE_RGB),
+        (1.0, END_BURGUNDY_RGB),
     )
     _STOPS = tuple((t, rgb, _oklab_of_bytes(rgb)) for t, rgb in raw)
     return _STOPS
@@ -230,29 +223,34 @@ def palette_hex(t: float) -> str:
     return f"#{red:02X}{green:02X}{blue:02X}"
 
 
+_RANK_KNOTS = (0.0, 0.25, 0.5, 0.75, 1.0)
+
+
 def bend_rank(q: float) -> float:
     """Map a raw rank ``q = k/(N+1)`` onto the palette.
 
-    Piecewise quadratic inside the four anchor intervals. Knots at 0, 0.25,
-    0.5, 0.75, and 1 stay fixed. Elsewhere the curve pulls toward 0, toward
-    green at 0.5, or toward 1:
+    The raw quartiles 0, 0.25, 0.5, 0.75, and 1 land exactly on the palette
+    knots 0, 0.2, 0.4, 0.7, and 1. Inside each quartile, with
+    ``u = (q − q0)/0.25`` and the palette interval ``[t0, t1]``, the curve
+    pulls toward 0, toward green, or toward 1:
 
-    - ``[0, 0.25]``: ``u = q/0.25``, ``t = 0.25 u²``
-    - ``[0.25, 0.5]``: ``u = (q−0.25)/0.25``, ``t = 0.25 + 0.25 (1−(1−u)²)``
-    - ``[0.5, 0.75]``: ``u = (q−0.5)/0.25``, ``t = 0.5 + 0.25 u²``
-    - ``[0.75, 1]``: ``u = (q−0.75)/0.25``, ``t = 1 − 0.25 (1−u)²``
+    - ``[0, 0.25]`` → ``[0, 0.2]``: ``t = t0 + (t1−t0) u²``
+    - ``[0.25, 0.5]`` → ``[0.2, 0.4]``: ``t = t0 + (t1−t0) (1−(1−u)²)``
+    - ``[0.5, 0.75]`` → ``[0.4, 0.7]``: ``t = t0 + (t1−t0) u²``
+    - ``[0.75, 1]`` → ``[0.7, 1]``: ``t = t0 + (t1−t0) (1−(1−u)²)``
     """
-    if q <= 0.25:
-        u = q / 0.25
-        return 0.25 * u * u
-    if q <= 0.5:
-        u = (q - 0.25) / 0.25
-        return 0.25 + 0.25 * (1.0 - (1.0 - u) ** 2)
-    if q <= 0.75:
-        u = (q - 0.5) / 0.25
-        return 0.5 + 0.25 * u * u
-    u = (q - 0.75) / 0.25
-    return 1.0 - 0.25 * (1.0 - u) ** 2
+    position = min(1.0, max(0.0, float(q)))
+    for index, (q0, q1) in enumerate(zip(_RANK_KNOTS, _RANK_KNOTS[1:])):
+        if position == q0:
+            return PALETTE_KNOTS[index]
+        if position == q1:
+            return PALETTE_KNOTS[index + 1]
+        if position < q1:
+            u = (position - q0) / (q1 - q0)
+            shape = u * u if index % 2 == 0 else 1.0 - (1.0 - u) ** 2
+            t0, t1 = PALETTE_KNOTS[index], PALETTE_KNOTS[index + 1]
+            return t0 + (t1 - t0) * shape
+    return 1.0
 
 
 def categorical_positions(n: int) -> list[float]:
@@ -260,12 +258,12 @@ def categorical_positions(n: int) -> list[float]:
 
     Lowest or earliest is first.
 
-    - N = 1 → ``[0.5]`` (logo green).
-    - N = 2 → ``[0.25, 0.75]`` (logo blue, logo orange).
+    - N = 1 → ``[0.4]`` (logo green).
+    - N = 2 → ``[0.2, 0.7]`` (logo blue, logo orange).
     - N ≥ 3 → raw rank ``q_i = (i+1)/(N+1)``, then ``bend_rank(q_i)``.
 
     The bend leaves the logo anchors exact. N = 3 is blue, green, orange.
-    N = 7 is ``[0.0625, 0.25, 0.4375, 0.5, 0.5625, 0.75, 0.9375]``: items 2,
+    N = 7 is ``[0.05, 0.2, 0.35, 0.4, 0.475, 0.7, 0.925]``: items 2,
     4, and 6 are the logo colors, item 1 sits nearer the violet end, item 3
     nearer green, and item 7 nearer the red end.
     """
@@ -273,9 +271,9 @@ def categorical_positions(n: int) -> list[float]:
     if count <= 0:
         return []
     if count == 1:
-        return [0.5]
+        return [LOGO_GREEN_T]
     if count == 2:
-        return [0.25, 0.75]
+        return [LOGO_BLUE_T, LOGO_ORANGE_T]
     return [bend_rank((i + 1) / (count + 1)) for i in range(count)]
 
 
@@ -303,7 +301,7 @@ def watch_year_palette(all_watch_years) -> dict[int, tuple]:
 
 def color_for_year(palette: dict[int, tuple], year: int, fallback=None):
     if fallback is None:
-        fallback = palette_color(0.25)
+        fallback = palette_color(LOGO_BLUE_T)
     return palette.get(int(year), fallback)
 
 
@@ -395,7 +393,7 @@ def rating_color(
     """Map a Letterboxd rating onto the full 0–1 palette.
 
     0.5 → t = 0 (purple) and 5 → t = 1 (burgundy). The logo anchors sit
-    inside that range at the same 0.25 / 0.50 / 0.75 positions.
+    inside that range at 0.2 / 0.4 / 0.7.
     """
     return palette_color(_rating_t(avg, vmin, vmax))
 
