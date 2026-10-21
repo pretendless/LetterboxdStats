@@ -49,22 +49,22 @@ def test_logo_anchor_constants_are_the_measured_bytes():
     assert LOGO_BLUE_HEX == "#3FB7EB"
     assert LOGO_GREEN_HEX == "#03E53E"
     assert LOGO_ORANGE_HEX == "#FC7A02"
-    assert (LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T) == (0.2, 0.4, 0.7)
-    assert PALETTE_KNOTS == (0.0, 0.2, 0.4, 0.7, 1.0)
+    assert (LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T) == (0.2, 0.5, 0.7)
+    assert PALETTE_KNOTS == (0.0, 0.2, 0.5, 0.7, 1.0)
     assert palette_hex(0.2) == "#3FB7EB"
-    assert palette_hex(0.4) == "#03E53E"
+    assert palette_hex(0.5) == "#03E53E"
     assert palette_hex(0.7) == "#FC7A02"
     assert palette_rgb(0.2) == LOGO_BLUE_RGB
-    assert palette_rgb(0.4) == LOGO_GREEN_RGB
+    assert palette_rgb(0.5) == LOGO_GREEN_RGB
     assert palette_rgb(0.7) == LOGO_ORANGE_RGB
-    # The old evenly spaced positions are no longer the logo colors.
+    # Blue and orange are not at the old quarter marks. Green is the midpoint.
     assert palette_rgb(0.25) != LOGO_BLUE_RGB
-    assert palette_rgb(0.5) != LOGO_GREEN_RGB
+    assert palette_rgb(0.4) != LOGO_GREEN_RGB
     assert palette_rgb(0.75) != LOGO_ORANGE_RGB
     # Colorbars go through the same function, not a binned lookup.
     cmap = rating_colormap()
     assert palette_rgb_from(cmap(0.2)) == LOGO_BLUE_RGB
-    assert palette_rgb_from(cmap(0.4)) == LOGO_GREEN_RGB
+    assert palette_rgb_from(cmap(0.5)) == LOGO_GREEN_RGB
     assert palette_rgb_from(cmap(0.7)) == LOGO_ORANGE_RGB
 
 
@@ -159,8 +159,8 @@ def _contrast_on_black(rgb: tuple[int, int, int]) -> float:
 def test_discrete_ranks_n1_n2_n3_n7_and_a_larger_n():
     for raw, knot in zip((0.0, 0.25, 0.5, 0.75, 1.0), PALETTE_KNOTS):
         assert bend_rank(raw) == knot
-    assert categorical_positions(1) == [0.4]
-    assert categorical_colors(1)[0] == palette_color(0.4)
+    assert categorical_positions(1) == [0.5]
+    assert categorical_colors(1)[0] == palette_color(0.5)
     assert palette_rgb(categorical_positions(1)[0]) == LOGO_GREEN_RGB
 
     assert categorical_positions(2) == [0.2, 0.7]
@@ -170,15 +170,15 @@ def test_discrete_ranks_n1_n2_n3_n7_and_a_larger_n():
     # Not the plain rank formula, which would miss the logo.
     assert categorical_positions(2) != [1 / 3, 2 / 3]
 
-    assert categorical_positions(3) == [0.2, 0.4, 0.7]
+    assert categorical_positions(3) == [0.2, 0.5, 0.7]
     three = categorical_colors(3)
     assert palette_rgb_from(three[0]) == LOGO_BLUE_RGB
     assert palette_rgb_from(three[1]) == LOGO_GREEN_RGB
     assert palette_rgb_from(three[2]) == LOGO_ORANGE_RGB
 
     seven_pos = categorical_positions(7)
-    assert np.allclose(seven_pos, [0.05, 0.2, 0.35, 0.4, 0.475, 0.7, 0.925])
-    assert seven_pos[1] == 0.2 and seven_pos[3] == 0.4 and seven_pos[5] == 0.7
+    assert np.allclose(seven_pos, [0.05, 0.2, 0.425, 0.5, 0.55, 0.7, 0.925])
+    assert seven_pos[1] == 0.2 and seven_pos[3] == 0.5 and seven_pos[5] == 0.7
     seven = categorical_colors(7)
     # 1-based items 2, 4, 6 stay on the logo. Item 1 is nearer violet than
     # the plain segment midpoint 0.10; item 7 is nearer the red end; item 3 is
@@ -187,7 +187,7 @@ def test_discrete_ranks_n1_n2_n3_n7_and_a_larger_n():
     assert palette_rgb_from(seven[3]) == LOGO_GREEN_RGB
     assert palette_rgb_from(seven[5]) == LOGO_ORANGE_RGB
     assert seven_pos[0] < 0.10
-    assert abs(0.4 - seven_pos[2]) < abs(0.2 - seven_pos[2])
+    assert abs(0.5 - seven_pos[2]) < abs(0.2 - seven_pos[2])
     assert seven_pos[-1] > 0.86
 
     # Knots of a longer series stay exact; the ends pull past the raw ranks.
@@ -195,7 +195,7 @@ def test_discrete_ranks_n1_n2_n3_n7_and_a_larger_n():
     eleven = categorical_positions(11)
     assert eleven[0] < raw_eleven[0]
     assert eleven[-1] > raw_eleven[-1]
-    assert eleven[2] == 0.2 and eleven[5] == 0.4 and eleven[8] == 0.7
+    assert eleven[2] == 0.2 and eleven[5] == 0.5 and eleven[8] == 0.7
     assert palette_rgb_from(categorical_colors(11)[2]) == LOGO_BLUE_RGB
     assert palette_rgb_from(categorical_colors(11)[5]) == LOGO_GREEN_RGB
     assert palette_rgb_from(categorical_colors(11)[8]) == LOGO_ORANGE_RGB
@@ -215,7 +215,7 @@ def test_rating_scale_uses_full_range_and_same_anchors():
     # Logo blue is inside the rating scale, not the low end.
     # t = 0.2 → rating = 0.5 + 0.2 * 4.5 = 1.4
     assert palette_rgb_from(rating_color(1.4)) == LOGO_BLUE_RGB
-    assert palette_rgb_from(rating_color(2.3)) == LOGO_GREEN_RGB  # t = 0.4
+    assert palette_rgb_from(rating_color(2.75)) == LOGO_GREEN_RGB  # t = 0.5
     assert palette_rgb_from(rating_color(3.65)) == LOGO_ORANGE_RGB  # t = 0.7
     assert palette_rgb_from(rating_color(RATING_VMIN)) != LOGO_BLUE_RGB
 

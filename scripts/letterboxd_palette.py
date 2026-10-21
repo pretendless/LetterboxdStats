@@ -4,11 +4,11 @@ Every data color comes from ``palette_color``. The three logo circles are
 fixed anchors (median sRGB of each non-overlapping interior):
 
 - 0.2 blue ``#3FB7EB``
-- 0.4 green ``#03E53E``
+- 0.5 green ``#03E53E``
 - 0.7 orange ``#FC7A02``
 
 ``palette_color`` is piecewise-linear in OKLab ``(L, a, b)`` between five
-knots: deep purple ``#5922BF`` at 0, the three logo colors at 0.2 / 0.4 /
+knots: deep purple ``#5922BF`` at 0, the three logo colors at 0.2 / 0.5 /
 0.7, and deep burgundy ``#890E3A`` at 1. The uneven spacing gives each
 segment a different length so the scale is not uniform. There is no hold,
 hue band, or ease: each segment is the straight OKLab line, so lightness
@@ -52,7 +52,7 @@ LOGO_ORANGE_HEX = "#FC7A02"
 
 # Palette positions of the logo knots.
 LOGO_BLUE_T = 0.2
-LOGO_GREEN_T = 0.4
+LOGO_GREEN_T = 0.5
 LOGO_ORANGE_T = 0.7
 PALETTE_KNOTS = (0.0, LOGO_BLUE_T, LOGO_GREEN_T, LOGO_ORANGE_T, 1.0)
 
@@ -230,13 +230,13 @@ def bend_rank(q: float) -> float:
     """Map a raw rank ``q = k/(N+1)`` onto the palette.
 
     The raw quartiles 0, 0.25, 0.5, 0.75, and 1 land exactly on the palette
-    knots 0, 0.2, 0.4, 0.7, and 1. Inside each quartile, with
+    knots 0, 0.2, 0.5, 0.7, and 1. Inside each quartile, with
     ``u = (q − q0)/0.25`` and the palette interval ``[t0, t1]``, the curve
     pulls toward 0, toward green, or toward 1:
 
     - ``[0, 0.25]`` → ``[0, 0.2]``: ``t = t0 + (t1−t0) u²``
-    - ``[0.25, 0.5]`` → ``[0.2, 0.4]``: ``t = t0 + (t1−t0) (1−(1−u)²)``
-    - ``[0.5, 0.75]`` → ``[0.4, 0.7]``: ``t = t0 + (t1−t0) u²``
+    - ``[0.25, 0.5]`` → ``[0.2, 0.5]``: ``t = t0 + (t1−t0) (1−(1−u)²)``
+    - ``[0.5, 0.75]`` → ``[0.5, 0.7]``: ``t = t0 + (t1−t0) u²``
     - ``[0.75, 1]`` → ``[0.7, 1]``: ``t = t0 + (t1−t0) (1−(1−u)²)``
     """
     position = min(1.0, max(0.0, float(q)))
@@ -258,12 +258,12 @@ def categorical_positions(n: int) -> list[float]:
 
     Lowest or earliest is first.
 
-    - N = 1 → ``[0.4]`` (logo green).
+    - N = 1 → ``[0.5]`` (logo green).
     - N = 2 → ``[0.2, 0.7]`` (logo blue, logo orange).
     - N ≥ 3 → raw rank ``q_i = (i+1)/(N+1)``, then ``bend_rank(q_i)``.
 
     The bend leaves the logo anchors exact. N = 3 is blue, green, orange.
-    N = 7 is ``[0.05, 0.2, 0.35, 0.4, 0.475, 0.7, 0.925]``: items 2,
+    N = 7 is ``[0.05, 0.2, 0.425, 0.5, 0.55, 0.7, 0.925]``: items 2,
     4, and 6 are the logo colors, item 1 sits nearer the violet end, item 3
     nearer green, and item 7 nearer the red end.
     """
@@ -393,7 +393,7 @@ def rating_color(
     """Map a Letterboxd rating onto the full 0–1 palette.
 
     0.5 → t = 0 (purple) and 5 → t = 1 (burgundy). The logo anchors sit
-    inside that range at 0.2 / 0.4 / 0.7.
+    inside that range at 0.2 / 0.5 / 0.7.
     """
     return palette_color(_rating_t(avg, vmin, vmax))
 
