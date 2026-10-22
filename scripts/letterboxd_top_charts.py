@@ -1402,8 +1402,10 @@ def seat_inset_panel_bottom_right(
     """Bottom-right inset: panel **bottom** aligns with the last bar bottom.
 
     Used by watches/count / Most often / higher-rating Top review panels.
-    Keeps the side edge margin; on overlap, nudge right (expanding ``xlim`` /
-    figure width) until clear of bars and tip labels.
+    Keeps the side edge margin. On overlap with tips/bars: first slide **left**
+    along the bar-aligned bottom; if still blocked, expand ``xlim`` / figure
+    width and retry at that same bottom. Only after bumps are exhausted, raise
+    slightly within the axes so text is never seated past the edge.
     """
     from matplotlib.transforms import Bbox
 
@@ -1413,49 +1415,57 @@ def seat_inset_panel_bottom_right(
         axes_box = ax.get_window_extent(renderer=renderer)
         edge_pad = max(float(INSET_PANEL_EDGE_PAD_PX), float(fontsize) * 1.25)
         bar_lo, _bar_hi = _hbar_band_y_disp(ax, renderer)
-        if bar_lo is not None:
-            y0_disp = float(bar_lo)
-        else:
-            y0_disp = float(axes_box.y0) + edge_pad
-        # Keep the panel inside the axes band.
         y0_min = float(axes_box.y0) + edge_pad
         y0_max = float(axes_box.y1) - edge_pad - panel_h_px
-        y0_disp = min(max(y0_disp, y0_min), y0_max)
-        y1_disp = y0_disp + panel_h_px
-        x1_target = float(axes_box.x1) - edge_pad
-        x0_disp = x1_target - panel_w_px
-        x1_disp = x1_target
+        if bar_lo is not None:
+            start_y0 = float(bar_lo)
+        else:
+            start_y0 = y0_min
+        # Prefer last-bar bottom; clamp so the full panel stays in-axes.
+        start_y0 = min(max(start_y0, y0_min), y0_max)
+        x_min = float(axes_box.x0) + edge_pad
+        x0_preferred = float(axes_box.x1) - edge_pad - panel_w_px
+        step_px = max(2.0, fontsize * 0.35)
 
-        def _panel_box(x0_px: float) -> Bbox:
+        def _panel_box(x0_px: float, y0_px: float) -> Bbox:
             return Bbox.from_extents(
-                x0_px, y0_disp, x0_px + panel_w_px, y0_disp + panel_h_px
+                x0_px, y0_px, x0_px + panel_w_px, y0_px + panel_h_px
             )
 
-        clear = all(
-            not _bbox_overlaps(_panel_box(x0_disp), obs) for obs in obstacles
-        )
-        if not clear:
-            step_px = max(2.0, fontsize * 0.35)
-            x_cursor = x0_disp
-            x_max = float(axes_box.x1) - edge_pad - panel_w_px
-            found = False
-            while x_cursor <= x_max + 1e-6:
+        def _scan_x(y0_px: float) -> float | None:
+            x_cursor = x0_preferred
+            while x_cursor >= x_min - 1e-6:
                 if all(
-                    not _bbox_overlaps(_panel_box(x_cursor), obs)
+                    not _bbox_overlaps(_panel_box(x_cursor, y0_px), obs)
                     for obs in obstacles
                 ):
-                    x0_disp = x_cursor
-                    x1_disp = x_cursor + panel_w_px
-                    found = True
-                    break
-                x_cursor += step_px
-            clear = found
+                    return x_cursor
+                x_cursor -= step_px
+            return None
 
+        # Hold the bar-aligned bottom through left scans + xlim bumps.
+        found_x = _scan_x(start_y0)
+        chosen_y0 = start_y0
+        # After bumps are used up, allow a small raise to clear stubborn tips.
+        if found_x is None and attempt >= max_bumps:
+            y_cursor = start_y0 + step_px
+            while y_cursor <= y0_max + 1e-6:
+                found_x = _scan_x(y_cursor)
+                if found_x is not None:
+                    chosen_y0 = y_cursor
+                    break
+                y_cursor += step_px
+
+        x0_disp = found_x if found_x is not None else x0_preferred
+        y0_disp = chosen_y0
+        x1_disp = x0_disp + panel_w_px
+        y1_disp = y0_disp + panel_h_px
         x0, y0, x1, y1 = x0_disp, y0_disp, x1_disp, y1_disp
-        if clear:
+        if found_x is not None:
             return x0, y0, x1, y1
         if attempt >= max_bumps:
             break
+        # Need more empty room on the right (tips compress in display space).
         x_lo, x_hi = ax.get_xlim()
         span = float(x_hi) - float(x_lo)
         if span <= 0:
@@ -1472,6 +1482,19 @@ def seat_inset_panel_bottom_right(
             )
         except Exception:
             pass
+        # Tall panels: also give vertical room so edge pad still fits.
+        if panel_h_px + 2 * edge_pad > float(axes_box.height):
+            y_lo, y_hi = ax.get_ylim()
+            y_span = float(y_hi) - float(y_lo)
+            if y_span > 0:
+                ax.set_ylim(y_lo, float(y_hi) + y_span * 0.04)
+            try:
+                w_in, h_in = fig.get_size_inches()
+                fig.set_size_inches(
+                    float(w_in), float(h_in) * 1.04, forward=True
+                )
+            except Exception:
+                pass
         fig.canvas.draw()
     return x0, y0, x1, y1
 
@@ -1485,20 +1508,22 @@ def draw_top_review_panel(
     fontsize: float = INSET_PANEL_FONTSIZE,
     title_fontsize: float = INSET_PANEL_TITLE_FONTSIZE,
     date_fontsize: float = INSET_PANEL_DATE_FONTSIZE,
-    max_body_lines: int = 6,
+    max_body_lines: int = 16,
 ) -> bool:
     """In-plot Top review panel: title (+♥), ★/½ on next line, text, date.
 
     ``review`` is ``{"title", "text", "date", "liked"?, "rating"?}`` from the
     Top review picker. When ``liked`` is True, append ♥ after the title (same
     mark as charts). When ``rating`` is set, draw ``★…½`` on its **own line
-    below the title** (omit the star line entirely when unrated).     ``corner``
+    below the title** (omit the star line entirely when unrated). ``corner``
     is ``bottom_right`` (watches / higher / count; panel bottom aligns with
     the last bar bottom) or ``top_right`` (lower-rating; panel top aligns
     with the first bar top). Body text is already capped
-    (``TOP_REVIEW_MAX_CHARS``); layout may wrap and ellipsize further if the
-    panel height is tight. Returns True when drawn. Panel fill is the logo
-    charcoal gradient (same as No date bars), top→bottom.
+    (``TOP_REVIEW_MAX_CHARS``); layout wraps to the panel inner width and
+    grows width/height within the plot (edge margin + corner align) so title,
+    stars, body, and date stay fully inside the rounded box — never clipped by
+    the panel edge, axes, or figure. Returns True when drawn. Panel fill is
+    the logo charcoal gradient (same as No date bars), top→bottom.
     """
     if not review or not isinstance(review, dict):
         return False
@@ -1517,18 +1542,25 @@ def draw_top_review_panel(
 
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
-    inv = ax.transAxes.inverted()
 
     axes_box = ax.get_window_extent(renderer=renderer)
-    panel_w_px = max(
-        140.0, float(axes_box.width) * float(INSET_PANEL_TOP_REVIEW_WIDTH_FRAC)
+    edge_pad = max(float(INSET_PANEL_EDGE_PAD_PX), float(fontsize) * 1.25)
+    # Usable width inside the axes after side margins.
+    max_panel_w = max(140.0, float(axes_box.width) - 2.0 * edge_pad)
+    panel_w_px = min(
+        max(
+            140.0,
+            float(axes_box.width) * float(INSET_PANEL_TOP_REVIEW_WIDTH_FRAC),
+        ),
+        max_panel_w,
     )
     pad_x_px = max(7.0, fontsize * 1.0)
     pad_y_px = max(6.0, fontsize * 0.8)
     title_gap_px = max(3.0, title_fontsize * 0.35)
     stars_gap_px = max(2.5, fontsize * 0.3)
     date_gap_px = max(3.0, date_fontsize * 0.35)
-    inner_w = max(40.0, panel_w_px - 2 * pad_x_px)
+    # Extra air so glyphs never kiss the rounded stroke.
+    text_inset_px = max(2.0, fontsize * 0.2)
 
     def _measure(text: str, *, fs: float, weight: str = "normal") -> tuple[float, float]:
         probe = ax.text(
@@ -1547,61 +1579,114 @@ def draw_top_review_panel(
         probe.remove()
         return float(box.width), float(box.height)
 
+    def _break_word(word: str, *, fs: float, max_w: float) -> list[str]:
+        """Character-split a single token that exceeds ``max_w``."""
+        if not word:
+            return []
+        w0, _ = _measure(word, fs=fs)
+        if w0 <= max_w:
+            return [word]
+        parts: list[str] = []
+        chunk = ""
+        for ch in word:
+            trial = chunk + ch
+            tw, _ = _measure(trial, fs=fs)
+            if chunk and tw > max_w:
+                parts.append(chunk)
+                chunk = ch
+            else:
+                chunk = trial
+        if chunk:
+            parts.append(chunk)
+        return parts
+
     def _wrap_line(text: str, *, fs: float, max_w: float) -> list[str]:
         words = str(text or "").split()
         if not words:
             return []
         lines: list[str] = []
-        cur = words[0]
-        for word in words[1:]:
-            trial = f"{cur} {word}"
-            w, _ = _measure(trial, fs=fs)
-            if w <= max_w:
-                cur = trial
-            else:
-                lines.append(cur)
-                cur = word
-        lines.append(cur)
+        cur = ""
+        for word in words:
+            pieces = _break_word(word, fs=fs, max_w=max_w)
+            for piece in pieces:
+                trial = f"{cur} {piece}".strip() if cur else piece
+                w, _ = _measure(trial, fs=fs)
+                if cur and w > max_w:
+                    lines.append(cur)
+                    cur = piece
+                else:
+                    cur = trial
+        if cur:
+            lines.append(cur)
         return lines
 
-    title_w, title_h = _measure(title, fs=title_fontsize, weight="bold")
-    shown_title = title
-    if title_w > inner_w:
-        # Truncate the film name only; keep ♥ suffix intact.
-        lo, hi = 1, len(base_title)
-        best = _compose_title(base_title[:1] + "…")
-        while lo <= hi:
-            mid = (lo + hi) // 2
-            candidate = _compose_title(base_title[:mid].rstrip() + "…")
-            w, _ = _measure(candidate, fs=title_fontsize, weight="bold")
-            if w <= inner_w:
-                best = candidate
-                lo = mid + 1
-            else:
-                hi = mid - 1
-        shown_title = best
-        _, title_h = _measure(shown_title, fs=title_fontsize, weight="bold")
+    def _layout_for_width(width_px: float) -> tuple[str, list[str], float, float, float, float]:
+        """Return shown_title, body_lines, title_h, stars_h, body_h, date_h."""
+        inner = max(40.0, float(width_px) - 2.0 * pad_x_px - 2.0 * text_inset_px)
+        title_w, title_h_local = _measure(title, fs=title_fontsize, weight="bold")
+        shown = title
+        if title_w > inner:
+            # Grow width preference is handled by the caller; truncate name only
+            # when even the max panel width cannot hold the full title.
+            lo, hi = 1, len(base_title)
+            best = _compose_title(base_title[:1] + "…")
+            while lo <= hi:
+                mid = (lo + hi) // 2
+                candidate = _compose_title(base_title[:mid].rstrip() + "…")
+                w, _ = _measure(candidate, fs=title_fontsize, weight="bold")
+                if w <= inner:
+                    best = candidate
+                    lo = mid + 1
+                else:
+                    hi = mid - 1
+            shown = best
+            _, title_h_local = _measure(shown, fs=title_fontsize, weight="bold")
+        stars_h_local = 0.0
+        if stars:
+            _, stars_h_local = _measure(stars, fs=fontsize)
+        lines = _wrap_line(body, fs=fontsize, max_w=inner)
+        _, line_h_local = _measure("Ag", fs=fontsize)
+        row_gap = max(1.5, fontsize * 0.25)
+        body_h_local = (
+            len(lines) * line_h_local
+            + max(0, len(lines) - 1) * row_gap
+            if lines
+            else 0.0
+        )
+        date_h_local = 0.0
+        if date_s:
+            _, date_h_local = _measure(date_s, fs=date_fontsize)
+        return shown, lines, title_h_local, stars_h_local, body_h_local, date_h_local
 
-    stars_h = 0.0
-    if stars:
-        _, stars_h = _measure(stars, fs=fontsize)
-
-    body_lines = _wrap_line(body, fs=fontsize, max_w=inner_w)
+    shown_title, body_lines, title_h, stars_h, body_h, date_h = _layout_for_width(
+        panel_w_px
+    )
     if not body_lines:
         return False
+
+    # If the full title still needs more width, grow toward the axes limit.
+    title_w_full, _ = _measure(title, fs=title_fontsize, weight="bold")
+    need_inner = title_w_full + 2.0 * text_inset_px
+    need_w = need_inner + 2.0 * pad_x_px
+    if need_w > panel_w_px + 0.5 and panel_w_px < max_panel_w - 0.5:
+        panel_w_px = min(max_panel_w, max(panel_w_px, need_w))
+        shown_title, body_lines, title_h, stars_h, body_h, date_h = _layout_for_width(
+            panel_w_px
+        )
+        if not body_lines:
+            return False
+
     _, line_h = _measure("Ag", fs=fontsize)
     row_gap_px = max(1.5, fontsize * 0.25)
+    # Prefer growing height over ellipsizing the already-capped 280-char body.
     if len(body_lines) > max_body_lines:
         body_lines = body_lines[:max_body_lines]
         last = body_lines[-1].rstrip()
         if not last.endswith("…") and not last.endswith("..."):
             body_lines[-1] = last[: max(1, len(last) - 1)].rstrip() + "…"
-    body_h = (
-        len(body_lines) * line_h + max(0, len(body_lines) - 1) * row_gap_px
-    )
-    date_h = 0.0
-    if date_s:
-        _, date_h = _measure(date_s, fs=date_fontsize)
+        body_h = (
+            len(body_lines) * line_h + max(0, len(body_lines) - 1) * row_gap_px
+        )
 
     panel_h_px = (
         2 * pad_y_px
@@ -1630,6 +1715,10 @@ def draw_top_review_panel(
             fontsize=fontsize,
         )
 
+    # Seating may expand xlim / figure size — rebuild the axes transform so
+    # display→axes mapping matches the final layout (stale inv placed the
+    # panel past the axes edge and clipped body text mid-line).
+    inv = ax.transAxes.inverted()
     x0, y0 = inv.transform((x0_disp, y0_disp))
     x1, y1 = inv.transform((x1_disp, y1_disp))
     paint_inset_panel_logo_background(
@@ -1642,8 +1731,11 @@ def draw_top_review_panel(
         zorder=20,
     )
 
+    text_x = x0_disp + pad_x_px + text_inset_px
+    # clip_on=False: panel is already seated inside the axes with edge pad;
+    # axes clipping was cutting glyphs on the right after a stale transform.
     cursor_y = y1_disp - pad_y_px
-    tx, ty = inv.transform((x0_disp + pad_x_px, cursor_y))
+    tx, ty = inv.transform((text_x, cursor_y))
     # Title in FG; trailing ♥ (when liked) is logo orange.
     draw_colored_text_segments(
         ax,
@@ -1656,13 +1748,13 @@ def draw_top_review_panel(
         transform=ax.transAxes,
         fontweight="bold",
         mark_fontweight="bold",
-        clip_on=True,
+        clip_on=False,
         zorder=21,
     )
     cursor_y -= title_h
     if stars:
         cursor_y -= stars_gap_px
-        sx, sy = inv.transform((x0_disp + pad_x_px, cursor_y))
+        sx, sy = inv.transform((text_x, cursor_y))
         # Entire ★/½ string (including U+00BD ½) is logo green.
         ax.text(
             float(sx),
@@ -1673,13 +1765,13 @@ def draw_top_review_panel(
             color=MARK_STAR_HEX,
             ha="left",
             va="top",
-            clip_on=True,
+            clip_on=False,
             zorder=21,
         )
         cursor_y -= stars_h
     cursor_y -= title_gap_px
     for line in body_lines:
-        lx, ly = inv.transform((x0_disp + pad_x_px, cursor_y))
+        lx, ly = inv.transform((text_x, cursor_y))
         ax.text(
             float(lx),
             float(ly),
@@ -1689,12 +1781,12 @@ def draw_top_review_panel(
             color=FG,
             ha="left",
             va="top",
-            clip_on=True,
+            clip_on=False,
             zorder=21,
         )
         cursor_y -= line_h + row_gap_px
     if date_s:
-        dx, dy = inv.transform((x0_disp + pad_x_px, y0_disp + pad_y_px + date_h))
+        dx, dy = inv.transform((text_x, y0_disp + pad_y_px + date_h))
         ax.text(
             float(dx),
             float(dy),
@@ -1704,7 +1796,7 @@ def draw_top_review_panel(
             color=FG,
             ha="left",
             va="top",
-            clip_on=True,
+            clip_on=False,
             zorder=21,
             alpha=0.85,
         )
@@ -1750,7 +1842,6 @@ def draw_most_reviewed_years_panel(
     n_cols = len(columns)
 
     fig.canvas.draw()
-    inv = ax.transAxes.inverted()
 
     title_probe = ax.text(
         0,
@@ -1832,6 +1923,9 @@ def draw_most_reviewed_years_panel(
         fontsize=fontsize,
     )
 
+    # Fresh transform after seating (ylim / figure pad bumps invalidate a
+    # pre-seat inverted axes transform).
+    inv = ax.transAxes.inverted()
     x0, y0 = inv.transform((x0_disp, y0_disp))
     x1, y1 = inv.transform((x1_disp, y1_disp))
     paint_inset_panel_logo_background(
@@ -1922,7 +2016,6 @@ def draw_swatch_legend_panel(
 
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
-    inv = ax.transAxes.inverted()
 
     sample = ax.text(
         0,
@@ -2001,6 +2094,7 @@ def draw_swatch_legend_panel(
         fontsize=fontsize,
     )
 
+    inv = ax.transAxes.inverted()
     x0, y0 = inv.transform((x0_disp, y0_disp))
     x1, y1 = inv.transform((x1_disp, y1_disp))
     paint_inset_panel_logo_background(
@@ -2694,7 +2788,18 @@ def chart_rating_hbar(
                 ellipsis=NAME_ELLIPSIS,
             )
             shown = name_part + engage
-            inside = True
+            # If measurement slack would still clip ♥/≡ under the bar mask,
+            # fall back to the outside overflow path so marks stay visible.
+            if engage and name_width(shown) > inside_px + 0.5:
+                shown = (
+                    prefix
+                    + name[:SHORT_BAR_NAME_CHARS].rstrip()
+                    + NAME_ELLIPSIS
+                    + engage
+                )
+                inside = False
+            else:
+                inside = True
         else:
             # Short bar / long name: 15 chars + ... + engagement, overflowing.
             shown = (
