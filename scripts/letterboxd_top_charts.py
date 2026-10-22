@@ -186,6 +186,78 @@ def category_label_with_engagement_counts(
     return f"{label} {tip}"
 
 
+# Multi-column mark panels (Most reviewed years, …): counts are not capped at
+# 999 — measure/reserve width for at least this many digits (4–5 are common).
+_MARK_PANEL_COUNT_DIGITS = 5
+
+
+def _ranked_mark_line_pieces(
+    rank: int, name: str, count: int, mark: str
+) -> tuple[str, str, str]:
+    """Head / bold mark+space / bold count strings as ``_draw_ranked_count_mark_line`` draws."""
+    mark_draw = _mpl_engagement_text(mark)
+    return f"{int(rank)}. {name} ", f"{mark_draw} ", str(int(count))
+
+
+def _measure_ranked_mark_line_size_px(
+    fig,
+    ax,
+    *,
+    rank: int,
+    name: str,
+    count: int,
+    mark: str,
+    fontsize: float,
+) -> tuple[float, float]:
+    """Display-pixel (width, height) of one ranked mark line, pieces as drawn."""
+    mark_fp = review_mark_fontproperties()
+    head, mark_s, count_s = _ranked_mark_line_pieces(rank, name, count, mark)
+    use_mark_fp = mark_fp if mark_s.startswith(REVIEW_NOTE) else None
+    probes = []
+    try:
+        head_p = ax.text(
+            0,
+            0,
+            head,
+            transform=ax.transAxes,
+            fontsize=fontsize,
+            fontweight="normal",
+            alpha=0,
+        )
+        mark_p = ax.text(
+            0,
+            0,
+            mark_s,
+            transform=ax.transAxes,
+            fontsize=fontsize,
+            fontweight="bold",
+            alpha=0,
+            fontproperties=use_mark_fp,
+        )
+        count_p = ax.text(
+            0,
+            0,
+            count_s,
+            transform=ax.transAxes,
+            fontsize=fontsize,
+            fontweight="bold",
+            alpha=0,
+        )
+        probes = [head_p, mark_p, count_p]
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        width = sum(
+            float(p.get_window_extent(renderer=renderer).width) for p in probes
+        )
+        height = max(
+            float(p.get_window_extent(renderer=renderer).height) for p in probes
+        )
+        return width, height
+    finally:
+        for p in probes:
+            p.remove()
+
+
 def _draw_ranked_count_mark_line(
     fig,
     ax,
@@ -204,12 +276,14 @@ def _draw_ranked_count_mark_line(
 ) -> object:
     """Draw ``1. Name ♥ N`` / ``1. Name ≡ N`` (bold mark, then bold count).
 
-    Returns the head text artist's window extent (for line advance).
+    Returns the union window extent of head + mark + count (for line advance
+    and multi-column width checks).
     """
-    mark_draw = _mpl_engagement_text(mark)
+    from matplotlib.transforms import Bbox
+
     mark_fp = review_mark_fontproperties()
-    use_mark_fp = mark_fp if mark_draw == REVIEW_NOTE else None
-    head = f"{rank}. {name} "
+    head, mark_s, count_s = _ranked_mark_line_pieces(rank, name, count, mark)
+    use_mark_fp = mark_fp if mark_s.startswith(REVIEW_NOTE) else None
     text_kw = dict(
         transform=transform,
         fontsize=fontsize,
@@ -228,7 +302,7 @@ def _draw_ranked_count_mark_line(
     mark_artist = ax.text(
         float(cursor_x),
         y,
-        f"{mark_draw} ",
+        mark_s,
         fontweight="bold",
         fontproperties=use_mark_fp,
         **text_kw,
@@ -237,14 +311,19 @@ def _draw_ranked_count_mark_line(
     renderer = fig.canvas.get_renderer()
     mb = mark_artist.get_window_extent(renderer=renderer)
     nx, _ny = inv.transform((mb.x1, mb.y0))
-    ax.text(
+    count_artist = ax.text(
         float(nx),
         y,
-        str(int(count)),
+        count_s,
         fontweight="bold",
         **text_kw,
     )
-    return hb
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    cb = count_artist.get_window_extent(renderer=renderer)
+    hb = head_artist.get_window_extent(renderer=renderer)
+    mb = mark_artist.get_window_extent(renderer=renderer)
+    return Bbox.union([hb, mb, cb])
 
 
 def count_liked_among_keys(film_keys, liked_keys) -> int:
@@ -865,7 +944,7 @@ def seat_inset_panel_in_axes(
     )
 
 
-def seat_inset_panel_top_right(
+def seat_inset_panel_top_left(
     fig,
     ax,
     *,
@@ -874,7 +953,7 @@ def seat_inset_panel_top_right(
     fontsize: float = 7,
     max_bumps: int = 4,
 ) -> tuple[float, float, float, float]:
-    """Top-right inset seat aligned with the tallest bar top; raise if needed.
+    """Top-left inset seat aligned with the tallest bar top; raise if needed.
 
     Retries with a slight ylim bump (and a small figure top pad) only when the
     preferred seat still overlaps bars or tip labels inside the current axes.
@@ -887,7 +966,7 @@ def seat_inset_panel_top_right(
             panel_w_px=panel_w_px,
             panel_h_px=panel_h_px,
             fontsize=fontsize,
-            prefer_left=False,
+            prefer_left=True,
             vertical="tallest_bar_top",
         )
         if clear:
@@ -921,7 +1000,7 @@ def draw_most_reviewed_years_panel(
 ) -> bool:
     """Inset panel: years ranked by date-bound review tip counts.
 
-    Seats **top-right** inside the plot area, with the panel bottom aligned to
+    Seats **top-left** inside the plot area, with the panel bottom aligned to
     the tallest bar top; raises only when the rectangle would overlap bars or
     tip labels (slight ylim / figure pad only as needed for clearance).
 
@@ -949,41 +1028,8 @@ def draw_most_reviewed_years_panel(
     n_cols = len(columns)
 
     fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
     inv = ax.transAxes.inverted()
-    mark_draw = _mpl_engagement_text(REVIEW_NOTE)
-    mark_fp = review_mark_fontproperties()
-    use_mark_fp = mark_fp if mark_draw == REVIEW_NOTE else None
 
-    # Measure one sample line and the title to size columns in display pixels.
-    sample_head = ax.text(
-        0,
-        0,
-        "99. 9999 ",
-        transform=ax.transAxes,
-        fontsize=fontsize,
-        fontweight="normal",
-        alpha=0,
-    )
-    sample_count = ax.text(
-        0,
-        0,
-        "999",
-        transform=ax.transAxes,
-        fontsize=fontsize,
-        fontweight="bold",
-        alpha=0,
-    )
-    sample_mark = ax.text(
-        0,
-        0,
-        f"{mark_draw} ",
-        transform=ax.transAxes,
-        fontsize=fontsize,
-        fontweight="bold",
-        alpha=0,
-        fontproperties=use_mark_fp,
-    )
     title_probe = ax.text(
         0,
         0,
@@ -995,64 +1041,56 @@ def draw_most_reviewed_years_panel(
     )
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
-    head_w = float(sample_head.get_window_extent(renderer=renderer).width)
-    count_w = float(sample_count.get_window_extent(renderer=renderer).width)
-    mark_w = float(sample_mark.get_window_extent(renderer=renderer).width)
-    line_h = float(sample_head.get_window_extent(renderer=renderer).height)
     title_h = float(title_probe.get_window_extent(renderer=renderer).height)
     title_w = float(title_probe.get_window_extent(renderer=renderer).width)
-    for artist in (sample_head, sample_count, sample_mark, title_probe):
-        artist.remove()
+    title_probe.remove()
 
-    col_gap_px = max(10.0, fontsize * 1.4)
-    row_gap_px = max(2.0, fontsize * 0.35)
+    # Column width from measured line pieces (as drawn). Reserve ≥5 count digits
+    # so 4–5 digit review totals never crash into the next column; if a row is
+    # wider still, that measured width wins.
+    count_digits = _MARK_PANEL_COUNT_DIGITS
+    for col in columns:
+        for _rank, _name, count in col:
+            count_digits = max(count_digits, len(str(int(count))))
+    reserve_count = int("9" * count_digits)
+
+    col_gap_px = max(16.0, fontsize * 2.2)
+    row_gap_px = max(3.0, fontsize * 0.45)
     title_gap_px = max(3.0, title_fontsize * 0.4)
     pad_x_px = max(6.0, fontsize * 0.9)
     pad_y_px = max(5.0, fontsize * 0.7)
-    col_w_px = head_w + mark_w + count_w
-    # Real years are four digits; widen slightly from measured heads if needed.
+
+    col_w_px = 0.0
+    line_h = 0.0
+    # Floor: two-digit rank + four-digit year + reserved count width.
+    floor_w, floor_h = _measure_ranked_mark_line_size_px(
+        fig,
+        ax,
+        rank=99,
+        name="9999",
+        count=reserve_count,
+        mark=REVIEW_NOTE,
+        fontsize=fontsize,
+    )
+    col_w_px = max(col_w_px, floor_w)
+    line_h = max(line_h, floor_h)
     for col in columns:
         for rank, name, count in col:
-            probe = ax.text(
-                0,
-                0,
-                f"{rank}. {name} ",
-                transform=ax.transAxes,
-                fontsize=fontsize,
-                alpha=0,
-            )
-            mprobe = ax.text(
-                0,
-                0,
-                f"{mark_draw} ",
-                transform=ax.transAxes,
-                fontsize=fontsize,
-                fontweight="bold",
-                alpha=0,
-                fontproperties=use_mark_fp,
-            )
-            cprobe = ax.text(
-                0,
-                0,
-                str(count),
-                transform=ax.transAxes,
-                fontsize=fontsize,
-                fontweight="bold",
-                alpha=0,
-            )
-            fig.canvas.draw()
-            renderer = fig.canvas.get_renderer()
-            w = (
-                float(probe.get_window_extent(renderer=renderer).width)
-                + float(mprobe.get_window_extent(renderer=renderer).width)
-                + float(cprobe.get_window_extent(renderer=renderer).width)
-            )
-            col_w_px = max(col_w_px, w)
-            probe.remove()
-            mprobe.remove()
-            cprobe.remove()
+            for measure_count in (int(count), reserve_count):
+                w, h = _measure_ranked_mark_line_size_px(
+                    fig,
+                    ax,
+                    rank=rank,
+                    name=name,
+                    count=measure_count,
+                    mark=REVIEW_NOTE,
+                    fontsize=fontsize,
+                )
+                col_w_px = max(col_w_px, w)
+                line_h = max(line_h, h)
 
     max_rows = max((len(c) for c in columns), default=0)
+    line_step_px = line_h + row_gap_px
     body_h_px = (
         max_rows * line_h + max(0, max_rows - 1) * row_gap_px if max_rows else 0.0
     )
@@ -1064,7 +1102,7 @@ def draw_most_reviewed_years_panel(
     panel_w_px = max(panel_w_px, title_w + 2 * pad_x_px)
     panel_h_px = 2 * pad_y_px + title_h + title_gap_px + body_h_px
 
-    x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_top_right(
+    x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_top_left(
         fig,
         ax,
         panel_w_px=panel_w_px,
@@ -1103,14 +1141,15 @@ def draw_most_reviewed_years_panel(
         clip_on=True,
         zorder=21,
     )
-    # First row starts under the title.
+    # First row starts under the title; step by measured line height (not a
+    # per-glyph y0 that can collapse rows when marks/counts are bold).
     line_y_disp = y1_disp - pad_y_px - title_h - title_gap_px
     for col_i, col in enumerate(columns):
         col_x_disp = x0_disp + pad_x_px + col_i * (col_w_px + col_gap_px)
         y_disp = line_y_disp
         for rank, name, count in col:
             x_axes, y_axes = inv.transform((col_x_disp, y_disp))
-            hb = _draw_ranked_count_mark_line(
+            _draw_ranked_count_mark_line(
                 fig,
                 ax,
                 x=float(x_axes),
@@ -1125,7 +1164,7 @@ def draw_most_reviewed_years_panel(
                 zorder=21,
                 clip_on=True,
             )
-            y_disp = float(hb.y0) - row_gap_px
+            y_disp -= line_step_px
     return True
 
 
@@ -1143,7 +1182,7 @@ def draw_swatch_legend_panel(
     """In-plot legend panel: colored swatches + labels (genre stacks, etc.).
 
     Same seating and column rules as Most reviewed years: max 5 rows per
-    column, wrap right, rebalance a short final remainder, seat **top-right**
+    column, wrap right, rebalance a short final remainder, seat **top-left**
     with the panel bottom at the tallest bar top and raise only to clear
     bars/tips. ``entries`` is ``[(label, color), ...]`` in legend order
     (red→violet for genre stacks).
@@ -1237,7 +1276,7 @@ def draw_swatch_legend_panel(
     panel_w_px = max(panel_w_px, title_w + 2 * pad_x_px)
     panel_h_px = 2 * pad_y_px + title_h + title_gap_px + body_h_px
 
-    x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_top_right(
+    x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_top_left(
         fig,
         ax,
         panel_w_px=panel_w_px,
