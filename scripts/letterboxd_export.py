@@ -303,6 +303,53 @@ def reviewed_film_keys(reviewed_films: pd.DataFrame | None) -> set[str]:
     return set(film_name_year_key(reviewed_films).tolist())
 
 
+def review_row_counts_by_film(
+    reviewed_films: pd.DataFrame | None,
+) -> dict[str, int]:
+    """Library-wide Name|||Year → number of reviews.csv rows for that film."""
+    if reviewed_films is None or getattr(reviewed_films, "empty", True):
+        return {}
+    work = reviewed_films.copy()
+    work["_film_key"] = film_name_year_key(work)
+    counts = work.groupby("_film_key", dropna=False).size()
+    return {str(k): int(n) for k, n in counts.items() if int(n) > 0}
+
+
+def film_key_display_label(film_key: str) -> str:
+    """``Name|||Year`` → ``Name (Year)`` (or bare name when year is empty)."""
+    raw = str(film_key or "")
+    name, sep, year = raw.partition("|||")
+    name = name.strip() or "?"
+    year = year.strip()
+    if sep and year:
+        return f"{name} ({year})"
+    return name
+
+
+def most_reviewed_by_row_count(
+    reviewed_films: pd.DataFrame | None,
+    top_n: int,
+    *,
+    min_reviews: int = 2,
+) -> list[tuple[str, int]]:
+    """Top films by reviews.csv row count; only those with ``count >= min_reviews``.
+
+    Used by the rewatch chart side panel (library-wide, not limited to bars).
+    Empty when nothing reaches the threshold.
+    """
+    if not top_n or top_n <= 0:
+        return []
+    threshold = max(1, int(min_reviews))
+    counts = review_row_counts_by_film(reviewed_films)
+    usable: list[tuple[str, int]] = [
+        (film_key_display_label(key), n)
+        for key, n in counts.items()
+        if n >= threshold
+    ]
+    usable.sort(key=lambda pair: (-pair[1], pair[0].casefold()))
+    return usable[: int(top_n)]
+
+
 def _review_date_bucket_key(value, grain: str):
     """Normalize a review Date (or chart index value) to a comparable bucket key."""
     if grain == "year":

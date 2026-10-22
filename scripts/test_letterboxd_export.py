@@ -30,8 +30,10 @@ from letterboxd_export import (
     load_ratings,
     load_reviewed_films,
     merged_film_ratings,
+    most_reviewed_by_row_count,
     ratings_for_averages,
     review_counts_by_date_grain,
+    review_row_counts_by_film,
     reviewed_film_keys,
     scope_letterboxd_frames,
     unique_rated_film_count,
@@ -673,7 +675,7 @@ def test_load_reviewed_films_from_zip(tmp: Path) -> None:
 
 
 def test_review_counts_by_date_grain_not_watch_year() -> None:
-    """❝ buckets use review Date; watch year of the film must not credit the tip."""
+    """≡ buckets use review Date; watch year of the film must not credit the tip."""
     # Watched in 2024; review logged in 2026. Two 2026 rows for same film → count 1.
     reviews = pd.DataFrame(
         [
@@ -717,6 +719,30 @@ def test_review_counts_by_date_grain_not_watch_year() -> None:
     assert by_month[5] == 1  # June → Old Watch again (per-month unique)
 
 
+def test_most_reviewed_by_row_count_requires_more_than_one() -> None:
+    """Library-wide Most reviewed: only films with >1 review row; omit singles."""
+    reviews = pd.DataFrame(
+        [
+            {"Name": "Once", "Year": 2000, "Date": "2024-01-01"},
+            {"Name": "Twice", "Year": 2001, "Date": "2024-01-02"},
+            {"Name": "Twice", "Year": 2001, "Date": "2024-02-02"},
+            {"Name": "Thrice", "Year": 2002, "Date": "2024-03-01"},
+            {"Name": "Thrice", "Year": 2002, "Date": "2024-03-02"},
+            {"Name": "Thrice", "Year": 2002, "Date": "2024-03-03"},
+        ]
+    )
+    assert review_row_counts_by_film(reviews) == {
+        "Once|||2000": 1,
+        "Twice|||2001": 2,
+        "Thrice|||2002": 3,
+    }
+    ranked = most_reviewed_by_row_count(reviews, top_n=10, min_reviews=2)
+    assert ranked == [("Thrice (2002)", 3), ("Twice (2001)", 2)]
+    assert most_reviewed_by_row_count(
+        reviews.iloc[:1], top_n=10, min_reviews=2
+    ) == []
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as raw:
         tmp = Path(raw)
@@ -735,6 +761,7 @@ def main() -> int:
         test_load_liked_films_from_zip(tmp)
         test_load_reviewed_films_from_zip(tmp)
         test_review_counts_by_date_grain_not_watch_year()
+        test_most_reviewed_by_row_count_requires_more_than_one()
     print("test_letterboxd_export: ok")
     return 0
 

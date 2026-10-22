@@ -41,6 +41,7 @@ from letterboxd_export import (  # noqa: E402
     load_export,
     load_liked_films,
     load_reviewed_films,
+    most_reviewed_by_row_count,
     ratings_for_catalog,
     review_counts_by_date_grain,
     reviewed_film_keys,
@@ -630,7 +631,7 @@ def chart_weekday_month(
     """Weekday + month watches stacked by watch year.
 
     Likes (♥) stay film-level among diary watches in each weekday/month.
-    Reviews (❝) and Most reviewed use review Date weekday/month — not film
+    Reviews (≡) and Most reviewed use review Date weekday/month — not film
     presence among watches. ``reviewed_keys`` is ignored (kept for call-site
     compatibility).
     """
@@ -673,7 +674,7 @@ def chart_weekday_month(
 
     week_liked = [count_liked_among_keys(week_keys[i], liked) for i in range(7)]
     month_liked = [count_liked_among_keys(month_keys[i], liked) for i in range(12)]
-    # ❝ by review Date weekday / calendar month (not watch-day film presence).
+    # ≡ by review Date weekday / calendar month (not watch-day film presence).
     week_reviewed = review_counts_by_date_grain(
         reviewed_films, range(7), grain="weekday"
     )
@@ -1003,7 +1004,7 @@ def chart_views_by_year(
     """Film watches by watch year / month / day.
 
     Likes (♥) stay unique liked films among diary watches in each bucket.
-    Reviews (❝) use review Date in the same grain — not film presence among
+    Reviews (≡) use review Date in the same grain — not film presence among
     watches. ``reviewed_keys`` is ignored (call-site compatibility).
     """
     del reviewed_keys
@@ -1756,6 +1757,7 @@ def chart_top_rewatches(
     exclude_keywords: tuple[str, ...] | list[str] | None = None,
     liked_keys: set[str] | frozenset | None = None,
     reviewed_keys: set[str] | frozenset | None = None,
+    reviewed_films: pd.DataFrame | None = None,
 ) -> bool:
     """Horizontal stacked bars of rewatched films, colored by watch year.
 
@@ -1767,10 +1769,16 @@ def chart_top_rewatches(
 
     Liked / reviewed films append ♥ / REVIEW_MARK after the visible title on
     the y-label. Tip row is count + average only (no liked/review-count tip).
+
+    Side panel: Watch year legend always. No Most liked list. Most reviewed is
+    library-wide by reviews.csv row count, only films with more than one
+    review; omitted when none qualify.
     """
     del film_ratings  # unique-film merge must not feed this chart's tip
     liked = set(liked_keys or ())
     reviewed = set(reviewed_keys or ())
+    if not reviewed and reviewed_films is not None:
+        reviewed = reviewed_film_keys(reviewed_films)
     names = df["Name"].fillna("").astype(str).str.strip()
     years_release = df["Year"] if "Year" in df.columns else pd.Series(dtype=float)
     key = names + "|||" + years_release.map(lambda y: str(int(y)) if pd.notna(y) else "")
@@ -1800,15 +1808,10 @@ def chart_top_rewatches(
     kept_rows = eligible[:limit]
     if not kept_rows:
         return False
-    # Most liked / reviewed: rank eligible rewatch films by mark (0/1), top ``limit``.
-    liked_by_label = {
-        label: (1 if str(key_id) in liked else 0) for key_id, _row, label in eligible
-    }
-    reviewed_by_label = {
-        label: (1 if str(key_id) in reviewed else 0) for key_id, _row, label in eligible
-    }
-    most_liked = rank_most_liked(liked_by_label, limit)
-    most_reviewed = rank_most_reviewed(reviewed_by_label, limit)
+    # No Most liked on this chart. Most reviewed = library-wide, count > 1 only.
+    most_reviewed = most_reviewed_by_row_count(
+        reviewed_films, limit, min_reviews=2
+    )
     # Chart draws bottom→top; reverse so the most-watched sits at the top.
     kept_rows = list(reversed(kept_rows))
 
@@ -1847,9 +1850,9 @@ def chart_top_rewatches(
 
     avg_labels = [format_single_rating_label(rating_lookup.get(key_id)) for key_id in keys]
 
-    # Row pitch stays ~0.42 in so a longer rewatch list gets a taller figure.
-    has_side = bool(most_liked or most_reviewed)
-    fig_w = 12.4 if has_side else 11.4
+    # Wider gutter when Most reviewed sits under Watch year; legend alone is tighter.
+    has_reviewed_list = bool(most_reviewed)
+    fig_w = 12.4 if has_reviewed_list else 11.4
     fig, ax = plt.subplots(figsize=(fig_w, max(4, len(labels) * 0.42)))
     y = np.arange(len(labels))
     left = np.zeros(len(labels))
@@ -1884,14 +1887,14 @@ def chart_top_rewatches(
                 clip_on=False,
             )
         )
-    right_frac = 0.74 if has_side else 0.78
+    right_frac = 0.74 if has_reviewed_list else 0.78
     fig.tight_layout(rect=[0, 0, right_frac, 1])
     draw_watch_year_most_liked_panel(
         fig,
         ax,
         years,
         palette,
-        most_liked,
+        most_liked=None,
         most_reviewed=most_reviewed,
         fontsize=8,
         title_fontsize=9,
@@ -1997,6 +2000,7 @@ def main(argv: list[str] | None = None) -> int:
             exclude_keywords=opts.exclude_keywords,
             liked_keys=liked_keys,
             reviewed_keys=reviewed_keys,
+            reviewed_films=reviewed_films,
         )
         summary = build_diary_summary(
             diary,

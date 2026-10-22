@@ -295,16 +295,16 @@ export const SEARCH_MATCH_FIELDS = [
   "year",
 ];
 
-// U+2665 only for likes. Review mark: U+275D ❝ (same text dingbat rules as ♥; no VS15).
+// U+2665 only for likes. Review mark: U+2261 ≡ (same text dingbat rules as ♥; no VS15).
 // Keep in sync with REVIEW_MARK in letterboxd_top_charts.py.
 const LIKED_HEART = "\u2665";
-const REVIEW_MARK = "\u275D";
+const REVIEW_MARK = "\u2261";
 
 /**
  * Format one film row under a match-site section:
- * `1. Name (Year) ♥ ❝: 5, —, 3.5` when liked/reviewed (marks after year).
+ * `1. Name (Year) ♥ ≡: 5, —, 3.5` when liked/reviewed (marks after year).
  * Heart is U+2665 BLACK HEART SUIT only (never U+2764). Review mark is
- * U+275D ❝ (no VS15). Colon separates title from ratings; em dash `—` is only
+ * U+2261 ≡ (no VS15). Colon separates title from ratings; em dash `—` is only
  * for empty slots. Ratings: one value per watch (diary oldest→newest, or one
  * watched-only slot). Liked = likes/films.csv; reviewed = reviews.csv.
  */

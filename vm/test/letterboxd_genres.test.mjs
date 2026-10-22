@@ -715,8 +715,8 @@ test("search keyword HTML lists sections by match site with watch ratings", () =
   assert.match(chunks[0], /<b>Search keyword: Elijah Wood<\/b>/);
   assert.match(chunks[0], /2 films/);
   // Sections in fixed order; genre before actor. Eternal appears under both.
-  // ♥ (U+2665) and ❝ (U+275D, no VS15) after year before colon when set.
-  const reviewMark = "\u275D";
+  // ♥ (U+2665) and ≡ (U+2261, no VS15) after year before colon when set.
+  const reviewMark = "\u2261";
   assert.match(
     chunks[0],
     /<b>genre<\/b>\n1\. Eternal Sunshine of the Spotless Mind \(2004\): 5, —/,

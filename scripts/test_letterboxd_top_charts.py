@@ -210,10 +210,10 @@ def test_liked_heart_helpers_use_black_heart_suit():
     assert len(months) == 3
 
 
-def test_review_mark_helpers_use_turned_comma_ornament():
-    """U+275D ❝ for charts and Telegram (no VS15; same style as ♥)."""
-    assert REVIEW_NOTE == "\u275d"
-    assert REVIEW_MARK == "\u275d"
+def test_review_mark_helpers_use_identical_to():
+    """U+2261 ≡ for charts and Telegram (no VS15; same style as ♥)."""
+    assert REVIEW_NOTE == "\u2261"
+    assert REVIEW_MARK == "\u2261"
     assert "\ufe0e" not in REVIEW_MARK
     assert "\ufe0f" not in REVIEW_MARK
     assert film_title_with_engagement_marks("Short", liked=False, reviewed=False) == "Short"
@@ -1194,6 +1194,103 @@ def test_top_rewatches_avg_is_diary_row_mean(tmp_path: Path | None = None):
     assert _rgba(by_text["3.00"].get_color()) == _rgba(rating_color(3.0))
 
 
+def test_top_rewatches_side_panel_no_most_liked_library_reviews(
+    tmp_path: Path | None = None,
+):
+    """Rewatch chart: Watch year only + Most reviewed (>1 reviews); no Most liked."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-rewatch-panel")
+    out.mkdir(parents=True, exist_ok=True)
+    diary = pd.DataFrame(
+        [
+            {"Name": "Repeat", "Year": 2001, "Rating": 4.0, "Watched Date": "2020-01-01"},
+            {"Name": "Repeat", "Year": 2001, "Rating": 3.0, "Watched Date": "2021-01-01"},
+            {"Name": "Other", "Year": 1999, "Rating": 2.0, "Watched Date": "2020-06-01"},
+            {"Name": "Other", "Year": 1999, "Rating": 5.0, "Watched Date": "2021-06-01"},
+        ]
+    )
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+    liked_keys = {"Repeat|||2001", "Other|||1999"}
+    # Library-wide: Multi has 3 reviews (not on the rewatch bars); Once has 1.
+    reviewed_films = pd.DataFrame(
+        [
+            {"Name": "Multi", "Year": 1980, "Date": "2024-01-01"},
+            {"Name": "Multi", "Year": 1980, "Date": "2024-02-01"},
+            {"Name": "Multi", "Year": 1980, "Date": "2024-03-01"},
+            {"Name": "Once", "Year": 1990, "Date": "2024-04-01"},
+            {"Name": "Repeat", "Year": 2001, "Date": "2024-05-01"},
+        ]
+    )
+    texts = _texts_on_save(
+        lambda c: c.chart_top_rewatches(
+            diary,
+            out / "top_rewatches.png",
+            liked_keys=liked_keys,
+            reviewed_films=reviewed_films,
+        )
+    )
+    labels = {t.get_text() for t in texts}
+    assert "Most liked" not in labels
+    assert "Most reviewed" in labels
+    assert any(t.get_text().startswith("1. Multi ") for t in texts)
+    assert not any("Once" in t.get_text() and t.get_text().startswith(("1.", "2.")) for t in texts)
+    # Watch year is a legend title (not ax.text); Most reviewed sits under it.
+
+    # Only singles → omit Most reviewed entirely.
+    singles = pd.DataFrame(
+        [{"Name": "Once", "Year": 1990, "Date": "2024-04-01"}]
+    )
+    texts2 = _texts_on_save(
+        lambda c: c.chart_top_rewatches(
+            diary,
+            out / "top_rewatches_singles.png",
+            liked_keys=liked_keys,
+            reviewed_films=singles,
+        )
+    )
+    assert "Most reviewed" not in {t.get_text() for t in texts2}
+    assert "Most liked" not in {t.get_text() for t in texts2}
+
+
+def test_release_years_rating_labels_include_engagement_counts(
+    tmp_path: Path | None = None,
+):
+    """Release years higher/lower: in-bar ``1. 2001 ♥ 10 ≡ 12`` when counts > 0."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-release-year-engage")
+    out.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {"year": 2001, "avg": 4.5, "rated": 8, "liked_count": 10, "reviewed_count": 12},
+        {"year": 1999, "avg": 4.0, "rated": 6, "liked_count": 0, "reviewed_count": 3},
+        {"year": 1988, "avg": 3.5, "rated": 5, "liked_count": 2, "reviewed_count": 0},
+        {"year": 1977, "avg": 3.0, "rated": 4, "liked_count": 0, "reviewed_count": 0},
+    ]
+    # Capture text artists from chart_rating_hbar via save hook on top_charts.
+    import letterboxd_top_charts as charts
+
+    captured: list = []
+    real_save = charts.save_dark_figure
+
+    def grab(fig, dest, **kwargs):
+        captured.extend([t.get_text() for ax in fig.axes for t in ax.texts])
+        return real_save(fig, dest, **kwargs)
+
+    charts.save_dark_figure = grab
+    try:
+        assert (
+            chart_release_years_by_rating(
+                rows, out / "higher.png", limit=4, min_rated=1
+            )
+            is True
+        )
+    finally:
+        charts.save_dark_figure = real_save
+    joined = "\n".join(captured)
+    assert f"1. 2001 {LIKED_HEART} 10 {REVIEW_NOTE} 12" in joined
+    assert f"2. 1999 {REVIEW_NOTE} 3" in joined
+    assert f"3. 1988 {LIKED_HEART} 2" in joined
+    assert "4. 1977" in joined
+    assert f"4. 1977 {LIKED_HEART}" not in joined
+    assert f"4. 1977 {REVIEW_NOTE}" not in joined
+
 def test_views_count_bars_show_avg_or_dash(tmp_path: Path | None = None):
     """Year and day count bars: white count, bold colored mean, dash if unrated."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-views-avg")
@@ -1237,7 +1334,7 @@ def test_views_count_bars_show_avg_or_dash(tmp_path: Path | None = None):
 def test_views_by_year_reviews_follow_review_date_not_watch(
     tmp_path: Path | None = None,
 ):
-    """Film watched in year A with review Date in year B → ❝ under B, not A."""
+    """Film watched in year A with review Date in year B → ≡ under B, not A."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-review-date-year")
     out.mkdir(parents=True, exist_ok=True)
     diary = pd.DataFrame(
@@ -1292,7 +1389,7 @@ def test_views_by_year_reviews_follow_review_date_not_watch(
     assert captured["reviewed"] == [0, 1]
     tip = f"{REVIEW_NOTE} 1"
     assert any(t.get_text() == tip for t in texts)
-    # Film-level bug would also put ❝ on 2024; date-bound has a single tip.
+    # Film-level bug would also put ≡ on 2024; date-bound has a single tip.
     assert sum(1 for t in texts if t.get_text() == tip) == 1
 
 
@@ -1327,7 +1424,7 @@ def test_weekday_month_reviews_follow_review_date(tmp_path: Path | None = None):
     )
     labels = {t.get_text() for t in texts}
     assert "Most reviewed weekdays" in labels
-    # Rank head and ❝ are separate text artists; Saturday owns the review.
+    # Rank head and ≡ are separate text artists; Saturday owns the review.
     assert any(t.get_text().startswith("1. Sat ") for t in texts)
     assert any(t.get_text().startswith(f"{REVIEW_NOTE} ") for t in texts)
     # Thursday was the watch day — must not be Most reviewed #1.
@@ -1510,7 +1607,7 @@ def test_rating_hbar_worst_skips_short_slate(tmp_path: Path | None = None):
 if __name__ == "__main__":
     test_display_lang()
     test_liked_heart_helpers_use_black_heart_suit()
-    test_review_mark_helpers_use_turned_comma_ornament()
+    test_review_mark_helpers_use_identical_to()
     test_no_date_legend_swatch_is_logo_gray_gradient()
     test_top_n_default_about_20()
     test_ranked_hbar_grows_taller_with_n()
@@ -1536,6 +1633,8 @@ if __name__ == "__main__":
     test_letterboxd_rating_distribution_percent_tips()
     test_rating_distribution_includes_undated_no_date()
     test_top_rewatches_avg_is_diary_row_mean()
+    test_top_rewatches_side_panel_no_most_liked_library_reviews()
+    test_release_years_rating_labels_include_engagement_counts()
     test_views_count_bars_show_avg_or_dash()
     test_views_by_year_reviews_follow_review_date_not_watch()
     test_weekday_month_reviews_follow_review_date()
