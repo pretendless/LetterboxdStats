@@ -219,13 +219,14 @@ def test_recolor_ticklabels_hides_original_to_avoid_duplicate_titles():
     assert label1s[1].get_visible() is False
     assert label1s[2].get_visible() is True  # unmarked keeps the native tick label
     custom = [t.get_text() for t in ax.texts]
-    assert "Grosse Pointe Blank (1997)" in custom
+    # Space before ♥/≡ stays on the title head fragment.
+    assert "Grosse Pointe Blank (1997) " in custom
     assert REVIEW_NOTE in custom
-    assert "Before Sunrise (1995)" in custom
+    assert "Before Sunrise (1995) " in custom
     assert LIKED_HEART in custom
     # Title head appears once among custom fragments (not also as a visible tick).
-    assert custom.count("Grosse Pointe Blank (1997)") == 1
-    assert custom.count("Before Sunrise (1995)") == 1
+    assert custom.count("Grosse Pointe Blank (1997) ") == 1
+    assert custom.count("Before Sunrise (1995) ") == 1
     # Colored segments stay left of the bar zero-line (no collision into bars).
     renderer = fig.canvas.get_renderer()
     axes_x0 = float(ax.get_window_extent(renderer=renderer).x0)
@@ -241,10 +242,10 @@ def test_liked_heart_helpers_use_black_heart_suit():
     assert LIKED_HEART == "\u2665"
     assert "\u2764" not in LIKED_HEART
     assert film_title_with_liked_heart("Short", liked=False) == "Short"
-    assert film_title_with_liked_heart("Short", liked=True) == f"Short{LIKED_HEART}"
-    # Heart sits after the ellipsis on overflow labels.
+    assert film_title_with_liked_heart("Short", liked=True) == f"Short {LIKED_HEART}"
+    # Heart sits after a space past the ellipsis on overflow labels.
     truncated = "Some long titl..."
-    assert film_title_with_liked_heart(truncated, liked=True) == f"{truncated}{LIKED_HEART}"
+    assert film_title_with_liked_heart(truncated, liked=True) == f"{truncated} {LIKED_HEART}"
     assert category_label_with_liked_count("Drama", 0) == "Drama"
     assert category_label_with_liked_count("Drama", 12) == f"Drama {LIKED_HEART} 12"
     assert format_liked_tip(0) is None
@@ -305,15 +306,15 @@ def test_review_mark_helpers_use_identical_to():
     assert "\ufe0e" not in REVIEW_MARK
     assert "\ufe0f" not in REVIEW_MARK
     assert film_title_with_engagement_marks("Short", liked=False, reviewed=False) == "Short"
-    assert film_title_with_engagement_marks("Short", reviewed=True) == f"Short{REVIEW_NOTE}"
+    assert film_title_with_engagement_marks("Short", reviewed=True) == f"Short {REVIEW_NOTE}"
     assert (
         film_title_with_engagement_marks("Short", liked=True, reviewed=True)
-        == f"Short{LIKED_HEART}{REVIEW_NOTE}"
+        == f"Short {LIKED_HEART} {REVIEW_NOTE}"
     )
     truncated = "Some long titl..."
     assert (
         film_title_with_engagement_marks(truncated, reviewed=True)
-        == f"{truncated}{REVIEW_NOTE}"
+        == f"{truncated} {REVIEW_NOTE}"
     )
     assert category_label_with_engagement_counts("Drama", 0, 0) == "Drama"
     assert category_label_with_engagement_counts("Drama", 12, 0) == f"Drama {LIKED_HEART} 12"
@@ -329,6 +330,69 @@ def test_review_mark_helpers_use_identical_to():
     assert ranked == [("Nolan", 5)]
     assert normalize_most_reviewed_sections(ranked) == [("Most reviewed", ranked)]
     assert normalize_most_reviewed_sections([]) == []
+
+
+def test_engagement_marks_keep_clear_space_after_name_with_stroke():
+    """Split ♥/≡ artists must not stick to the name when path_effects stroke.
+
+    After always-color (#57), in-bar labels draw name and marks as separate
+    Text artists. Bboxes ignore the stroke halo, so a lone trailing space is
+    eaten unless ``draw_colored_text_segments`` adds stroke pad before marks.
+    """
+    import matplotlib.patheffects as path_effects
+    from letterboxd_top_charts import (
+        _hbar_label_engagement_segments,
+        draw_colored_text_segments,
+    )
+
+    stroke = [
+        path_effects.Stroke(linewidth=3.2, foreground="#000000"),
+        path_effects.Normal(),
+    ]
+    fig, ax = plt.subplots(figsize=(8, 2))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 1)
+    label = f"1. Preston Sturges {REVIEW_NOTE} 3"
+    segs = _hbar_label_engagement_segments(label)
+    assert segs[0][0].endswith(" ")
+    assert segs[1][0] == REVIEW_NOTE
+    artists = draw_colored_text_segments(
+        ax,
+        0.5,
+        0.5,
+        segs,
+        fontsize=14,
+        ha="left",
+        va="center",
+        fontweight="bold",
+        mark_fontweight="bold",
+        path_effects=stroke,
+    )
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    head = next(a for a in artists if "Preston" in a.get_text())
+    mark = next(a for a in artists if a.get_text() == REVIEW_NOTE)
+    # Name-only probe (no trailing space) to measure letter ink end.
+    probe = ax.text(
+        head.get_position()[0],
+        0.2,
+        head.get_text().rstrip(),
+        fontsize=14,
+        fontweight="bold",
+        path_effects=stroke,
+        alpha=0,
+    )
+    fig.canvas.draw()
+    letter_x1 = probe.get_window_extent(renderer=renderer).x1
+    mark_x0 = mark.get_window_extent(renderer=renderer).x0
+    head_x1 = head.get_window_extent(renderer=renderer).x1
+    probe.remove()
+    # Trailing space is on the head; pad must clear both stroke halos past that
+    # bbox (name halo + mark halo), not only the string space width.
+    assert mark_x0 - head_x1 >= 6.0
+    # Past letter ink: space + both halos (≥ ~5 + 2×~3 pt stroke at 100 dpi).
+    assert mark_x0 - letter_x1 >= 12.0
+    plt.close(fig)
 
 
 def test_top_n_default_about_20():
@@ -2149,6 +2213,7 @@ if __name__ == "__main__":
     test_recolor_ticklabels_hides_original_to_avoid_duplicate_titles()
     test_liked_heart_helpers_use_black_heart_suit()
     test_review_mark_helpers_use_identical_to()
+    test_engagement_marks_keep_clear_space_after_name_with_stroke()
     test_no_date_legend_swatch_is_logo_gray_gradient()
     test_top_n_default_about_20()
     test_ranked_hbar_grows_taller_with_n()

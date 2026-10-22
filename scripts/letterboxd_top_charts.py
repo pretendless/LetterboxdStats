@@ -178,7 +178,9 @@ def _hbar_label_engagement_segments(label: str) -> list[tuple[str, str]]:
     """Hbar left label: white name/counts; ♥/≡ always logo-colored.
 
     Used both inside and outside the bar fill. Handles bare film marks
-    (``…♥≡``) and category tips (``… ♥ N ≡ M``).
+    (``… ♥ ≡``) and category tips (``… ♥ N ≡ M``). Callers must put a space
+    before the first mark; ``draw_colored_text_segments`` adds stroke pad so
+    the halo does not eat that space.
     """
     import re
 
@@ -226,6 +228,53 @@ def _figure_renderer(fig):
     return renderer
 
 
+def _path_effect_stroke_linewidth_px(fig, path_effects) -> float:
+    """Display pixels for the Stroke linewidth (bbox ignores the halo)."""
+    if not path_effects:
+        return 0.0
+    for effect in path_effects:
+        lw = getattr(effect, "_linewidth", None)
+        if lw is None:
+            lw = getattr(effect, "linewidth", None)
+        if lw is None:
+            # matplotlib.patheffects.Stroke stores gc props on ``_gc``.
+            gc = getattr(effect, "_gc", None) or {}
+            if isinstance(gc, dict):
+                lw = gc.get("linewidth")
+        if lw is not None:
+            try:
+                return float(lw) * float(fig.dpi) / 72.0
+            except (TypeError, ValueError):
+                return 0.0
+    return 0.0
+
+
+def _is_engagement_mark_fragment(frag: str) -> bool:
+    """True when ``frag`` is a lone ♥ / ≡ glyph (colored mark segment)."""
+    if not frag:
+        return False
+    if frag in (LIKED_HEART, REVIEW_NOTE):
+        return True
+    return len(frag) == 1 and (
+        frag == LIKED_HEART or (REVIEW_NOTE and frag == REVIEW_NOTE)
+    )
+
+
+def _append_engagement_mark(text: str, mark: str) -> str:
+    """Append ``mark`` with a clear ASCII space after the name / ``...`` / prior mark."""
+    base = str(text or "")
+    token = str(mark or "")
+    if not token:
+        return base
+    if base.endswith(token):
+        return base
+    if not base:
+        return token
+    if base[-1].isspace():
+        return f"{base}{token}"
+    return f"{base} {token}"
+
+
 def draw_colored_text_segments(
     ax,
     x: float,
@@ -248,6 +297,12 @@ def draw_colored_text_segments(
     ``ha`` other than ``left`` is only exact for a single segment; multi-segment
     tips/titles should pass ``ha='left'`` (or ``center`` only when one piece).
     Returns the artists drawn.
+
+    When ``path_effects`` stroke the glyphs, ``Text`` bboxes ignore the halo, so a
+    normal space between name and ♥/≡ is eaten by both strokes. Before each mark
+    fragment, advance by **two** stroke linewidths in display pixels (outgoing
+    name halo + incoming mark halo) so the gap still reads as a clear space
+    (matches ``Name ♥ N ≡ M``).
     """
     if transform is None:
         transform = ax.transData
@@ -258,6 +313,8 @@ def draw_colored_text_segments(
     artists: list = []
     inv = transform.inverted()
     renderer = _figure_renderer(fig)
+    # One linewidth clears each side's halo; both artists stroke, so pad ×2.
+    stroke_pad_px = 2.0 * _path_effect_stroke_linewidth_px(fig, path_effects)
     start_x = float(x)
     if ha in ("center", "right") and len(segments) > 1:
         probes = []
@@ -266,6 +323,8 @@ def draw_colored_text_segments(
             for frag, _color in segments:
                 if not frag:
                     continue
+                if stroke_pad_px and _is_engagement_mark_fragment(frag):
+                    total_w += stroke_pad_px
                 p = ax.text(
                     0,
                     0,
@@ -305,10 +364,12 @@ def draw_colored_text_segments(
     for frag, color in segments:
         if not frag:
             continue
-        is_mark = frag in (LIKED_HEART, REVIEW_NOTE) or (
-            len(frag) == 1
-            and (frag == LIKED_HEART or (REVIEW_NOTE and frag == REVIEW_NOTE))
-        )
+        is_mark = _is_engagement_mark_fragment(frag)
+        if is_mark and stroke_pad_px and ha_draw == "left":
+            origin = transform.transform((cursor_x, float(y)))
+            cursor_x = float(
+                inv.transform((origin[0] + stroke_pad_px, origin[1]))[0]
+            )
         weight = (
             mark_fontweight
             if mark_fontweight and is_mark
@@ -405,30 +466,30 @@ def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
 def film_title_with_liked_heart(visible_title: str, *, liked: bool) -> str:
     """Append ♥ after the visible film title (including after ``...`` truncation).
 
-    Unliked titles are unchanged. No space before the heart so overflow labels
-    read ``Some long titl...♥``.
+    Unliked titles are unchanged. Always a clear space before the heart so
+    overflow labels read ``Some long titl... ♥`` (never stuck to the name).
     """
     text = str(visible_title or "")
     if not liked:
         return text
-    return f"{text}{LIKED_HEART}"
+    return _append_engagement_mark(text, LIKED_HEART)
 
 
 def film_title_with_review_mark(visible_title: str, *, reviewed: bool) -> str:
     """Append ≡ (U+2261) after the visible title (including after truncation).
 
-    Same no-space rule as likes: ``Some long titl...≡`` when reviewed.
+    Same space-before-mark rule as likes: ``Some long titl... ≡`` when reviewed.
     """
     text = str(visible_title or "")
     if not reviewed or not REVIEW_NOTE:
         return text
-    return f"{text}{REVIEW_NOTE}"
+    return _append_engagement_mark(text, REVIEW_NOTE)
 
 
 def film_title_with_engagement_marks(
     visible_title: str, *, liked: bool = False, reviewed: bool = False
 ) -> str:
-    """Append ♥ then ≡ (each only when True), no spaces before marks."""
+    """Append ♥ then ≡ (each only when True), with spaces before/between marks."""
     text = film_title_with_liked_heart(visible_title, liked=liked)
     return film_title_with_review_mark(text, reviewed=reviewed)
 
@@ -2720,11 +2781,15 @@ def chart_rating_hbar(
         liked_count: int,
         reviewed_count: int,
     ) -> str:
-        """Bare ♥/≡ for film rows; `` ♥ N ≡ M`` for category counts; else empty."""
+        """`` ♥`` / `` ≡`` / `` ♥ ≡`` for film rows; `` ♥ N ≡ M`` for counts; else empty.
+
+        Leading space keeps the first mark clear of the name / ``...``.
+        """
         if film_liked or film_reviewed:
-            return film_title_with_engagement_marks(
+            marks = film_title_with_engagement_marks(
                 "", liked=film_liked, reviewed=film_reviewed
             )
+            return f" {marks}" if marks else ""
         tip = format_engagement_tip(liked_count, reviewed_count)
         return f" {tip}" if tip else ""
 
