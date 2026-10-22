@@ -172,9 +172,9 @@ function fmtNum(n) {
   return String(Number(n));
 }
 
-function fmtRating(n) {
+function fmtRating(n, { tenPoint = false } = {}) {
   if (n == null || !Number.isFinite(Number(n))) return "—";
-  const v = Number(n);
+  const v = Number(n) * (tenPoint ? 2 : 1);
   return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, "") || String(v);
 }
 
@@ -228,19 +228,21 @@ export function buildCalendarReportHtml(summary) {
     );
   }
   if (s.films_per_month != null && Number.isFinite(Number(s.films_per_month))) {
+    // Pace is films/month — not a star rating; never apply ten-point ×2.
     lines.push(
       `Pace: <b>${escapeHtml(fmtRating(s.films_per_month))}</b> films per month on average`,
     );
   }
 
+  const tenPoint = Boolean(s.ten_point_display);
   const ratedShare = fmtPct(s.rated_share);
   if (s.rated_count != null) {
     let ratingLine = `Ratings: <b>${escapeHtml(fmtNum(s.rated_count))}</b> (${escapeHtml(ratedShare)})`;
     if (s.rating_avg != null) {
-      ratingLine += ` · average <b>${escapeHtml(fmtRating(s.rating_avg))}</b>`;
+      ratingLine += ` · average <b>${escapeHtml(fmtRating(s.rating_avg, { tenPoint }))}</b>`;
     }
     if (s.rating_mode != null) {
-      ratingLine += ` · most often <b>${escapeHtml(fmtRating(s.rating_mode))}</b>`;
+      ratingLine += ` · most often <b>${escapeHtml(fmtRating(s.rating_mode, { tenPoint }))}</b>`;
     }
     lines.push(ratingLine);
   }

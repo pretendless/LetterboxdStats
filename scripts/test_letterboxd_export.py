@@ -49,8 +49,12 @@ from letterboxd_genre_charts import (
     watch_rating_slots_for_film,
 )
 from letterboxd_options import (
+    average_rating_axis_label,
+    display_rating_value,
     field_values_match_keyword,
     format_count_avg_label,
+    format_rating_compact,
+    format_rating_number,
     format_single_rating_label,
     is_comedy_genre,
     is_drama_genre,
@@ -306,6 +310,7 @@ def test_rewatch_in_averages_mean_and_unique_threshold() -> None:
     assert opts_off.show_likes is True
     assert opts_off.show_reviews is True
     assert opts_off.show_top_review is True
+    assert opts_off.ten_point_display is False
     likes_off = read_chart_options(
         {"LETTERBOXD_SHOW_LIKES": "false", "LETTERBOXD_SHOW_REVIEWS": "no"}
     )
@@ -314,6 +319,8 @@ def test_rewatch_in_averages_mean_and_unique_threshold() -> None:
     assert likes_off.show_top_review is False
     top_off = read_chart_options({"LETTERBOXD_SHOW_TOP_REVIEW": "no"})
     assert top_off.show_top_review is False
+    ten_on = read_chart_options({"LETTERBOXD_TEN_POINT_DISPLAY": "true"})
+    assert ten_on.ten_point_display is True
 
 
 def test_diary_wins_over_ratings_csv() -> None:
@@ -424,6 +431,8 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert format_count_avg_label(1.94, 17, 3) == "1.94"
     assert format_count_avg_label(4.25, 2, 3) == "—"
     assert format_count_avg_label(None, 5, 3) == "—"
+    assert format_count_avg_label(4.25, 3, 3, ten_point=True) == "8.50"
+    assert format_count_avg_label(3.5, 5, 3, ten_point=True) == "7.00"
     assert is_usa_country("U.S.A.")
     assert is_usa_country("United States")
     assert not is_usa_country("France")
@@ -497,6 +506,9 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert format_search_rating_slot(5) == "5"
     assert format_search_rating_slot(3.5) == "3.5"
     assert format_search_rating_slot(None) == "—"
+    assert format_search_rating_slot(3.5, ten_point=True) == "7"
+    assert format_search_rating_slot(4.25, ten_point=True) == "8.5"
+    assert format_search_rating_slot(5, ten_point=True) == "10"
     diary_slots = pd.DataFrame(
         [
             {
@@ -567,6 +579,20 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert opts.search_keywords == ("Wood", "2001")
     assert format_single_rating_label(4.5) == "4.50"
     assert format_single_rating_label(None) == "—"
+    assert format_single_rating_label(4.5, ten_point=True) == "9.00"
+    assert display_rating_value(3.5, ten_point=True) == 7.0
+    assert format_rating_number(4.25, ten_point=True) == "8.50"
+    assert format_rating_compact(4.25, ten_point=True) == "8.5"
+    assert average_rating_axis_label(ten_point=False) == "Average rating (out of 5)"
+    assert average_rating_axis_label(ten_point=True) == "Average rating (out of 10)"
+    ten_slots = watch_rating_slots_for_film(
+        "The Fellowship of the Ring",
+        2001,
+        diary_slots,
+        {"The Fellowship of the Ring|||2001": 4.0},
+        ten_point=True,
+    )
+    assert ten_slots == ["10", "8", "7"]
 
 
 def test_load_liked_films_from_zip(tmp: Path) -> None:
