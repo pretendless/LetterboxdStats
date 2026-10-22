@@ -269,6 +269,50 @@ def categorical_colors(n: int, cmap=None) -> list[tuple]:
     return [tuple(float(c) for c in cmap(t)) for t in positions]
 
 
+def stable_genre_names(names) -> list[str]:
+    """Unique genre labels in stable order (casefold, then original spelling)."""
+    uniq = {str(n).strip() for n in (names or []) if str(n or "").strip()}
+    return sorted(uniq, key=lambda s: (s.casefold(), s))
+
+
+def genre_spectrum_color_map(names) -> dict[str, tuple]:
+    """One red→violet color map for a run over a stable genre name list.
+
+    Unique names are ordered with ``stable_genre_names``, then painted with
+    reversed ``categorical_colors`` (burgundy/red first → purple/violet last).
+    Charts that show a subset keep these global hexes; unused names simply do
+    not appear. Do not rebuild this from each chart's top-N alone.
+    """
+    ordered = stable_genre_names(names)
+    if not ordered:
+        return {}
+    colors = list(reversed(categorical_colors(len(ordered))))
+    return {name: colors[i] for i, name in enumerate(ordered)}
+
+
+def genres_in_spectrum_order(names, color_map: dict | None = None) -> list[str]:
+    """Present genres ordered red→violet for stacks (bottom→top) and legends.
+
+    Uses ranks from ``color_map`` (or a transient map over ``names``). Duplicate
+    names are dropped, first spelling kept.
+    """
+    present: list[str] = []
+    seen: set[str] = set()
+    for raw in names or []:
+        name = str(raw or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        present.append(name)
+    if not present:
+        return []
+    cmap = color_map if color_map is not None else genre_spectrum_color_map(present)
+    full = stable_genre_names(cmap.keys())
+    rank = {g: i for i, g in enumerate(full)}
+    shown = [g for g in present if g in cmap]
+    return sorted(shown, key=lambda g: (rank.get(g, 10**9), g.casefold(), g))
+
+
 # Sentinel stack segment for catalog rows with no Watched Date (watched-only).
 # Real Letterboxd watch years are four-digit; 0 never collides. Ordered last in
 # the legend so dated years stay earliest→latest. Not a sample on the

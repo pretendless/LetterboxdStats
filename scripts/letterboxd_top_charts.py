@@ -659,7 +659,10 @@ def count_avg_text_style(label: str) -> dict:
 
 
 def sort_labels_by_name_length(names: list[str] | tuple[str, ...]) -> list[str]:
-    """Descending name length (longest first), then case-insensitive alpha."""
+    """Descending name length (longest first), then case-insensitive alpha.
+
+    Kept for tests/callers; genre stack coloring uses ``spectral_stack_color_map``.
+    """
     return sorted(
         (str(n) for n in (names or []) if str(n or "")),
         key=lambda s: (-len(s), s.casefold(), s),
@@ -669,17 +672,29 @@ def sort_labels_by_name_length(names: list[str] | tuple[str, ...]) -> list[str]:
 def categorical_color_map_by_name_length(
     names: list[str] | tuple[str, ...],
 ) -> dict[str, object]:
-    """Map each label to a categorical palette color by length-sorted order.
+    """Deprecated length-sorted map; prefer ``spectral_stack_color_map``.
 
-    Longest names get earlier (purple-side) colors so an in-plot legend that
-    lists descending-length names reads as a smooth top-to-bottom gradient.
-    Stack segments should use the same map even when drawn in another order.
+    Longest names get earlier (purple-side) colors. Genre stacks no longer use
+    this — it scrambled bottom→top spectra.
     """
     ordered = sort_labels_by_name_length(names)
     if not ordered:
         return {}
     colors = categorical_colors(len(ordered))
     return {name: colors[i] for i, name in enumerate(ordered)}
+
+
+def spectral_stack_color_map(
+    names_bottom_first: list[str] | tuple[str, ...],
+) -> dict[str, object]:
+    """Deprecated local stack map — prefer ``genre_spectrum_color_map``.
+
+    Kept as a thin alias that paints only the given names (no run-wide union).
+    Production genre charts build one map over the run's genre union instead.
+    """
+    from letterboxd_palette import genre_spectrum_color_map
+
+    return genre_spectrum_color_map(names_bottom_first)
 
 
 def inset_panel_column_sizes(
@@ -754,6 +769,18 @@ def _axes_plot_obstacles(fig, ax):
     return obstacles, renderer
 
 
+def _tallest_bar_top_disp(ax, renderer) -> float | None:
+    """Highest display-space top among axes patches (bars / stack segments)."""
+    top = None
+    for patch in ax.patches:
+        try:
+            y1 = float(patch.get_window_extent(renderer=renderer).y1)
+        except Exception:
+            continue
+        top = y1 if top is None else max(top, y1)
+    return top
+
+
 def seat_inset_panel_in_axes(
     fig,
     ax,
@@ -762,12 +789,21 @@ def seat_inset_panel_in_axes(
     panel_h_px: float,
     fontsize: float = 7,
     prefer_left: bool = True,
-) -> tuple[float, float, float, float]:
-    """Pick a display-pixel box for an in-plot inset; no ylim/figsize growth.
+    vertical: str = "lowest_clear",
+) -> tuple[float, float, float, float, bool]:
+    """Pick a display-pixel box for an in-plot inset.
 
-    Prefers the lowest clear seat along the left (or right) edge among short
-    bars. Raises toward the top of the axes only when the rectangle would
-    overlap bars or tip labels. Returns ``(x0, y0, x1, y1)`` in display pixels.
+    ``prefer_left`` chooses the left or right edge. ``vertical``:
+
+    - ``lowest_clear`` (default): lowest clear seat along that edge; raise only
+      when the rectangle would overlap bars or tip labels.
+    - ``tallest_bar_top``: prefer the panel **bottom** at the tallest bar top
+      (panel sits at that shelf), then **raise** until clear of bars/tips
+      (Most reviewed years, genre legends).
+
+    Returns ``(x0, y0, x1, y1, clear)`` in display pixels. ``clear`` is False
+    when no non-overlapping seat fits inside the current axes (caller may bump
+    ylim / figure pad and retry).
     """
     from matplotlib.transforms import Bbox
 
@@ -797,11 +833,25 @@ def seat_inset_panel_in_axes(
         return all(not _bbox_overlaps(candidate, obs) for obs in obstacles)
 
     step_px = max(2.0, fontsize * 0.35)
+    mode = str(vertical or "lowest_clear").strip().lower()
+    if mode == "tallest_bar_top":
+        bar_top = _tallest_bar_top_disp(ax, renderer)
+        if bar_top is None:
+            start_y0 = y_high
+        else:
+            # Panel bottom ≈ tallest bar top (same level as the bar shelf).
+            start_y0 = float(bar_top)
+        start_y0 = min(max(start_y0, y_low), y_high)
+    else:
+        start_y0 = y_low
+
     chosen_y0 = y_high
-    y_cursor = y_low
+    found_clear = False
+    y_cursor = start_y0
     while y_cursor <= y_high + 1e-6:
         if _clear_of_obstacles(y_cursor):
             chosen_y0 = y_cursor
+            found_clear = True
             break
         y_cursor += step_px
 
@@ -811,7 +861,52 @@ def seat_inset_panel_in_axes(
         y0_disp,
         x0_disp + panel_w_px,
         y0_disp + panel_h_px,
+        found_clear,
     )
+
+
+def seat_inset_panel_top_right(
+    fig,
+    ax,
+    *,
+    panel_w_px: float,
+    panel_h_px: float,
+    fontsize: float = 7,
+    max_bumps: int = 4,
+) -> tuple[float, float, float, float]:
+    """Top-right inset seat aligned with the tallest bar top; raise if needed.
+
+    Retries with a slight ylim bump (and a small figure top pad) only when the
+    preferred seat still overlaps bars or tip labels inside the current axes.
+    """
+    x0 = y0 = x1 = y1 = 0.0
+    for attempt in range(max(0, int(max_bumps)) + 1):
+        x0, y0, x1, y1, clear = seat_inset_panel_in_axes(
+            fig,
+            ax,
+            panel_w_px=panel_w_px,
+            panel_h_px=panel_h_px,
+            fontsize=fontsize,
+            prefer_left=False,
+            vertical="tallest_bar_top",
+        )
+        if clear:
+            return x0, y0, x1, y1
+        if attempt >= max_bumps:
+            break
+        y_lo, y_hi = ax.get_ylim()
+        span = float(y_hi) - float(y_lo)
+        if span <= 0:
+            break
+        ax.set_ylim(y_lo, float(y_hi) + span * 0.04)
+        try:
+            fig.subplots_adjust(
+                top=min(0.98, float(fig.subplotpars.top) + 0.012)
+            )
+        except Exception:
+            pass
+        fig.canvas.draw()
+    return x0, y0, x1, y1
 
 
 def draw_most_reviewed_years_panel(
@@ -826,10 +921,9 @@ def draw_most_reviewed_years_panel(
 ) -> bool:
     """Inset panel: years ranked by date-bound review tip counts.
 
-    Seats **inside** the plot area, as low/left as fits among short early-year
-    bars. Raises toward the top of the axes only when the rectangle would
-    overlap bars or tip labels. Does **not** expand figure height or ylim just
-    to park the panel above the axes.
+    Seats **top-right** inside the plot area, with the panel bottom aligned to
+    the tallest bar top; raises only when the rectangle would overlap bars or
+    tip labels (slight ylim / figure pad only as needed for clearance).
 
     Five numbered rows per column, then wrap right; a short final remainder
     (1–3) rebalances the last two columns (see
@@ -970,13 +1064,12 @@ def draw_most_reviewed_years_panel(
     panel_w_px = max(panel_w_px, title_w + 2 * pad_x_px)
     panel_h_px = 2 * pad_y_px + title_h + title_gap_px + body_h_px
 
-    x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_in_axes(
+    x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_top_right(
         fig,
         ax,
         panel_w_px=panel_w_px,
         panel_h_px=panel_h_px,
         fontsize=fontsize,
-        prefer_left=True,
     )
 
     x0, y0 = inv.transform((x0_disp, y0_disp))
@@ -1050,9 +1143,10 @@ def draw_swatch_legend_panel(
     """In-plot legend panel: colored swatches + labels (genre stacks, etc.).
 
     Same seating and column rules as Most reviewed years: max 5 rows per
-    column, wrap right, rebalance a short final remainder, seat low/left among
-    short bars and raise only to clear bars/tips. Does not expand figure size.
-    ``entries`` is ``[(label, color), ...]`` in legend order.
+    column, wrap right, rebalance a short final remainder, seat **top-right**
+    with the panel bottom at the tallest bar top and raise only to clear
+    bars/tips. ``entries`` is ``[(label, color), ...]`` in legend order
+    (red→violet for genre stacks).
     """
     from matplotlib.patches import FancyBboxPatch, Rectangle
 
@@ -1143,13 +1237,12 @@ def draw_swatch_legend_panel(
     panel_w_px = max(panel_w_px, title_w + 2 * pad_x_px)
     panel_h_px = 2 * pad_y_px + title_h + title_gap_px + body_h_px
 
-    x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_in_axes(
+    x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_top_right(
         fig,
         ax,
         panel_w_px=panel_w_px,
         panel_h_px=panel_h_px,
         fontsize=fontsize,
-        prefer_left=True,
     )
 
     x0, y0 = inv.transform((x0_disp, y0_disp))

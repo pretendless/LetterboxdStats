@@ -25,6 +25,8 @@ from letterboxd_palette import (
     RATING_VMIN,
     categorical_colors,
     categorical_positions,
+    genre_spectrum_color_map,
+    genres_in_spectrum_order,
     oklab_to_srgb,
     palette_color,
     palette_hex,
@@ -32,6 +34,7 @@ from letterboxd_palette import (
     rating_color,
     rating_colormap,
     srgb_to_oklab,
+    stable_genre_names,
     watch_year_palette,
 )
 
@@ -272,10 +275,26 @@ def test_rating_scale_uses_full_range_and_same_anchors():
     assert _oklab_distance(near_high, palette_rgb(0.0)) < _oklab_distance(near_high, LOGO_BLUE_RGB)
 
 
+def test_genre_spectrum_color_map_stable_across_subsets():
+    """Same genre keeps one hex whether painted alone or in a larger run map."""
+    universe = ["War", "Drama", "Action", "Comedy", "Horror", "Crime"]
+    full = genre_spectrum_color_map(universe)
+    assert list(full.keys()) == stable_genre_names(universe)
+    # Top-N subset must not remesh hues relative to the run map.
+    top = ["Drama", "Action", "Horror"]
+    for name in top:
+        assert full[name] == genre_spectrum_color_map(universe)[name]
+    ordered = genres_in_spectrum_order(top, full)
+    assert ordered[0] == stable_genre_names(top)[0]  # red-most among subset
+    assert ordered[-1] == stable_genre_names(top)[-1]
+    assert genre_spectrum_color_map([]) == {}
+
+
 if __name__ == "__main__":
     test_logo_anchor_constants_are_the_measured_bytes()
     test_oklab_segments_hit_anchors_and_deep_ends()
     test_piecewise_linear_oklab_has_no_lightness_jump()
     test_discrete_ranks_use_logo_knots_then_even_midpoints()
     test_rating_scale_uses_full_range_and_same_anchors()
+    test_genre_spectrum_color_map_stable_across_subsets()
     print("ok")
