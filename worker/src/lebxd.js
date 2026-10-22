@@ -82,6 +82,15 @@ async function defaultSend(env, chatId, text, extra) {
   return telegram(env, "sendMessage", payload);
 }
 
+async function defaultSendDocument(env, chatId, fileId, extra = {}) {
+  const payload = {
+    chat_id: chatId,
+    document: fileId,
+  };
+  if (extra.caption) payload.caption = String(extra.caption).slice(0, 1024);
+  return telegram(env, "sendDocument", payload);
+}
+
 async function defaultAnswerCallback(env, id, text) {
   const payload = { callback_query_id: id };
   if (text) payload.text = String(text).slice(0, 200);
@@ -150,6 +159,7 @@ async function answer(env, update, send, deps = {}) {
   if (document) {
     const handled = await handleLetterboxdDocument(env, message, {
       send,
+      sendDocument: deps.sendDocument || defaultSendDocument,
       fetch: deps.fetch,
       now: deps.now,
       waitUntil: deps.waitUntil,
@@ -193,9 +203,12 @@ async function handleTelegram(request, env, send, deps) {
 
 export async function handle(request, env, deps = {}) {
   const send = deps.sendMessage || defaultSend;
+  const sendDocument = deps.sendDocument || defaultSendDocument;
   const url = new URL(request.url);
   if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) return json({ ok: true });
-  if (request.method === "POST" && url.pathname === "/lebxd") return handleTelegram(request, env, send, deps);
+  if (request.method === "POST" && url.pathname === "/lebxd") {
+    return handleTelegram(request, env, send, { ...deps, sendDocument });
+  }
   return new Response("not found", { status: 404 });
 }
 

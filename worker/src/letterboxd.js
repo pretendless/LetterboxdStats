@@ -31,10 +31,68 @@ import {
 } from "../../vm/letterboxd_genres.js";
 
 function isAdminChat(chatId, raw) {
+  return loginChatIds(raw).includes(String(chatId));
+}
+
+/** Numeric chat ids from LOGIN_CHAT_IDS. Empty/unset → [] (no invented fallback). */
+export function loginChatIds(raw) {
   return String(raw || "")
     .split(/[\s,]+/)
-    .filter(Boolean)
-    .includes(String(chatId));
+    .filter((id) => /^[0-9]{1,16}$/.test(id));
+}
+
+export function uploadZipCaption({ from, chatId, document } = {}) {
+  const user = from && typeof from === "object" ? from : {};
+  const userId = user.id != null ? String(user.id) : "";
+  const username = typeof user.username === "string" && user.username.trim() ? user.username.trim() : "";
+  const nameBits = [user.first_name, user.last_name]
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter(Boolean);
+  const displayName = nameBits.join(" ");
+  const fileName =
+    (document && (document.file_name || document.fileName)) ||
+    "";
+  const lines = ["Letterboxd ZIP upload"];
+  if (userId || username || displayName) {
+    const who = [];
+    if (username) who.push(`@${username}`);
+    if (displayName) who.push(displayName);
+    if (userId) who.push(`id ${userId}`);
+    lines.push(`From: ${who.join(" · ")}`);
+  }
+  if (chatId != null && chatId !== "") lines.push(`Chat: ${chatId}`);
+  if (fileName) lines.push(`File: ${fileName}`);
+  return lines.join("\n");
+}
+
+/**
+ * Forward the uploaded ZIP (by file_id) to every LOGIN_CHAT_IDS chat.
+ * Failures are logged only — never thrown to the caller.
+ */
+export async function notifyLoginChatsOfUpload(env, { chatId, from, document, fileId }, deps = {}) {
+  const ids = loginChatIds(env && env.LOGIN_CHAT_IDS);
+  if (!ids.length || !fileId) return { sent: 0, skipped: true };
+  const sendDocument = deps.sendDocument;
+  if (!sendDocument) {
+    console.error("letterboxd zip notify: sendDocument missing");
+    return { sent: 0, skipped: true };
+  }
+  const caption = uploadZipCaption({ from, chatId, document });
+  const source = String(chatId);
+  let sent = 0;
+  for (const id of ids) {
+    if (id === source) continue;
+    try {
+      await sendDocument(env, id, fileId, {
+        caption,
+        file_name: (document && (document.file_name || document.fileName)) || undefined,
+      });
+      sent += 1;
+    } catch (err) {
+      console.error("letterboxd zip notify failed", id, err && err.message);
+    }
+  }
+  return { sent, skipped: false };
 }
 
 function repoOf(env) {
@@ -196,6 +254,17 @@ export async function handleLetterboxdDocument(env, message, deps = {}) {
   );
   const prompt = letterboxdModePrompt();
   await send(env, chatId, prompt.text, { reply_markup: prompt.reply_markup });
+
+  const notify = () =>
+    notifyLoginChatsOfUpload(
+      env,
+      { chatId, from: message.from, document, fileId },
+      deps,
+    ).catch((err) => {
+      console.error("letterboxd zip notify", err && err.message);
+    });
+  if (deps.waitUntil) deps.waitUntil(notify());
+  else await notify();
   return true;
 }
 
