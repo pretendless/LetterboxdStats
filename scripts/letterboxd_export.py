@@ -244,16 +244,36 @@ def liked_film_keys(liked_films: pd.DataFrame | None) -> set[str]:
     return set(film_name_year_key(liked_films).tolist())
 
 
+# X/Twitter post limit — Top review panel body (review text only).
+TOP_REVIEW_MAX_CHARS = 280
+TOP_REVIEW_ELLIPSIS = "..."
+
+
+def truncate_top_review_text(
+    text: str, *, max_chars: int = TOP_REVIEW_MAX_CHARS
+) -> str:
+    """Truncate review body to ``max_chars`` then ellipsis (title/date untouched)."""
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+    limit = max(1, int(max_chars))
+    if len(raw) <= limit:
+        return raw
+    cut = raw[:limit].rstrip()
+    return f"{cut}{TOP_REVIEW_ELLIPSIS}"
+
+
 def load_reviewed_films(zip_path: Path | str) -> pd.DataFrame:
     """Parse top-level reviews.csv if present. Empty frame when missing (not an error).
 
-    Keeps every review row with Name + Year + Date (review logged date). Multiple
-    rows for the same film are retained so watch-date charts can bucket by Date.
+    Keeps every review row with Name + Year + Date (review logged date) and
+    Review text when present. Multiple rows for the same film are retained so
+    watch-date charts can bucket by Date and Top review can pick among texts.
     Prefer reviews.csv; never pick deleted/orphaned copies or likes/reviews.csv
     (that file is review-URI likes, not film reviews).
     """
     path = Path(zip_path)
-    empty_cols = ["Name", "Year", "Date"]
+    empty_cols = ["Name", "Year", "Date", "Review"]
     if not path.is_file():
         return pd.DataFrame(columns=empty_cols)
     try:
@@ -293,7 +313,62 @@ def load_reviewed_films(zip_path: Path | str) -> pd.DataFrame:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     else:
         df["Date"] = pd.NaT
-    return df[["Name", "Year", "Date"]].copy()
+    if "Review" in df.columns:
+        df["Review"] = df["Review"].fillna("").astype(str)
+    else:
+        df["Review"] = ""
+    return df[["Name", "Year", "Date", "Review"]].copy()
+
+
+def pick_shortest_review(
+    reviewed_films: pd.DataFrame | None,
+    film_keys,
+    *,
+    max_chars: int = TOP_REVIEW_MAX_CHARS,
+) -> dict | None:
+    """Among reviews for ``film_keys``, pick the shortest non-empty Review text.
+
+    Returns ``{"title", "text", "date"}`` or None. ``text`` is truncated to
+    ``max_chars`` with ellipsis; ``title`` is ``Name (Year)``; ``date`` is the
+    review Date as YYYY-MM-DD when available.
+    """
+    if reviewed_films is None or getattr(reviewed_films, "empty", True):
+        return None
+    keys = {str(k) for k in (film_keys or ()) if k is not None and str(k)}
+    if not keys:
+        return None
+    if "Review" not in reviewed_films.columns:
+        return None
+    work = reviewed_films.copy()
+    work["_film_key"] = film_name_year_key(work)
+    work = work[work["_film_key"].astype(str).isin(keys)].copy()
+    if work.empty:
+        return None
+    work["_text"] = work["Review"].fillna("").astype(str).str.strip()
+    work = work[work["_text"] != ""].copy()
+    if work.empty:
+        return None
+    work["_len"] = work["_text"].str.len()
+    # Shortest text; stable tie-break by title then date then row order.
+    work = work.sort_values(
+        by=["_len", "Name", "Year", "Date"],
+        ascending=[True, True, True, True],
+        kind="mergesort",
+    )
+    row = work.iloc[0]
+    title = film_key_display_label(str(row["_film_key"]))
+    date_val = row.get("Date")
+    date_str = ""
+    if pd.notna(date_val):
+        try:
+            date_str = pd.Timestamp(date_val).strftime("%Y-%m-%d")
+        except (TypeError, ValueError):
+            date_str = ""
+    return {
+        "title": title,
+        "text": truncate_top_review_text(str(row["_text"]), max_chars=max_chars),
+        "date": date_str,
+    }
 
 
 def reviewed_film_keys(reviewed_films: pd.DataFrame | None) -> set[str]:

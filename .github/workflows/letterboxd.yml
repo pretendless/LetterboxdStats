@@ -43,6 +43,11 @@ on:
         required: false
         default: "true"
         type: string
+      show_top_review:
+        description: Bottom-right top-review panel on ranking charts (true/false; default false); also emits lower-rating charts
+        required: false
+        default: "false"
+        type: string
       include_usa:
         description: Include USA in country tops (true/false)
         required: false
@@ -115,6 +120,7 @@ jobs:
           LETTERBOXD_INCLUDE_REWATCH_IN_AVERAGES: ${{ inputs.include_rewatch_in_averages }}
           LETTERBOXD_SHOW_LIKES: ${{ inputs.show_likes }}
           LETTERBOXD_SHOW_REVIEWS: ${{ inputs.show_reviews }}
+          LETTERBOXD_SHOW_TOP_REVIEW: ${{ inputs.show_top_review }}
           LETTERBOXD_INCLUDE_USA: ${{ inputs.include_usa }}
           LETTERBOXD_INCLUDE_ENGLISH: ${{ inputs.include_english }}
           LETTERBOXD_INCLUDE_DRAMA: ${{ inputs.include_drama }}

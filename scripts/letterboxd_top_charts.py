@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from letterboxd_export import film_name_year_key
+from letterboxd_export import film_name_year_key, pick_shortest_review
 from letterboxd_options import (
     TOP_N_DEFAULT,
     format_count_avg_label,
@@ -988,6 +988,271 @@ def seat_inset_panel_top_left(
     return x0, y0, x1, y1
 
 
+def seat_inset_panel_bottom_right(
+    fig,
+    ax,
+    *,
+    panel_w_px: float,
+    panel_h_px: float,
+    fontsize: float = 7,
+    max_bumps: int = 6,
+) -> tuple[float, float, float, float]:
+    """Bottom-right inset seat; shift right and widen the x-range on overlap.
+
+    Mirrors the raise-on-overlap idea horizontally: keep the panel on the
+    bottom edge, nudge it right (expanding ``xlim`` / figure width) until it
+    clears bars and tip labels.
+    """
+    from matplotlib.transforms import Bbox
+
+    x0 = y0 = x1 = y1 = 0.0
+    for attempt in range(max(0, int(max_bumps)) + 1):
+        obstacles, renderer = _axes_plot_obstacles(fig, ax)
+        axes_box = ax.get_window_extent(renderer=renderer)
+        edge_pad = max(4.0, fontsize * 0.5)
+        y0_disp = float(axes_box.y0) + edge_pad
+        y1_disp = y0_disp + panel_h_px
+        x1_target = float(axes_box.x1) - edge_pad
+        x0_disp = x1_target - panel_w_px
+        x1_disp = x1_target
+
+        def _panel_box(x0_px: float) -> Bbox:
+            return Bbox.from_extents(
+                x0_px, y0_disp, x0_px + panel_w_px, y0_disp + panel_h_px
+            )
+
+        clear = all(
+            not _bbox_overlaps(_panel_box(x0_disp), obs) for obs in obstacles
+        )
+        if not clear:
+            step_px = max(2.0, fontsize * 0.35)
+            x_cursor = x0_disp
+            x_max = float(axes_box.x1) - edge_pad - panel_w_px
+            found = False
+            while x_cursor <= x_max + 1e-6:
+                if all(
+                    not _bbox_overlaps(_panel_box(x_cursor), obs)
+                    for obs in obstacles
+                ):
+                    x0_disp = x_cursor
+                    x1_disp = x_cursor + panel_w_px
+                    found = True
+                    break
+                x_cursor += step_px
+            clear = found
+
+        x0, y0, x1, y1 = x0_disp, y0_disp, x1_disp, y1_disp
+        if clear:
+            return x0, y0, x1, y1
+        if attempt >= max_bumps:
+            break
+        x_lo, x_hi = ax.get_xlim()
+        span = float(x_hi) - float(x_lo)
+        if span <= 0:
+            break
+        ax.set_xlim(x_lo, float(x_hi) + span * 0.06)
+        try:
+            w_in, h_in = fig.get_size_inches()
+            fig.set_size_inches(float(w_in) * 1.04, float(h_in), forward=True)
+        except Exception:
+            pass
+        try:
+            fig.subplots_adjust(
+                right=min(0.98, float(fig.subplotpars.right) + 0.01)
+            )
+        except Exception:
+            pass
+        fig.canvas.draw()
+    return x0, y0, x1, y1
+
+
+def draw_top_review_panel(
+    fig,
+    ax,
+    review: dict | None,
+    *,
+    fontsize: float = 7,
+    title_fontsize: float = 8,
+    date_fontsize: float = 6.5,
+    max_body_lines: int = 6,
+) -> bool:
+    """Bottom-right in-plot panel: film title, truncated review text, date.
+
+    ``review`` is ``{"title", "text", "date"}`` from ``pick_shortest_review``.
+    Body text is already capped (``TOP_REVIEW_MAX_CHARS``); layout may wrap and
+    ellipsize further if the panel height is tight. Returns True when drawn.
+    """
+    from matplotlib.patches import FancyBboxPatch
+
+    if not review or not isinstance(review, dict):
+        return False
+    title = str(review.get("title") or "").strip()
+    body = str(review.get("text") or "").strip()
+    date_s = str(review.get("date") or "").strip()
+    if not title or not body:
+        return False
+
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    inv = ax.transAxes.inverted()
+
+    axes_box = ax.get_window_extent(renderer=renderer)
+    panel_w_px = max(120.0, float(axes_box.width) * 0.28)
+    pad_x_px = max(6.0, fontsize * 0.9)
+    pad_y_px = max(5.0, fontsize * 0.7)
+    title_gap_px = max(3.0, title_fontsize * 0.35)
+    date_gap_px = max(3.0, date_fontsize * 0.35)
+    inner_w = max(40.0, panel_w_px - 2 * pad_x_px)
+
+    def _measure(text: str, *, fs: float, weight: str = "normal") -> tuple[float, float]:
+        probe = ax.text(
+            0,
+            0,
+            text,
+            transform=ax.transAxes,
+            fontsize=fs,
+            fontweight=weight,
+            alpha=0,
+        )
+        fig.canvas.draw()
+        ren = fig.canvas.get_renderer()
+        box = probe.get_window_extent(renderer=ren)
+        probe.remove()
+        return float(box.width), float(box.height)
+
+    def _wrap_line(text: str, *, fs: float, max_w: float) -> list[str]:
+        words = str(text or "").split()
+        if not words:
+            return []
+        lines: list[str] = []
+        cur = words[0]
+        for word in words[1:]:
+            trial = f"{cur} {word}"
+            w, _ = _measure(trial, fs=fs)
+            if w <= max_w:
+                cur = trial
+            else:
+                lines.append(cur)
+                cur = word
+        lines.append(cur)
+        return lines
+
+    title_w, title_h = _measure(title, fs=title_fontsize, weight="bold")
+    shown_title = title
+    if title_w > inner_w:
+        lo, hi = 1, len(title)
+        best = title[:1] + "…"
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            candidate = title[:mid].rstrip() + "…"
+            w, _ = _measure(candidate, fs=title_fontsize, weight="bold")
+            if w <= inner_w:
+                best = candidate
+                lo = mid + 1
+            else:
+                hi = mid - 1
+        shown_title = best
+        _, title_h = _measure(shown_title, fs=title_fontsize, weight="bold")
+
+    body_lines = _wrap_line(body, fs=fontsize, max_w=inner_w)
+    if not body_lines:
+        return False
+    _, line_h = _measure("Ag", fs=fontsize)
+    row_gap_px = max(1.5, fontsize * 0.25)
+    if len(body_lines) > max_body_lines:
+        body_lines = body_lines[:max_body_lines]
+        last = body_lines[-1].rstrip()
+        if not last.endswith("…") and not last.endswith("..."):
+            body_lines[-1] = last[: max(1, len(last) - 1)].rstrip() + "…"
+    body_h = (
+        len(body_lines) * line_h + max(0, len(body_lines) - 1) * row_gap_px
+    )
+    date_h = 0.0
+    if date_s:
+        _, date_h = _measure(date_s, fs=date_fontsize)
+
+    panel_h_px = (
+        2 * pad_y_px
+        + title_h
+        + title_gap_px
+        + body_h
+        + (date_gap_px + date_h if date_s else 0.0)
+    )
+
+    x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_bottom_right(
+        fig,
+        ax,
+        panel_w_px=panel_w_px,
+        panel_h_px=panel_h_px,
+        fontsize=fontsize,
+    )
+
+    x0, y0 = inv.transform((x0_disp, y0_disp))
+    x1, y1 = inv.transform((x1_disp, y1_disp))
+    box = FancyBboxPatch(
+        (float(x0), float(y0)),
+        float(x1 - x0),
+        float(y1 - y0),
+        boxstyle="round,pad=0.004,rounding_size=0.01",
+        transform=ax.transAxes,
+        facecolor="#14181C",
+        edgecolor=FG,
+        linewidth=0.8,
+        alpha=0.92,
+        zorder=20,
+        clip_on=True,
+    )
+    ax.add_patch(box)
+
+    cursor_y = y1_disp - pad_y_px
+    tx, ty = inv.transform((x0_disp + pad_x_px, cursor_y))
+    ax.text(
+        float(tx),
+        float(ty),
+        shown_title,
+        transform=ax.transAxes,
+        fontsize=title_fontsize,
+        fontweight="bold",
+        color=FG,
+        ha="left",
+        va="top",
+        clip_on=True,
+        zorder=21,
+    )
+    cursor_y -= title_h + title_gap_px
+    for line in body_lines:
+        lx, ly = inv.transform((x0_disp + pad_x_px, cursor_y))
+        ax.text(
+            float(lx),
+            float(ly),
+            line,
+            transform=ax.transAxes,
+            fontsize=fontsize,
+            color=FG,
+            ha="left",
+            va="top",
+            clip_on=True,
+            zorder=21,
+        )
+        cursor_y -= line_h + row_gap_px
+    if date_s:
+        dx, dy = inv.transform((x0_disp + pad_x_px, y0_disp + pad_y_px + date_h))
+        ax.text(
+            float(dx),
+            float(dy),
+            date_s,
+            transform=ax.transAxes,
+            fontsize=date_fontsize,
+            color=FG,
+            ha="left",
+            va="top",
+            clip_on=True,
+            zorder=21,
+            alpha=0.85,
+        )
+    return True
+
+
 def draw_most_reviewed_years_panel(
     fig,
     ax,
@@ -1420,6 +1685,7 @@ def chart_stacked_count_hbar(
     most_liked: list[tuple[str, int]] | None = None,
     reviewed_counts: list[int] | None = None,
     most_reviewed: list[tuple[str, int]] | None = None,
+    top_review: dict | None = None,
 ) -> bool:
     """matrix shape (len(years), len(labels)); labels ordered bottom→top.
 
@@ -1543,6 +1809,8 @@ def chart_stacked_count_hbar(
     _place_liked_tip_inline_after(
         fig, ax, tip_anchors, likes, reviewed_counts=reviews, fontsize=8
     )
+    if top_review:
+        draw_top_review_panel(fig, ax, top_review)
     save_dark_figure(fig, path, dpi=160, pad_inches=0.05)
     plt.close(fig)
     return True
@@ -1557,12 +1825,15 @@ def _prepare_rating_rows(
     label_fn: Callable[[object], str] | None = None,
     limit: int = TOP_N_DEFAULT,
     ascending: bool = False,
-) -> list[tuple[str, float, int | None, int, bool, int, bool]]:
-    """Return (label, avg, rated_n, liked_count, film_liked, reviewed_count, film_reviewed).
+    allow_short_worst: bool = False,
+) -> list[tuple[str, float, int | None, int, bool, int, bool, tuple]]:
+    """Return (label, avg, rated_n, liked_count, film_liked, reviewed_count, film_reviewed, film_keys).
 
     ``liked_count`` / ``reviewed_count`` are for category avg charts (``♥ N`` /
     REVIEW_MARK beside the name). ``film_liked`` / ``film_reviewed`` are for
     film-title bars (bare marks after the visible title).
+    ``allow_short_worst`` lifts the full-slate gate on ascending (lower-rating)
+    charts so a short list still draws (Top review mode).
     """
     usable = []
     for row in rows or []:
@@ -1590,15 +1861,26 @@ def _prepare_rating_rows(
             reviewed_count = 0
         film_liked = bool(row.get("liked"))
         film_reviewed = bool(row.get("reviewed"))
+        raw_keys = row.get("film_keys") or row.get("_keys") or ()
+        film_keys = tuple(str(k) for k in raw_keys if k is not None and str(k))
         usable.append(
-            (label, avg_f, rated_n, liked_count, film_liked, reviewed_count, film_reviewed)
+            (
+                label,
+                avg_f,
+                rated_n,
+                liked_count,
+                film_liked,
+                reviewed_count,
+                film_reviewed,
+                film_keys,
+            )
         )
     if not usable:
         return []
     if ascending:
         usable.sort(key=lambda r: (r[1], -(r[2] or 0), r[0]))
         # Anti-rating charts need a full top-M slate — skip short lists.
-        if limit and len(usable) < limit:
+        if limit and len(usable) < limit and not allow_short_worst:
             return []
     else:
         usable.sort(key=lambda r: (-r[1], -(r[2] or 0), r[0]))
@@ -1677,7 +1959,7 @@ def chart_rating_vbar(
     if not usable:
         return False
     labels = []
-    for lab, _avg, _rated, liked_count, film_liked, reviewed_count, film_reviewed in usable:
+    for lab, _avg, _rated, liked_count, film_liked, reviewed_count, film_reviewed, _keys in usable:
         short = _short_label(lab, limit=18)
         if film_liked or film_reviewed:
             short = film_title_with_engagement_marks(
@@ -1688,7 +1970,7 @@ def chart_rating_vbar(
                 short, liked_count, reviewed_count
             )
         labels.append(short)
-    avgs = [a for _, a, _, _, _, _, _ in usable]
+    avgs = [a for _, a, _, _, _, _, _, _ in usable]
     colors = rating_colors(avgs)
 
     fig, ax = plt.subplots(figsize=(max(10.0, len(labels) * 0.55), 6.5))
@@ -1702,7 +1984,7 @@ def chart_rating_vbar(
     ax.yaxis.grid(True, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     style_axes(ax)
-    for bar, avg, rated in zip(bars, avgs, [n for _, _, n, _, _, _, _ in usable]):
+    for bar, avg, rated in zip(bars, avgs, [n for _, _, n, _, _, _, _, _ in usable]):
         x = bar.get_x() + bar.get_width() / 2
         label = f"{avg:.2f}"
         style = count_avg_text_style(label)
@@ -1752,6 +2034,10 @@ def chart_rating_hbar(
     xlabel: str = "Average rating (out of 5)",
     limit: int = TOP_N_DEFAULT,
     ascending: bool = False,
+    allow_short_worst: bool = False,
+    reviewed_films: pd.DataFrame | None = None,
+    show_top_review: bool = False,
+    top_review: dict | None = None,
 ) -> bool:
     """Horizontal bars for TMDB avg tops.
 
@@ -1769,6 +2055,8 @@ def chart_rating_hbar(
 
     Category rows may set ``liked_count`` / ``reviewed_count``. Film-title rows
     may set ``liked`` / ``reviewed`` True (bare marks after the visible title).
+    When ``show_top_review``, the topmost visual row's shortest review is drawn
+    bottom-right (or ``top_review`` when precomputed).
     """
     import matplotlib.patheffects as path_effects
 
@@ -1780,20 +2068,26 @@ def chart_rating_hbar(
         label_fn=label_fn,
         limit=limit,
         ascending=ascending,
+        allow_short_worst=allow_short_worst,
     )
     if not usable:
         return False
 
+    # Topmost visual position = rank 1 = first in usable (before reverse for barh).
+    panel_review = top_review
+    if panel_review is None and show_top_review:
+        panel_review = pick_shortest_review(reviewed_films, usable[0][7])
+
     # barh draws first row at bottom — reverse so rank 1 sits at top.
     display = list(reversed(list(enumerate(usable, start=1))))
     ranks = [rank for rank, _ in display]
-    labels = [lab for _, (lab, _, _, _, _, _, _) in display]
-    avgs = [avg for _, (_, avg, _, _, _, _, _) in display]
-    rateds = [rated for _, (_, _, rated, _, _, _, _) in display]
-    liked_counts = [lc for _, (_, _, _, lc, _, _, _) in display]
-    film_likeds = [fl for _, (_, _, _, _, fl, _, _) in display]
-    reviewed_counts = [rc for _, (_, _, _, _, _, rc, _) in display]
-    film_revieweds = [fr for _, (_, _, _, _, _, _, fr) in display]
+    labels = [lab for _, (lab, _, _, _, _, _, _, _) in display]
+    avgs = [avg for _, (_, avg, _, _, _, _, _, _) in display]
+    rateds = [rated for _, (_, _, rated, _, _, _, _, _) in display]
+    liked_counts = [lc for _, (_, _, _, lc, _, _, _, _) in display]
+    film_likeds = [fl for _, (_, _, _, _, fl, _, _, _) in display]
+    reviewed_counts = [rc for _, (_, _, _, _, _, rc, _, _) in display]
+    film_revieweds = [fr for _, (_, _, _, _, _, _, fr, _) in display]
     colors = rating_colors(avgs)
 
     # Same point size at any N; the canvas grows about half an inch per row.
@@ -2042,6 +2336,8 @@ def chart_rating_hbar(
             fontweight="normal",
             clip_on=False,
         )
+    if panel_review:
+        draw_top_review_panel(fig, ax, panel_review)
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
     return True
@@ -2063,6 +2359,9 @@ def chart_diary_entity_stacked(
     liked_keys: set[str] | frozenset | None = None,
     reviewed_keys: set[str] | frozenset | None = None,
     catalog: pd.DataFrame | None = None,
+    names_for_row_unfiltered: Callable[[pd.Series], list[str]] | None = None,
+    reviewed_films: pd.DataFrame | None = None,
+    show_top_review: bool = False,
 ) -> bool:
     """Top entities by catalog hits; stack segments by watch year.
 
@@ -2107,6 +2406,32 @@ def chart_diary_entity_stacked(
         return False
 
     keywords = tuple(exclude_keywords or ())
+    # Pre-keyword top (and optional unfiltered names) — Exclude hiding #1
+    # suppresses the Top review panel for this chart.
+    raw_top_name = None
+    for n, c in totals.most_common():
+        if c < min_count:
+            continue
+        raw_top_name = n
+        break
+    exclude_hid_top = False
+    if show_top_review and raw_top_name is not None:
+        raw_display = label_fn(raw_top_name) if label_fn else raw_top_name
+        if label_matches_exclude_keywords(raw_display, keywords):
+            exclude_hid_top = True
+        elif names_for_row_unfiltered is not None:
+            unfiltered_totals: Counter[str] = Counter()
+            for _, row in work.iterrows():
+                for n in names_for_row_unfiltered(row) or []:
+                    if n:
+                        unfiltered_totals[n] += 1
+            for n, c in unfiltered_totals.most_common():
+                if c < min_count:
+                    continue
+                if n != raw_top_name:
+                    exclude_hid_top = True
+                break
+
     candidates = []
     for n, c in totals.most_common():
         if c < min_count:
@@ -2118,7 +2443,9 @@ def chart_diary_entity_stacked(
     if not candidates:
         return False
     top = [n for n, _ in candidates[:top_n]]
-    # Bottom-to-top: least among top-N at bottom.
+    # Bottom-to-top: least among top-N at bottom. Topmost visual = last in list
+    # = candidates[0] (highest count among kept rows).
+    visual_top_name = top[0]
     top = list(reversed(top))
     dated_years = sorted({y for y, _ in pairs if y != UNDATED_WATCH_YEAR})
     has_undated = any(y == UNDATED_WATCH_YEAR for y, _ in pairs)
@@ -2158,6 +2485,11 @@ def chart_diary_entity_stacked(
         reviewed_counts.append(reviewed_by_display.get(str(raw), 0))
     most_liked = rank_most_liked(liked_by_display, top_n)
     most_reviewed = rank_most_reviewed(reviewed_by_display, top_n)
+    panel_review = None
+    if show_top_review and not exclude_hid_top:
+        panel_review = pick_shortest_review(
+            reviewed_films, entity_keys.get(visual_top_name) or ()
+        )
     return chart_stacked_count_hbar(
         labels,
         all_years,
@@ -2171,6 +2503,7 @@ def chart_diary_entity_stacked(
         most_liked=most_liked,
         reviewed_counts=reviewed_counts,
         most_reviewed=most_reviewed,
+        top_review=panel_review,
     )
 
 
@@ -2185,6 +2518,8 @@ def chart_release_years_by_count(
     exclude_keywords: tuple[str, ...] | list[str] | None = None,
     liked_keys: set[str] | frozenset | None = None,
     reviewed_keys: set[str] | frozenset | None = None,
+    reviewed_films: pd.DataFrame | None = None,
+    show_top_review: bool = False,
 ) -> bool:
     """Release-year count top stacked by watch year (catalog hits)."""
 
@@ -2210,6 +2545,8 @@ def chart_release_years_by_count(
         liked_keys=liked_keys,
         reviewed_keys=reviewed_keys,
         catalog=catalog,
+        reviewed_films=reviewed_films,
+        show_top_review=show_top_review,
     )
 
 
@@ -2221,6 +2558,9 @@ def chart_release_years_by_rating(
     ascending: bool = False,
     title: str | None = None,
     min_rated: int = MIN_RATED_FOR_TOP,
+    allow_short_worst: bool = False,
+    reviewed_films: pd.DataFrame | None = None,
+    show_top_review: bool = False,
 ) -> bool:
     """«Годы выхода — выше/ниже оценка» as TMDB-style horizontal avg bars.
 
@@ -2243,6 +2583,8 @@ def chart_release_years_by_rating(
             reviewed_count = int(row.get("reviewed_count") or 0)
         except (TypeError, ValueError):
             reviewed_count = 0
+        raw_keys = row.get("film_keys") or ()
+        film_keys = tuple(str(k) for k in raw_keys if k is not None and str(k))
         normalized.append(
             {
                 "name": str(int(year)),
@@ -2250,6 +2592,7 @@ def chart_release_years_by_rating(
                 "rated": row.get("rated"),
                 "liked_count": liked_count,
                 "reviewed_count": reviewed_count,
+                "film_keys": film_keys,
             }
         )
     if title is None:
@@ -2265,6 +2608,9 @@ def chart_release_years_by_rating(
         title=title,
         limit=limit,
         ascending=ascending,
+        allow_short_worst=allow_short_worst,
+        reviewed_films=reviewed_films,
+        show_top_review=show_top_review,
     )
 
 
