@@ -633,6 +633,94 @@ def test_top_review_panel_aligns_to_first_and_last_bar() -> None:
     plt.close(fig2)
 
 
+def test_top_review_panel_text_stays_inside_box_with_tips() -> None:
+    """Body/title/date stay inside the rounded box after xlim bumps for tips.
+
+    Regression: a stale axes transform after seating placed the panel past the
+    axes edge and clipped review lines mid-word (e.g. ``fro`` from ``from``).
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from letterboxd_palette import INSET_PANEL_EDGE_PAD_PX
+    from letterboxd_top_charts import _hbar_band_y_disp, draw_top_review_panel
+
+    review = {
+        "title": "Bringing Up Baby (1938)",
+        "text": (
+            "had a leopard from this movie on some profile pics "
+            "unknowingly where it is from iconic stuff"
+        ),
+        "date": "2026-08-12",
+        "rating": 5.0,
+    }
+    fig, ax = plt.subplots(figsize=(11, 9.6))
+    avgs = np.linspace(4.5, 3.5, 20)
+    ax.barh(np.arange(20), avgs, height=0.72)
+    ax.set_xlim(0, 6.15)
+    for i, avg in enumerate(avgs):
+        ax.text(
+            float(avg) + 0.14,
+            i,
+            f"{avg:.2f} (4)",
+            fontsize=9,
+            ha="left",
+            va="center",
+        )
+    ax.set_yticks([])
+    fig.tight_layout()
+    fig.canvas.draw()
+    assert draw_top_review_panel(fig, ax, review, corner="bottom_right")
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    axes_box = ax.get_window_extent(renderer=renderer)
+    panels = [
+        p.get_window_extent(renderer=renderer)
+        for p in ax.patches
+        if p.__class__.__name__ == "FancyBboxPatch"
+    ]
+    assert panels
+    panel = panels[-1]
+    # Full panel inside axes with side edge margin.
+    assert float(panel.x1) <= float(axes_box.x1) + 1.0
+    assert float(axes_box.x1) - float(panel.x1) >= float(INSET_PANEL_EDGE_PAD_PX) - 1.0
+    bar_lo, _ = _hbar_band_y_disp(ax, renderer)
+    assert bar_lo is not None
+    assert abs(float(panel.y0) - float(bar_lo)) <= 6.0
+
+    tip_like = set()
+    for avg in avgs:
+        tip_like.add(f"{avg:.2f}")
+        tip_like.add(f"{avg:.2f} (4)")
+    for artist in ax.texts:
+        text = str(artist.get_text() or "")
+        if not text.strip() or text in tip_like or text.startswith("("):
+            continue
+        if text.replace(".", "").isdigit():
+            continue
+        box = artist.get_window_extent(renderer=renderer)
+        assert float(box.x1) <= float(panel.x1) + 2.5, text
+        assert float(box.x0) >= float(panel.x0) - 2.5, text
+        assert float(box.y0) >= float(panel.y0) - 2.5, text
+        assert float(box.y1) <= float(panel.y1) + 2.5, text
+        assert float(box.x1) <= float(axes_box.x1) + 2.5, text
+    # Wrapped body keeps whole words (no mid-word axes clip).
+    body_lines = [
+        str(t.get_text())
+        for t in ax.texts
+        if "leopard" in str(t.get_text())
+        or "unknowingly" in str(t.get_text())
+        or "iconic" in str(t.get_text())
+    ]
+    joined = " ".join(body_lines)
+    assert "from" in joined
+    assert "some" in joined
+    assert "fro " not in joined and not joined.endswith("fro")
+    plt.close(fig)
+
+
 def test_left_colorbar_clears_in_bar_labels(tmp_path: Path) -> None:
     """Left rating colorbar leaves room for in-bar rank/year text."""
     import matplotlib
@@ -745,6 +833,7 @@ def main() -> int:
         test_lower_rating_chart_draws_top_review_panel(Path(tmp))
         test_left_colorbar_clears_in_bar_labels(Path(tmp))
     test_top_review_panel_aligns_to_first_and_last_bar()
+    test_top_review_panel_text_stays_inside_box_with_tips()
     test_force_worst_emits_lower_rating_when_short()
     print("test_letterboxd_top_review: ok")
     return 0
