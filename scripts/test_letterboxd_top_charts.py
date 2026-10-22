@@ -29,6 +29,7 @@ from letterboxd_top_charts import (
     REVIEW_NOTE,
     TOP_N_DEFAULT,
     categorical_color_map_by_name_length,
+    spectral_stack_color_map,
     category_label_with_engagement_counts,
     category_label_with_liked_count,
     chart_rating_hbar,
@@ -1455,7 +1456,7 @@ def test_most_reviewed_years_column_sizes_rebalance_short_remainder():
 
 
 def test_sort_labels_by_name_length_longest_first():
-    """Genre legend order: longest names first; alpha tie-break; colors follow."""
+    """Length sort helper: longest names first; alpha tie-break."""
     names = ["War", "Drama", "Science Fiction", "Action", "Comedy", "Crime"]
     ordered = sort_labels_by_name_length(names)
     assert ordered[0] == "Science Fiction"
@@ -1465,7 +1466,6 @@ def test_sort_labels_by_name_length_longest_first():
     assert ordered.index("Comedy") < ordered.index("Crime")
     cmap = categorical_color_map_by_name_length(names)
     assert set(cmap) == set(names)
-    # First in length order gets the first categorical color.
     from letterboxd_palette import categorical_colors
 
     expected = categorical_colors(len(ordered))
@@ -1473,21 +1473,48 @@ def test_sort_labels_by_name_length_longest_first():
     assert cmap[ordered[-1]] == expected[-1]
 
 
+def test_spectral_stack_color_map_red_to_violet_bottom_to_top():
+    """Run-wide genre map: stable names → red→violet; subsets keep global hexes."""
+    from letterboxd_palette import (
+        categorical_colors,
+        genre_spectrum_color_map,
+        genres_in_spectrum_order,
+        stable_genre_names,
+    )
+
+    universe = ["War", "Drama", "Science Fiction", "Action", "Comedy", "Crime", "Horror"]
+    cmap = genre_spectrum_color_map(universe)
+    ordered = stable_genre_names(universe)
+    expected = list(reversed(categorical_colors(len(ordered))))
+    assert list(cmap.keys()) == ordered
+    assert cmap[ordered[0]] == expected[0]  # red/burgundy end
+    assert cmap[ordered[-1]] == expected[-1]  # violet/purple end
+    # Subset keeps the same hex as the full-run map (not remapped to a 3-color scale).
+    subset = ["Drama", "Action", "Horror"]
+    for name in subset:
+        assert genre_spectrum_color_map(universe)[name] == cmap[name]
+    assert genres_in_spectrum_order(subset, cmap) == sorted(
+        subset, key=lambda g: (ordered.index(g), g)
+    )
+    # Alias still paints a local list (stable order, not call order).
+    local = spectral_stack_color_map(["Drama", "Action"])
+    assert local == genre_spectrum_color_map(["Drama", "Action"])
+    assert spectral_stack_color_map([]) == {}
+
+
 def test_swatch_legend_panel_draws_title_and_names(tmp_path: Path | None = None):
-    """In-plot swatch legend seats inside axes with title + length-sorted names."""
+    """In-plot swatch legend seats top-right with spectral stack order."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-swatch-legend")
     out.mkdir(parents=True, exist_ok=True)
-    import letterboxd_top_charts as charts
-    from letterboxd_palette import categorical_colors, save_dark_figure
+    from letterboxd_palette import save_dark_figure
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    # Short left bars leave empty space for the panel.
-    ax.bar([0, 1, 2, 3, 4], [2, 3, 8, 9, 10], color="#3FB7EB", width=0.8)
+    # Tall left / short right so top-right can sit near tallest-bar height.
+    ax.bar([0, 1, 2, 3, 4], [10, 9, 3, 2, 2], color="#3FB7EB", width=0.8)
     ax.set_ylim(0, 12)
     names = ["War", "Drama", "Science Fiction", "Action", "Comedy", "Crime"]
-    ordered = sort_labels_by_name_length(names)
-    colors = categorical_colors(len(ordered))
-    entries = list(zip(ordered, colors))
+    cmap = spectral_stack_color_map(names)
+    entries = [(g, cmap[g]) for g in names]
     assert draw_swatch_legend_panel(
         fig, ax, entries, title="6 most common genres"
     )
@@ -1497,6 +1524,13 @@ def test_swatch_legend_panel_draws_title_and_names(tmp_path: Path | None = None)
     assert "6 most common genres" in labels
     assert "Science Fiction" in labels
     assert "War" in labels
+    # Panel title sits on the right half of the axes.
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    title = next(t for t in ax.texts if t.get_text() == "6 most common genres")
+    axes_box = ax.get_window_extent(renderer=renderer)
+    title_box = title.get_window_extent(renderer=renderer)
+    assert title_box.x0 > (axes_box.x0 + axes_box.x1) / 2
     plt.close(fig)
 
 
@@ -1507,11 +1541,11 @@ def test_most_reviewed_years_panel_wraps_five_per_column(
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-most-reviewed-years")
     out.mkdir(parents=True, exist_ok=True)
     # Eleven watch years; eleven review years → columns 5|3|3 (not 5|5|1).
-    # Early years are short so the panel can seat low/left without raising ylim.
+    # Tall early / short late bars: top-right can align near tallest-bar top.
     rows = []
     reviews = []
     for i, year in enumerate(range(2014, 2025)):
-        watch_n = 1 if year < 2020 else 40
+        watch_n = 40 if year < 2020 else 2
         for w in range(watch_n):
             rows.append(
                 {
@@ -1547,12 +1581,21 @@ def test_most_reviewed_years_panel_wraps_five_per_column(
             (t for t in ax.texts if t.get_text() == "Most reviewed years"), None
         )
         assert title is not None
-        captured["panel_y"] = float(title.get_window_extent(renderer=renderer).y1)
+        title_box = title.get_window_extent(renderer=renderer)
+        captured["panel_y"] = float(title_box.y1)
+        captured["panel_x"] = float(title_box.x0)
         axes_box = ax.get_window_extent(renderer=renderer)
         captured["axes_top"] = float(axes_box.y1)
         captured["axes_bottom"] = float(axes_box.y0)
+        captured["axes_left"] = float(axes_box.x0)
+        captured["axes_right"] = float(axes_box.x1)
+        # Bar patches only (exclude the panel FancyBboxPatch).
         bar_tops = sorted(
-            (float(p.get_window_extent(renderer=renderer).y1) for p in ax.patches),
+            (
+                float(p.get_window_extent(renderer=renderer).y1)
+                for p in ax.patches
+                if p.__class__.__name__ == "Rectangle"
+            ),
             reverse=True,
         )
         captured["tall_bar_top"] = bar_tops[0]
@@ -1580,16 +1623,17 @@ def test_most_reviewed_years_panel_wraps_five_per_column(
         t.startswith(f"{REVIEW_NOTE} ") or t == f"{REVIEW_NOTE} 1" or REVIEW_NOTE in t
         for t in labels
     )
-    # No figure-height bump; ylim stays tip pad (not panel parking).
+    # No figure-height bump for panel parking.
     assert captured["fig_h"] == 6.0
     ymax_data = 40
-    # rotation==0 for n=11 → top_pad 1.22
-    assert captured["ylim"][1] <= ymax_data * 1.22 + 1e-6
-    # Panel seats inside axes (not perched above via ylim expansion).
+    # Tip pad 1.22; seating may add slight ylim for clearance.
+    assert captured["ylim"][1] <= ymax_data * 1.22 * (1.04**4) + 1e-6
+    # Panel seats inside axes, on the right half, at/above the tallest-bar shelf.
     assert captured["axes_bottom"] < captured["panel_y"] <= captured["axes_top"]
-    # With short early bars, the panel is not stuck at the axes top.
-    axes_h = captured["axes_top"] - captured["axes_bottom"]
-    assert captured["panel_y"] < captured["axes_top"] - axes_h * 0.08
+    mid_x = (captured["axes_left"] + captured["axes_right"]) / 2
+    assert captured["panel_x"] > mid_x
+    # Title is near the panel top; bottom-aligned seat still keeps it ≥ bar top.
+    assert captured["panel_y"] >= captured["tall_bar_top"] - 8.0
     # No reviews → panel omitted.
     bare = _texts_on_save(
         lambda c: c.chart_views_by_year(
@@ -1919,6 +1963,7 @@ if __name__ == "__main__":
     test_views_count_bars_show_avg_or_dash()
     test_most_reviewed_years_column_sizes_rebalance_short_remainder()
     test_sort_labels_by_name_length_longest_first()
+    test_spectral_stack_color_map_red_to_violet_bottom_to_top()
     test_swatch_legend_panel_draws_title_and_names()
     test_most_reviewed_years_panel_wraps_five_per_column()
     test_views_by_year_reviews_follow_review_date_not_watch()

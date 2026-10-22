@@ -62,6 +62,8 @@ from letterboxd_options import (  # noqa: E402
 from letterboxd_palette import (  # noqa: E402
     FG,
     apply_dark_chart_theme,
+    genre_spectrum_color_map,
+    genres_in_spectrum_order,
     save_dark_figure,
     style_axes,
 )
@@ -71,7 +73,6 @@ from letterboxd_ratings import (  # noqa: E402
 )
 from letterboxd_top_charts import (  # noqa: E402
     TOP_N_DEFAULT,
-    categorical_color_map_by_name_length,
     chart_diary_entity_stacked,
     chart_rating_hbar,
     count_avg_text_style,
@@ -79,7 +80,6 @@ from letterboxd_top_charts import (  # noqa: E402
     count_reviewed_among_keys,
     display_lang,
     draw_swatch_legend_panel,
-    sort_labels_by_name_length,
 )
 
 apply_dark_chart_theme()
@@ -1357,24 +1357,43 @@ def main():
 
     # 1) Stacked yearly counts — diary only (need watch year).
     exclude_keywords = tuple(opts.exclude_keywords or ())
+
+    def _chart_genres(genres) -> list[str]:
+        return [
+            g
+            for g in _filter_genre_names(
+                genres,
+                include_drama=opts.include_drama,
+                include_comedy=opts.include_comedy,
+            )
+            if not label_matches_exclude_keywords(g, exclude_keywords)
+        ]
+
     all_genres_diary = [
-        g
-        for genres in diary["Genre list"]
-        for g in _filter_genre_names(
-            genres, include_drama=opts.include_drama, include_comedy=opts.include_comedy
-        )
-        if not label_matches_exclude_keywords(g, exclude_keywords)
+        g for genres in diary["Genre list"] for g in _chart_genres(genres)
     ]
-    # Frequency picks the top N; legend/palette order is descending name length.
-    top_genres = [g for g, _ in Counter(all_genres_diary).most_common(12)]
-    genre_colors = categorical_color_map_by_name_length(top_genres)
+    all_genres_catalog = [
+        g for genres in catalog["Genre list"] for g in _chart_genres(genres)
+    ]
+    # One red→violet map for the run (diary ∪ catalog). Subsets keep these hexes.
+    genre_colors = genre_spectrum_color_map(
+        set(all_genres_diary) | set(all_genres_catalog)
+    )
+    # Frequency picks which genres appear; stack/legend order is spectral.
+    top_genres = genres_in_spectrum_order(
+        [g for g, _ in Counter(all_genres_diary).most_common(12)],
+        genre_colors,
+    )
     yearly = {}
     for y in years:
         subset = diary[diary["Watched Date"].dt.year == y]
-        yearly[y] = {g: int(subset["Genre list"].apply(lambda gs: g in gs).sum()) for g in top_genres}
+        yearly[y] = {
+            g: int(subset["Genre list"].apply(lambda gs, genre=g: genre in gs).sum())
+            for g in top_genres
+        }
     fig, ax = plt.subplots(figsize=(14, 7))
     bottom = np.zeros(len(years))
-    # Stack in frequency order; colors follow the length-sorted map.
+    # Bottom→top = red→violet among present genres (fixed global colors).
     for genre in top_genres:
         vals = np.array([yearly[y][genre] for y in years])
         ax.bar(
@@ -1451,9 +1470,8 @@ def main():
         _shift(count_artist, cb, start)
         _shift(avg_artist, ab, start + cb.width + 4)
     if top_genres:
-        legend_entries = [
-            (g, genre_colors[g]) for g in sort_labels_by_name_length(top_genres)
-        ]
+        # Legend top→bottom = spectral order of colors shown (red→violet).
+        legend_entries = [(g, genre_colors[g]) for g in top_genres]
         draw_swatch_legend_panel(
             fig,
             ax,
@@ -1464,22 +1482,13 @@ def main():
     plt.close(fig)
 
     # 2) Genre avg best/worst PNGs built after rank_genres (same >3 gate as other tops).
-    all_genres_catalog = [g for genres in catalog["Genre list"] for g in genres]
 
     # 3) Counts by release decade — catalog (no watch-year stack).
     release_decades = {}
     for _, row in catalog.iterrows():
         meta = cache.get(f"{row['Name']}|||{int(row['Year']) if pd.notna(row['Year']) else ''}", {})
         ry = meta.get("tmdb_release_year")
-        genres = [
-            g
-            for g in _filter_genre_names(
-                meta.get("genres") or [],
-                include_drama=opts.include_drama,
-                include_comedy=opts.include_comedy,
-            )
-            if not label_matches_exclude_keywords(g, exclude_keywords)
-        ]
+        genres = _chart_genres(meta.get("genres") or row.get("Genre list") or [])
         if ry and genres:
             decade = (int(ry) // 10) * 10
             for genre in genres:
@@ -1488,16 +1497,19 @@ def main():
         [{"Decade": d, "Genre": g, "Views": n} for (d, g), n in release_decades.items()]
     )
     if not decade_df.empty:
-        common = [
-            g
-            for g in decade_df.groupby("Genre")["Views"].sum().nlargest(10).index
-            if not label_matches_exclude_keywords(g, exclude_keywords)
-        ]
-        genre_colors = categorical_color_map_by_name_length(common)
+        common = genres_in_spectrum_order(
+            [
+                g
+                for g in decade_df.groupby("Genre")["Views"].sum().nlargest(10).index
+                if not label_matches_exclude_keywords(g, exclude_keywords)
+            ],
+            genre_colors,
+        )
+        # Same global genre_colors as genre×year; stack bottom→top = red→violet.
         p = decade_df[decade_df["Genre"].isin(common)].pivot_table(
             index="Decade", columns="Genre", values="Views", aggfunc="sum", fill_value=0
         ).sort_index()
-        # Stack in pivot column order; colors follow the length-sorted map.
+        p = p.reindex(columns=[c for c in common if c in p.columns])
         stack_colors = [genre_colors[c] for c in p.columns]
         fig, ax = plt.subplots(figsize=(12, 6))
         p.plot(
@@ -1574,9 +1586,7 @@ def main():
             _shift(count_artist, cb, start)
             _shift(avg_artist, ab, start + cb.width + 4)
         if common:
-            legend_entries = [
-                (g, genre_colors[g]) for g in sort_labels_by_name_length(common)
-            ]
+            legend_entries = [(g, genre_colors[g]) for g in common]
             draw_swatch_legend_panel(
                 fig,
                 ax,

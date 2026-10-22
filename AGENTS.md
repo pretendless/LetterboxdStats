@@ -91,6 +91,10 @@ Discrete ordered series (watch years, ranked genres), earliest or lowest first, 
 
 Four or more values sample the full 0–1 palette. There is no quadratic bend and no snap onto the logo knots. N = 4 is `[0.125, 0.375, 0.625, 0.875]`. N = 7 is `[0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5] / 7`.
 
+Genre-name colors (decade×genre / genre×year stacks and any other chart that colors by genre label): one run-wide map from `genre_spectrum_color_map` over the stable union of filtered genre names (`stable_genre_names`, casefold). Assign reversed `categorical_colors` so the spectrum reads burgundy/red → purple/violet. Same genre name → same hex everywhere in the run; a chart’s top-N subset keeps those global colors (unused slots omit). Stack bottom→top and legend rows follow `genres_in_spectrum_order` among genres present. Do not rebuild the map from each chart’s top-N alone. Horizontal **watches by genre** bars stay watch-year colored (`watch_year_palette`), not genre-name colored.
+
+In-plot inset panels (**Most reviewed years**, genre swatch legends): top-right, panel bottom at the tallest-bar shelf, raise only to clear bars/tips (slight ylim / figure pad only as needed). Keep 5 rows per column with last-two rebalance (`inset_panel_column_sizes`).
+
 Watch-year stacks: dated years alone feed `categorical_positions` via `watch_year_palette`. `UNDATED_WATCH_YEAR` / **No date** is the logo-background charcoal gradient (`UNDATED_LOGO_TOP_HEX` `#2C3440` → `UNDATED_LOGO_BOTTOM_HEX` `#14181C`) — not a colormap slot and not solid white. Fill orientation follows the bar: **vertical** columns keep the logo axis (top→bottom); **horizontal** bars rotate 90° (left→right). Legend swatches always use the logo-native **vertical** gradient with `UNDATED_LEGEND_EDGE` on black.
 
 ## Rewatch averages toggle
