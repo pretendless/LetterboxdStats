@@ -428,6 +428,63 @@ def _ticklabel_engagement_segments(text: str) -> list[tuple[str, str]]:
     return title_engagement_segments(raw)
 
 
+def _split_ticklabel_name_and_marks(
+    segments: list[tuple[str, str]],
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """Split ``Name `` / ``♥ ≡`` (or ``♥ N ≡ M``) so the name can keep ha=right."""
+    name: list[tuple[str, str]] = []
+    marks: list[tuple[str, str]] = []
+    seen_mark = False
+    for frag, color in segments:
+        if not seen_mark and _is_engagement_mark_fragment(frag):
+            seen_mark = True
+        if seen_mark:
+            marks.append((frag, color))
+        else:
+            name.append((frag, color))
+    return name, marks
+
+
+def _probe_segment_width_px(
+    ax,
+    segments: list[tuple[str, str]],
+    *,
+    fontsize: float,
+    fontweight,
+    transform,
+    mark_fontweight: str | None = "bold",
+) -> float:
+    """Display-pixel width of ``segments`` (no stroke pad; tick labels are unstroked)."""
+    if not segments:
+        return 0.0
+    fig = ax.figure
+    renderer = _figure_renderer(fig)
+    probes = []
+    try:
+        total = 0.0
+        for frag, _color in segments:
+            if not frag:
+                continue
+            is_mark = _is_engagement_mark_fragment(frag)
+            weight = mark_fontweight if mark_fontweight and is_mark else fontweight
+            p = ax.text(
+                0,
+                0,
+                frag,
+                transform=transform,
+                fontsize=fontsize,
+                fontweight=weight,
+                alpha=0,
+                fontproperties=review_mark_fontproperties() if is_mark else None,
+            )
+            probes.append(p)
+            total += float(p.get_window_extent(renderer=renderer).width)
+        return total
+    finally:
+        for p in probes:
+            p.remove()
+
+
 def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
     """Recolor ♥/≡ inside tick labels to logo orange/blue (axis titles outside bars).
 
@@ -438,10 +495,11 @@ def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
     draws inside ``draw_colored_text_segments`` restore FixedFormatter strings
     and the title appears twice (gutter + near the bar zero-line).
 
-    Y-axis film titles share one left edge: after layout, every tick (marked or
-    not) is redrawn ``ha='left'`` at the leftmost reserved gutter edge, then
-    ♥/≡ follow the name. Marks therefore never pull names sideways when present
-    or absent. X-axis ticks keep their native ``ha`` (only marked labels redraw).
+    Y-axis labels stay **right-aligned** toward the axis (same as unmarked ticks
+    and other chart y-names). A shared mark gutter (widest ♥/≡ suffix among rows)
+    sits between the name column and the axis so marks never pull names sideways
+    when present or absent. X-axis ticks keep their native ``ha`` (only marked
+    labels redraw).
     """
     is_y = str(axis).lower().startswith("y")
     axis_obj = ax.yaxis if is_y else ax.xaxis
@@ -451,64 +509,110 @@ def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
     if not tick_labels:
         return
 
-    common_left_disp: float | None = None
+    mark_gutter_px = 0.0
+    parsed: list[tuple] = []
     if is_y:
-        renderer = fig.canvas.get_renderer()
-        lefts: list[float] = []
         for label in tick_labels:
             text = str(label.get_text() or "")
             if not text.strip():
                 continue
-            lefts.append(float(label.get_window_extent(renderer=renderer).x0))
-        if lefts:
-            common_left_disp = min(lefts)
+            segments = _ticklabel_engagement_segments(text)
+            name_segs, mark_segs = _split_ticklabel_name_and_marks(segments)
+            parsed.append((label, text, name_segs, mark_segs))
+            if mark_segs:
+                mark_gutter_px = max(
+                    mark_gutter_px,
+                    _probe_segment_width_px(
+                        ax,
+                        mark_segs,
+                        fontsize=float(label.get_fontsize()),
+                        fontweight=label.get_fontweight(),
+                        transform=label.get_transform(),
+                    ),
+                )
 
-    for label in tick_labels:
-        text = str(label.get_text() or "")
+    for item in (
+        parsed
+        if is_y
+        else [
+            (label, str(label.get_text() or ""), None, None)
+            for label in tick_labels
+        ]
+    ):
+        label, text, name_segs, mark_segs = item
         if not text.strip():
             continue
         has_marks = LIKED_HEART in text or (
             REVIEW_NOTE and REVIEW_NOTE in text
         )
-        # X-axis: only rebuild marked labels (preserve unmarked native ticks).
-        if not is_y and not has_marks:
+        if not is_y:
+            if not has_marks:
+                continue
+            segments = _ticklabel_engagement_segments(text)
+            x, y = label.get_position()
+            label.set_visible(False)
+            draw_colored_text_segments(
+                ax,
+                float(x),
+                float(y),
+                segments,
+                fontsize=float(label.get_fontsize()),
+                ha=label.get_ha(),
+                va=label.get_va(),
+                transform=label.get_transform(),
+                fontweight=label.get_fontweight(),
+                mark_fontweight="bold",
+                clip_on=False,
+                fontproperties=review_mark_fontproperties(),
+            )
             continue
-        # Y-axis unmarked rows still redraw so names share the left column.
-        if is_y and common_left_disp is None and not has_marks:
+
+        # Y: redraw when marks exist or a shared gutter must pull unmarked names
+        # in so every name shares the same right edge toward the axis.
+        if not has_marks and mark_gutter_px <= 0:
             continue
-        segments = _ticklabel_engagement_segments(text)
-        if not segments:
-            continue
+        assert name_segs is not None and mark_segs is not None
         x, y = label.get_position()
         transform = label.get_transform()
         va = label.get_va()
-        fontsize = label.get_fontsize()
+        fontsize = float(label.get_fontsize())
         weight = label.get_fontweight()
-        if is_y and common_left_disp is not None:
-            # Shared left column in display pixels → label transform coords.
-            origin = transform.transform((float(x), float(y)))
-            x = float(
-                transform.inverted().transform((common_left_disp, origin[1]))[0]
-            )
-            ha = "left"
-        else:
-            ha = label.get_ha()
-        # Survive later canvas.draw() / tight_layout (unlike set_text("")).
-        label.set_visible(False)
-        draw_colored_text_segments(
-            ax,
-            float(x),
-            float(y),
-            segments,
-            fontsize=float(fontsize),
-            ha=ha,
-            va=va,
-            transform=transform,
-            fontweight=weight,
-            mark_fontweight="bold",
-            clip_on=False,
-            fontproperties=review_mark_fontproperties(),
+        origin = transform.transform((float(x), float(y)))
+        name_right_disp = float(origin[0]) - float(mark_gutter_px)
+        name_x = float(
+            transform.inverted().transform((name_right_disp, origin[1]))[0]
         )
+        label.set_visible(False)
+        if name_segs:
+            draw_colored_text_segments(
+                ax,
+                name_x,
+                float(y),
+                name_segs,
+                fontsize=fontsize,
+                ha="right",
+                va=va,
+                transform=transform,
+                fontweight=weight,
+                mark_fontweight="bold",
+                clip_on=False,
+                fontproperties=review_mark_fontproperties(),
+            )
+        if mark_segs:
+            draw_colored_text_segments(
+                ax,
+                name_x,
+                float(y),
+                mark_segs,
+                fontsize=fontsize,
+                ha="left",
+                va=va,
+                transform=transform,
+                fontweight=weight,
+                mark_fontweight="bold",
+                clip_on=False,
+                fontproperties=review_mark_fontproperties(),
+            )
 
 
 def film_title_with_liked_heart(visible_title: str, *, liked: bool) -> str:

@@ -211,13 +211,13 @@ def test_recolor_ticklabels_hides_original_to_avoid_duplicate_titles():
     fig.tight_layout()
     recolor_ticklabel_engagement_marks(ax, axis="y")
     fig.canvas.draw()
-    # All y tick Texts stay hidden after layout/draw (names redraw left-aligned).
+    # All y tick Texts stay hidden when a mark gutter is reserved (incl. unmarked).
     # get_yticklabels() omits invisible labels — read majorTicks.label1 instead.
     label1s = [tick.label1 for tick in ax.yaxis.majorTicks]
     assert len(label1s) == 3
     assert label1s[0].get_visible() is False
     assert label1s[1].get_visible() is False
-    assert label1s[2].get_visible() is False  # unmarked also redraws in the column
+    assert label1s[2].get_visible() is False
     custom = [t.get_text() for t in ax.texts]
     # Space before ♥/≡ stays on the title head fragment.
     assert "Grosse Pointe Blank (1997) " in custom
@@ -236,24 +236,24 @@ def test_recolor_ticklabels_hides_original_to_avoid_duplicate_titles():
         if not str(t.get_text() or "").strip():
             continue
         assert float(t.get_window_extent(renderer=renderer).x1) <= axes_x0 + 1.0
-    # Film names share one left edge — marks must not pull marked rows left.
+    # Names stay right-aligned (share a right edge); marks must not pull them.
     name_heads = {
         "Grosse Pointe Blank (1997) ",
         "Before Sunrise (1995) ",
         "No Mark Film (2001)",
     }
-    name_lefts = [
-        float(t.get_window_extent(renderer=renderer).x0)
+    name_rights = [
+        float(t.get_window_extent(renderer=renderer).x1)
         for t in ax.texts
         if t.get_text() in name_heads
     ]
-    assert len(name_lefts) == 3
-    assert max(name_lefts) - min(name_lefts) <= 1.0
+    assert len(name_rights) == 3
+    assert max(name_rights) - min(name_rights) <= 1.0
     plt.close(fig)
 
 
-def test_recolor_ticklabels_y_names_share_left_edge_with_and_without_marks():
-    """Y labels: short unmarked name lines up with marked names (not right-shifted)."""
+def test_recolor_ticklabels_y_names_share_right_edge_with_and_without_marks():
+    """Y labels: right-aligned toward the axis; marks do not shift unmarked names."""
     import matplotlib.pyplot as plt
     from letterboxd_top_charts import (
         film_title_with_engagement_marks,
@@ -278,17 +278,17 @@ def test_recolor_ticklabels_y_names_share_left_edge_with_and_without_marks():
     recolor_ticklabel_engagement_marks(ax, axis="y")
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
-    name_lefts = []
+    name_rights = []
     for t in ax.texts:
         text = str(t.get_text() or "")
         # Name head fragments end with a trailing space when marks follow.
         if text.rstrip().endswith(")") or text.rstrip().endswith("…"):
             if LIKED_HEART in text or (REVIEW_NOTE and REVIEW_NOTE in text):
                 continue
-            name_lefts.append(float(t.get_window_extent(renderer=renderer).x0))
-    assert len(name_lefts) >= 4
-    assert max(name_lefts) - min(name_lefts) <= 1.0
-    # Marks keep logo colors.
+            name_rights.append(float(t.get_window_extent(renderer=renderer).x1))
+    assert len(name_rights) >= 4
+    assert max(name_rights) - min(name_rights) <= 1.0
+    # Marks keep logo colors and sit at/after the shared name right edge.
     from letterboxd_palette import MARK_LIKE_HEX, MARK_REVIEW_HEX
     import matplotlib.colors as mcolors
 
@@ -305,6 +305,9 @@ def test_recolor_ticklabels_y_names_share_left_edge_with_and_without_marks():
     assert heart and notes
     assert mcolors.to_hex(heart[0].get_color()).lower() == MARK_LIKE_HEX.lower()
     assert mcolors.to_hex(notes[0].get_color()).lower() == MARK_REVIEW_HEX.lower()
+    name_right = max(name_rights)
+    for t in heart + notes:
+        assert float(t.get_window_extent(renderer=renderer).x0) >= name_right - 2.0
     plt.close(fig)
 
 
@@ -2282,7 +2285,7 @@ if __name__ == "__main__":
     test_display_lang()
     test_outside_engagement_mark_colors_use_logo_brand()
     test_recolor_ticklabels_hides_original_to_avoid_duplicate_titles()
-    test_recolor_ticklabels_y_names_share_left_edge_with_and_without_marks()
+    test_recolor_ticklabels_y_names_share_right_edge_with_and_without_marks()
     test_liked_heart_helpers_use_black_heart_suit()
     test_review_mark_helpers_use_identical_to()
     test_engagement_marks_keep_clear_space_after_name_with_stroke()
