@@ -633,7 +633,7 @@ def apply_dark_chart_theme() -> None:
     from pathlib import Path
 
     # Prefer DejaVu Sans (ships with matplotlib; also fonts-dejavu on Ubuntu).
-    # DejaVu has ♥ (U+2665) and ❝ (U+275D review mark). Optionally register
+    # DejaVu has ♥ (U+2665) and ≡ (U+2261 review mark). Optionally register
     # Noto Sans Symbols 2 when present (harmless fallback for mark overrides).
     symbols2 = Path("/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf")
     if symbols2.is_file():

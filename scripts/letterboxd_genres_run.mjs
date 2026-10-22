@@ -295,16 +295,16 @@ export const SEARCH_MATCH_FIELDS = [
   "year",
 ];
 
-// U+2665 only for likes. Review mark: U+275D ❝ (same text dingbat rules as ♥; no VS15).
+// U+2665 only for likes. Review mark: U+2261 ≡ (same text dingbat rules as ♥; no VS15).
 // Keep in sync with REVIEW_MARK in letterboxd_top_charts.py.
 const LIKED_HEART = "\u2665";
-const REVIEW_MARK = "\u275D";
+const REVIEW_MARK = "\u2261";
 
 /**
  * Format one film row under a match-site section:
- * `1. Name (Year) ♥ ❝: 5, —, 3.5` when liked/reviewed (marks after year).
+ * `1. Name (Year) ♥ ≡: 5, —, 3.5` when liked/reviewed (marks after year).
  * Heart is U+2665 BLACK HEART SUIT only (never U+2764). Review mark is
- * U+275D ❝ (no VS15). Colon separates title from ratings; em dash `—` is only
+ * U+2261 ≡ (no VS15). Colon separates title from ratings; em dash `—` is only
  * for empty slots. Ratings: one value per watch (diary oldest→newest, or one
  * watched-only slot). Liked = likes/films.csv; reviewed = reviews.csv.
  */
@@ -318,8 +318,10 @@ function formatSearchFilmLine(film, index) {
   const ratingText = ratings.length
     ? ratings.map((slot) => escapeHtml(slot == null || slot === "" ? "—" : slot)).join(", ")
     : "";
-  const heart = film && film.liked ? ` ${LIKED_HEART}` : "";
-  const review = film && film.reviewed && REVIEW_MARK ? ` ${REVIEW_MARK}` : "";
+  // Bold ♥ / ≡ like chart engagement tips (mark only; no count on search lines).
+  const heart = film && film.liked ? ` <b>${LIKED_HEART}</b>` : "";
+  const review =
+    film && film.reviewed && REVIEW_MARK ? ` <b>${REVIEW_MARK}</b>` : "";
   const base = `${index}. ${name} (${escapeHtml(year)})${heart}${review}`;
   return ratingText ? `${base}: ${ratingText}` : base;
 }

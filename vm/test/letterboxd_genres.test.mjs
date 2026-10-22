@@ -715,8 +715,8 @@ test("search keyword HTML lists sections by match site with watch ratings", () =
   assert.match(chunks[0], /<b>Search keyword: Elijah Wood<\/b>/);
   assert.match(chunks[0], /2 films/);
   // Sections in fixed order; genre before actor. Eternal appears under both.
-  // ♥ (U+2665) and ❝ (U+275D, no VS15) after year before colon when set.
-  const reviewMark = "\u275D";
+  // ♥ (U+2665) and ≡ (U+2261, no VS15) after year before colon when set.
+  const reviewMark = "\u2261";
   assert.match(
     chunks[0],
     /<b>genre<\/b>\n1\. Eternal Sunshine of the Spotless Mind \(2004\): 5, —/,
@@ -724,10 +724,10 @@ test("search keyword HTML lists sections by match site with watch ratings", () =
   assert.match(
     chunks[0],
     new RegExp(
-      `<b>actor</b>\\n1\\. The Lord of the Rings: The Fellowship of the Ring \\(2001\\) ♥ ${reviewMark}: 5\\n2\\. Eternal Sunshine of the Spotless Mind \\(2004\\): 5, —`,
+      `<b>actor</b>\\n1\\. The Lord of the Rings: The Fellowship of the Ring \\(2001\\) <b>♥</b> <b>${reviewMark}</b>: 5\\n2\\. Eternal Sunshine of the Spotless Mind \\(2004\\): 5, —`,
     ),
   );
-  assert.doesNotMatch(chunks[0], /\(2004\) ♥/);
+  assert.doesNotMatch(chunks[0], /\(2004\) <b>♥<\/b>/);
   assert.doesNotMatch(chunks[0], /\u2764/);
   // No inline match-site parentheses on film lines.
   assert.doesNotMatch(chunks[0], /\(2001\) \(actor\)/);
