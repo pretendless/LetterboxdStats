@@ -290,6 +290,47 @@ def test_genre_spectrum_color_map_stable_across_subsets():
     assert genre_spectrum_color_map([]) == {}
 
 
+def test_logo_circles_colormap_and_inset_panel_paint():
+    """Inset panels: orange→green→blue L→R under a dark overlay + border."""
+    from letterboxd_palette import (
+        LOGO_BLUE_HEX,
+        LOGO_GREEN_HEX,
+        LOGO_ORANGE_HEX,
+        logo_circles_colormap,
+        paint_inset_panel_logo_background,
+    )
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+
+    cmap = logo_circles_colormap()
+    assert mcolors.to_hex(cmap(0.0)).lower() == LOGO_ORANGE_HEX.lower()
+    assert mcolors.to_hex(cmap(1.0)).lower() == LOGO_BLUE_HEX.lower()
+    # Mid knot is logo green (8-bit sample may be ±1 from the exact hex).
+    mid = tuple(int(round(c * 255)) for c in cmap(0.5)[:3])
+    assert mid[0] == 3 and mid[1] == 229 and mid[2] in (62, 63)
+    del LOGO_GREEN_HEX
+
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.bar([0, 1], [1, 2])
+    before_images = len(ax.images)
+    before_fancy = sum(
+        1 for p in ax.patches if p.__class__.__name__ == "FancyBboxPatch"
+    )
+    border = paint_inset_panel_logo_background(
+        ax, 0.1, 0.4, 0.4, 0.4, transform=ax.transAxes, zorder=20
+    )
+    assert border is not None
+    assert border.get_facecolor()[3] == 0.0  # edge-only chrome
+    assert len(ax.images) == before_images + 1
+    assert (
+        sum(1 for p in ax.patches if p.__class__.__name__ == "FancyBboxPatch")
+        == before_fancy + 3
+    )  # clip + overlay + border
+    # Gradient uses imshow, not Rectangle strips (bar-height tests count Rectangles).
+    assert sum(1 for p in ax.patches if p.__class__.__name__ == "Rectangle") == 2
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     test_logo_anchor_constants_are_the_measured_bytes()
     test_oklab_segments_hit_anchors_and_deep_ends()
@@ -297,4 +338,5 @@ if __name__ == "__main__":
     test_discrete_ranks_use_logo_knots_then_even_midpoints()
     test_rating_scale_uses_full_range_and_same_anchors()
     test_genre_spectrum_color_map_stable_across_subsets()
+    test_logo_circles_colormap_and_inset_panel_paint()
     print("ok")

@@ -39,6 +39,7 @@ from letterboxd_palette import (
     UNDATED_WATCH_YEAR,
     categorical_colors,
     is_undated_watch_year,
+    paint_inset_panel_logo_background,
     paint_undated_hbar_segments,
     rating_color,
     rating_colormap,
@@ -1135,10 +1136,9 @@ def draw_top_review_panel(
     (and ♥). ``corner`` is ``bottom_right`` (watches / higher / count) or
     ``top_right`` (lower-rating charts). Body text is already capped
     (``TOP_REVIEW_MAX_CHARS``); layout may wrap and ellipsize further if the
-    panel height is tight. Returns True when drawn.
+    panel height is tight.     Returns True when drawn. Panel fill is the logo circle gradient
+    (orange→green→blue) with a dark overlay for readable text.
     """
-    from matplotlib.patches import FancyBboxPatch
-
     if not review or not isinstance(review, dict):
         return False
     base_title = str(review.get("title") or "").strip()
@@ -1265,20 +1265,15 @@ def draw_top_review_panel(
 
     x0, y0 = inv.transform((x0_disp, y0_disp))
     x1, y1 = inv.transform((x1_disp, y1_disp))
-    box = FancyBboxPatch(
-        (float(x0), float(y0)),
+    paint_inset_panel_logo_background(
+        ax,
+        float(x0),
+        float(y0),
         float(x1 - x0),
         float(y1 - y0),
-        boxstyle="round,pad=0.004,rounding_size=0.01",
         transform=ax.transAxes,
-        facecolor="#14181C",
-        edgecolor=FG,
-        linewidth=0.8,
-        alpha=0.92,
         zorder=20,
-        clip_on=True,
     )
-    ax.add_patch(box)
 
     cursor_y = y1_disp - pad_y_px
     tx, ty = inv.transform((x0_disp + pad_x_px, cursor_y))
@@ -1348,10 +1343,9 @@ def draw_most_reviewed_years_panel(
     Five numbered rows per column, then wrap right; a short final remainder
     (1–3) rebalances the last two columns (see
     ``most_reviewed_years_column_sizes``). Lines use ``≡ N`` (symbol then
-    count). Returns True when drawn; False when omitted.
+    count). Panel fill is the logo circle gradient (orange→green→blue) with
+    a dark overlay. Returns True when drawn; False when omitted.
     """
-    from matplotlib.patches import FancyBboxPatch
-
     rows = _positive_rank_rows(ranked)
     if not rows or not REVIEW_NOTE:
         return False
@@ -1453,20 +1447,15 @@ def draw_most_reviewed_years_panel(
 
     x0, y0 = inv.transform((x0_disp, y0_disp))
     x1, y1 = inv.transform((x1_disp, y1_disp))
-    box = FancyBboxPatch(
-        (float(x0), float(y0)),
+    paint_inset_panel_logo_background(
+        ax,
+        float(x0),
+        float(y0),
         float(x1 - x0),
         float(y1 - y0),
-        boxstyle="round,pad=0.004,rounding_size=0.01",
         transform=ax.transAxes,
-        facecolor="#14181C",
-        edgecolor=FG,
-        linewidth=0.8,
-        alpha=0.92,
         zorder=20,
-        clip_on=True,
     )
-    ax.add_patch(box)
 
     title_x, title_y = inv.transform((x0_disp + pad_x_px, y1_disp - pad_y_px))
     ax.text(
@@ -1526,9 +1515,10 @@ def draw_swatch_legend_panel(
     column, wrap right, rebalance a short final remainder, seat **top-left**
     with the panel bottom at the tallest bar top and raise only to clear
     bars/tips. ``entries`` is ``[(label, color), ...]`` in legend order
-    (red→violet for genre stacks).
+    (red→violet for genre stacks). Panel fill is the logo circle gradient
+    (orange→green→blue) with a dark overlay.
     """
-    from matplotlib.patches import FancyBboxPatch, Rectangle
+    from matplotlib.patches import Rectangle
 
     items = [(str(name), color) for name, color in (entries or []) if str(name or "")]
     if not items:
@@ -1627,20 +1617,15 @@ def draw_swatch_legend_panel(
 
     x0, y0 = inv.transform((x0_disp, y0_disp))
     x1, y1 = inv.transform((x1_disp, y1_disp))
-    box = FancyBboxPatch(
-        (float(x0), float(y0)),
+    paint_inset_panel_logo_background(
+        ax,
+        float(x0),
+        float(y0),
         float(x1 - x0),
         float(y1 - y0),
-        boxstyle="round,pad=0.004,rounding_size=0.01",
         transform=ax.transAxes,
-        facecolor="#14181C",
-        edgecolor=FG,
-        linewidth=0.8,
-        alpha=0.92,
         zorder=20,
-        clip_on=True,
     )
-    ax.add_patch(box)
 
     title_x, title_y = inv.transform((x0_disp + pad_x_px, y1_disp - pad_y_px))
     ax.text(
