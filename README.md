@@ -12,25 +12,25 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 *The wizard asks one question at a time. Tap a button or type a reply.*
 
-![Bar chart of film watches per year; tips show bold ♥ / ≡ counts, then count and a bold colored average](docs/images/watches-by-year.png)
+![Bar chart of film watches per year; tips show bold N ♥ / M ≡ counts, Most reviewed years panel, then count and a bold colored average](docs/images/watches-by-year.png)
 
-*Watches per year. Above each bar: bold `♥ N ≡ M` when likes fall among that year’s watches or reviews were logged in that year (`reviews.csv` Date), then the white count and the bold colored average. Five years use the even palette midpoints (not the three logo knots alone).*
+*Watches per year. Above each bar: bold `N ♥ M ≡` when likes fall among that year’s watches or reviews were logged in that year (`reviews.csv` Date), then the white count and the bold colored average. When any year has reviews, a top-left **Most reviewed years** panel ranks those years by the same tip counts (five rows per column, wrapping right; a short final remainder of 1–3 rebalances the last two columns, e.g. 11 → 5|3|3). Five years use the even palette midpoints (not the three logo knots alone).*
 
 ![Weekday and month bar charts stacked by watch year, with Most liked and Most reviewed side lists](docs/images/weekday-month-by-year.png)
 
-*When you watch: weekdays and months, stacked by watch year. Tips are the same count + average pair, with bold `♥` / `≡` on a line above (`≡` buckets use review Date). The right column is Watch year, then **Most liked weekdays** / **Most liked months**, then **Most reviewed** for each.*
+*When you watch: weekdays and months, stacked by watch year. Tips are the same count + average pair, with bold `N ♥` / `M ≡` on a line above (`≡` buckets use review Date). The right column is Watch year, then **Most liked weekdays** / **Most liked months**, then **Most reviewed** for each.*
 
 ![Horizontal bars of the best-rated release years with ♥ / ≡ in the labels and averages at the tip](docs/images/release-years-higher-rating.png)
 
-*Release years with the highest average rating, among years with at least 4 rated films. Bar color follows the rating scale on the left. Short year names keep `♥ N` / `≡ M` with the rank label; the tip is the bold colored mean and `(n)` unique rated films, past any overflowing label.*
+*Release years with the highest average rating, among years with at least 4 rated films. Bar color follows the rating scale on the left. Short year names keep `N ♥` / `M ≡` with the rank label; the tip is the bold colored mean and `(n)` unique rated films, past any overflowing label.*
 
 ![Directors with the lowest average rating; short bars overflow fifteen letters; bold ♥ / ≡ counts sit in the name](docs/images/directors-lower-rating.png)
 
-*Directors with the lowest average rating (at least 4 rated films). A bar too short for 15 name letters shows the first 15 and an ellipsis, then bold `♥ N` / `≡ M`, overflowing right so the tip stays clear. Longer bars keep the label inside and ellipsize the name earlier so the metrics still fit.*
+*Directors with the lowest average rating (at least 4 rated films). A bar too short for 15 name letters shows the first 15 and an ellipsis, then bold `N ♥` / `M ≡`, overflowing right so the tip stays clear. Longer bars keep the label inside and ellipsize the name earlier so the metrics still fit.*
 
 ![Twenty directors from a 4.80 average down to 1.00, with bold ♥ / ≡ counts and a smooth purple-to-burgundy scale](docs/images/directors-higher-rating-20.png)
 
-*A top 20 across the rating scale (at least 4 rated films): one smooth blend from purple at 4.80, through logo blue, green, and orange, to burgundy at 1.00. Short bars overflow fifteen letters; bold `♥ N` / `≡ M` sit in the label when present.*
+*A top 20 across the rating scale (at least 4 rated films): one smooth blend from purple at 4.80, through logo blue, green, and orange, to burgundy at 1.00. Short bars overflow fifteen letters; bold `N ♥` / `M ≡` sit in the label when present.*
 
 ![Line chart of average rating by month, with a colored dot, mean above, and (n) below](docs/images/average-rating-by-month.png)
 
@@ -46,7 +46,7 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 ![Horizontal bars of watches by genre, stacked by watch year, with No date and Most liked / Most reviewed](docs/images/watches-by-genre.png)
 
-*Watches by genre (catalog hits), stacked by watch year, with undated rows in the **No date** charcoal segment (left→right on horizontal bars). Tips are count + average + inline `♥ N` / `≡ M`. The side panel lists **Most liked** and **Most reviewed** under Watch year.*
+*Watches by genre (catalog hits), stacked by watch year, with undated rows in the **No date** charcoal segment (left→right on horizontal bars). Tips are count + average + inline `N ♥` / `M ≡`. The side panel lists **Most liked** and **Most reviewed** under Watch year.*
 
 ![Horizontal bars of films that appear more than once, with ♥ / ≡ on titles](docs/images/top-rewatches.png)
 
@@ -100,9 +100,9 @@ These exclusions apply only to **count / watches** tops (genres, countries, dire
 
 Bar and column charts label each bar with the **count** and the **average rating** (a dash when the average is below the threshold or missing). Exceptions: the Letterboxd rating distribution in extra stats shows each bucket’s **percent of all ratings on that chart** (bold, two decimal places) plus the absolute count in parentheses (`NN.NN% (count)`; the rating is already the x-axis); Viewing pace and other non-bar pace charts stay unlabeled. Scatter/dot **Average rating by …** charts put the mean above the marker and the rated-film count in parentheses below it. **Most often in the diary** keeps diary-row counts, and its average tip is always the mean over all rated diary watches of that film (including rewatches), independent of the customize toggle.
 
-**Liked hearts** (`♥`, U+2665 only — never emoji) come from film-level `likes/films.csv` (Name+Year), scoped like the charts. Film-title bars (for example **Most often in the diary**) append `♥` after the visible title, including after a `...` truncation. Average-rating category bars (genres, directors, actors, …) show `♥ N` beside the name when that row’s average set includes N > 0 liked films. Quantitative count tips add `♥ N` only when N > 0: **inline** after count + average on horizontal bars; on a **separate** tip line above the pair on vertical columns. Charts that already show a **Watch year** legend also get a **Most liked** side list under it: top N positions by liked-film count (`1. Name ♥ 12` with bold count); omitted entirely when nothing is liked. The list is a compact text block with tight line spacing (not stretched to bar height). The combined weekday + month figure uses two lists instead of one mixed ranking: **Most liked weekdays** (every weekday with likes, up to all seven) and **Most liked months** (capped by the customize top size). A list with no likes is omitted.
+**Liked hearts** (`♥`, U+2665 only — never emoji) come from film-level `likes/films.csv` (Name+Year), scoped like the charts. Film-title bars (for example **Most often in the diary**) append `♥` after the visible title, including after a `...` truncation. Average-rating category bars (genres, directors, actors, …) show `N ♥` beside the name when that row’s average set includes N > 0 liked films. Quantitative count tips add `N ♥` only when N > 0: **inline** after count + average on horizontal bars; on a **separate** tip line above the pair on vertical columns. Charts that already show a **Watch year** legend also get a **Most liked** side list under it: top N positions by liked-film count (`1. Name 12 ♥` with bold count and mark); omitted entirely when nothing is liked. The list is a compact text block with tight line spacing (not stretched to bar height). The combined weekday + month figure uses two lists instead of one mixed ranking: **Most liked weekdays** (every weekday with likes, up to all seven) and **Most liked months** (capped by the customize top size). A list with no likes is omitted.
 
-**Review marks** use bold `≡` (U+2261 IDENTICAL TO — never emoji; no VS15), same weight emphasis as bold `♥ N` on average labels. Source is top-level `reviews.csv` (unique Name+Year for presence; not `likes/reviews.csv`). Layout matches likes: bare `≡` after film titles (including after truncation), bold `≡ N` on average-rating category labels when N > 0, bold inline after count+avg on horizontal tips, and on a separate tip line on vertical columns (combined with `♥ N` when both apply). Charts with a Watch year legend also get **Most reviewed** directly under **Most liked** (same top-N / weekday+month split rules, compact line spacing; bold `≡` + bold count), except **Most often in the diary**, which has no Most liked list and ranks **Most reviewed** library-wide by review-row count (only films with more than one review). Watch-date chart tips / Most reviewed buckets use each review’s own `Date`. Search-keyword HTML bolds the mark. DejaVu Sans has the glyph (same face as ♥).
+**Review marks** use bold `≡` (U+2261 IDENTICAL TO — never emoji; no VS15), same weight emphasis as bold `N ♥` on average labels. Source is top-level `reviews.csv` (unique Name+Year for presence; not `likes/reviews.csv`). Layout matches likes: bare `≡` after film titles (including after truncation), bold `M ≡` on average-rating category labels when M > 0, bold inline after count+avg on horizontal tips, and on a separate tip line on vertical columns (combined as `N ♥ M ≡` when both apply). Charts with a Watch year legend also get **Most reviewed** directly under **Most liked** (same top-N / weekday+month split rules, compact line spacing; bold count + bold `≡`), except **Most often in the diary**, which has no Most liked list and ranks **Most reviewed** library-wide by review-row count (only films with more than one review). **Film watches by year** adds a top-left **Most reviewed years** panel (same date-bound tip counts; five rows per column wrapping right, with a short final remainder of 1–3 rebalanced across the last two columns; omitted when no year has reviews). Watch-date chart tips / Most reviewed buckets use each review’s own `Date`. Search-keyword HTML bolds the mark. DejaVu Sans has the glyph (same face as ♥).
 
 ## Charts
 

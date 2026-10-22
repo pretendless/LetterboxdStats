@@ -45,6 +45,7 @@ from letterboxd_top_charts import (
     format_engagement_tip,
     format_liked_tip,
     format_reviewed_tip,
+    most_reviewed_years_column_sizes,
     normalize_most_liked_sections,
     normalize_most_reviewed_sections,
     rank_most_liked,
@@ -158,10 +159,10 @@ def test_liked_heart_helpers_use_black_heart_suit():
     truncated = "Some long titl..."
     assert film_title_with_liked_heart(truncated, liked=True) == f"{truncated}{LIKED_HEART}"
     assert category_label_with_liked_count("Drama", 0) == "Drama"
-    assert category_label_with_liked_count("Drama", 12) == f"Drama {LIKED_HEART} 12"
+    assert category_label_with_liked_count("Drama", 12) == f"Drama 12 {LIKED_HEART}"
     assert format_liked_tip(0) is None
     assert format_liked_tip(-1) is None
-    assert format_liked_tip(3) == f"{LIKED_HEART} 3"
+    assert format_liked_tip(3) == f"3 {LIKED_HEART}"
     assert count_liked_among_keys({"A|||1", "B|||2"}, {"B|||2", "C|||3"}) == 1
     ranked = rank_most_liked(
         {"Nolan": 12, "Villeneuve": 4, "Nobody": 0, "Fincher": 12},
@@ -169,9 +170,9 @@ def test_liked_heart_helpers_use_black_heart_suit():
     )
     assert ranked == [("Fincher", 12), ("Nolan", 12), ("Villeneuve", 4)]
     assert rank_most_liked({"A": 0, "B": 0}, 5) == []
-    # Numbered Most liked line shape (panel draws rank + bold count separately).
+    # Numbered Most liked line shape (panel draws rank + bold count then mark).
     name, count = ranked[0]
-    assert f"1. {name} {LIKED_HEART} {count}" == f"1. Fincher {LIKED_HEART} 12"
+    assert f"1. {name} {count} {LIKED_HEART}" == f"1. Fincher 12 {LIKED_HEART}"
     # Single list → one "Most liked" section; empty stays empty.
     assert normalize_most_liked_sections(ranked) == [("Most liked", ranked)]
     assert normalize_most_liked_sections([]) == []
@@ -228,14 +229,14 @@ def test_review_mark_helpers_use_identical_to():
         == f"{truncated}{REVIEW_NOTE}"
     )
     assert category_label_with_engagement_counts("Drama", 0, 0) == "Drama"
-    assert category_label_with_engagement_counts("Drama", 12, 0) == f"Drama {LIKED_HEART} 12"
+    assert category_label_with_engagement_counts("Drama", 12, 0) == f"Drama 12 {LIKED_HEART}"
     assert (
         category_label_with_engagement_counts("Drama", 12, 5)
-        == f"Drama {LIKED_HEART} 12 {REVIEW_NOTE} 5"
+        == f"Drama 12 {LIKED_HEART} 5 {REVIEW_NOTE}"
     )
     assert format_reviewed_tip(0) is None
-    assert format_reviewed_tip(3) == f"{REVIEW_NOTE} 3"
-    assert format_engagement_tip(2, 3) == f"{LIKED_HEART} 2 {REVIEW_NOTE} 3"
+    assert format_reviewed_tip(3) == f"3 {REVIEW_NOTE}"
+    assert format_engagement_tip(2, 3) == f"2 {LIKED_HEART} 3 {REVIEW_NOTE}"
     assert count_reviewed_among_keys({"A|||1", "B|||2"}, {"B|||2"}) == 1
     ranked = rank_most_reviewed({"Nolan": 5, "Nobody": 0}, top_n=3)
     assert ranked == [("Nolan", 5)]
@@ -1289,10 +1290,10 @@ def test_release_years_rating_labels_include_engagement_counts(
     finally:
         charts.save_dark_figure = real_save
     joined = "\n".join(t.get_text() for t in captured["texts"])
-    label = f"1. 2001 {LIKED_HEART} 10 {REVIEW_NOTE} 12"
+    label = f"1. 2001 10 {LIKED_HEART} 12 {REVIEW_NOTE}"
     assert label in joined
-    assert f"2. 1999 {REVIEW_NOTE} 3" in joined
-    assert f"3. 1988 {LIKED_HEART} 2" in joined
+    assert f"2. 1999 3 {REVIEW_NOTE}" in joined
+    assert f"3. 1988 2 {LIKED_HEART}" in joined
     assert "4. 1977" in joined
     assert f"4. 1977 {LIKED_HEART}" not in joined
     assert f"4. 1977 {REVIEW_NOTE}" not in joined
@@ -1364,13 +1365,13 @@ def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
         charts.save_dark_figure = real_save
 
     by_text = {t.get_text(): t for t in captured["texts"]}
-    short_outside = f"2. A24 {LIKED_HEART} 4 {REVIEW_NOTE} 1"
+    short_outside = f"2. A24 4 {LIKED_HEART} 1 {REVIEW_NOTE}"
     assert short_outside in by_text
     assert by_text[short_outside].get_clip_on() is False
     assert captured["extent"]["2.50"].x0 > captured["extent"][short_outside].x1
 
-    # Overflow long name: 15 chars + ... + spaced ♥/≡, tip after.
-    overflow = f"3. di Bonaventura... {LIKED_HEART} 1 {REVIEW_NOTE} 2"
+    # Overflow long name: 15 chars + ... + spaced N ♥ / M ≡, tip after.
+    overflow = f"3. di Bonaventura... 1 {LIKED_HEART} 2 {REVIEW_NOTE}"
     assert overflow in by_text
     assert by_text[overflow].get_clip_on() is False
     assert captured["extent"]["0.60"].x0 > captured["extent"][overflow].x1
@@ -1385,7 +1386,7 @@ def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
     inside = inside_labels[0]
     assert inside.get_clip_on() is True
     assert REVIEW_NOTE in inside.get_text()
-    assert inside.get_text().endswith(f"{REVIEW_NOTE} 2")
+    assert inside.get_text().endswith(f"2 {REVIEW_NOTE}")
     long_bar = max(captured["bars"], key=lambda box: box.width)
     assert captured["extent"]["4.60"].x0 > long_bar.x1
 
@@ -1427,6 +1428,80 @@ def test_views_count_bars_show_avg_or_dash(tmp_path: Path | None = None):
     assert "5.00" in day_text
     assert "—" in day_text
     assert all("n=" not in t for t in day_text)
+
+
+def test_most_reviewed_years_column_sizes_rebalance_short_remainder():
+    """Last two columns even out when the final remainder would be 1–3."""
+    assert most_reviewed_years_column_sizes(0) == []
+    assert most_reviewed_years_column_sizes(1) == [1]
+    assert most_reviewed_years_column_sizes(5) == [5]
+    assert most_reviewed_years_column_sizes(6) == [3, 3]  # not 5|1
+    assert most_reviewed_years_column_sizes(7) == [4, 3]  # not 5|2
+    assert most_reviewed_years_column_sizes(8) == [4, 4]  # not 5|3
+    assert most_reviewed_years_column_sizes(9) == [5, 4]  # 5+4 stays
+    assert most_reviewed_years_column_sizes(10) == [5, 5]
+    assert most_reviewed_years_column_sizes(11) == [5, 3, 3]
+    assert most_reviewed_years_column_sizes(12) == [5, 4, 3]
+    assert most_reviewed_years_column_sizes(13) == [5, 4, 4]
+    assert most_reviewed_years_column_sizes(14) == [5, 5, 4]
+    assert most_reviewed_years_column_sizes(16) == [5, 5, 3, 3]
+
+
+def test_most_reviewed_years_panel_wraps_five_per_column(
+    tmp_path: Path | None = None,
+):
+    """Film watches by year: Most reviewed years inset, 5 rows then wrap/rebalance."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-most-reviewed-years")
+    out.mkdir(parents=True, exist_ok=True)
+    # Eleven watch years; eleven review years → columns 5|3|3 (not 5|5|1).
+    rows = []
+    reviews = []
+    for i, year in enumerate(range(2014, 2025)):
+        rows.append(
+            {
+                "Name": f"Film{year}",
+                "Year": 1990 + i,
+                "Rating": 3.5,
+                "Watched Date": f"{year}-06-01",
+            }
+        )
+        reviews.append(
+            {
+                "Name": f"Film{year}",
+                "Year": 1990 + i,
+                "Date": pd.Timestamp(f"{year}-07-01"),
+            }
+        )
+    diary = pd.DataFrame(rows)
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+    reviewed_films = pd.DataFrame(reviews)
+    texts = _texts_on_save(
+        lambda cal: cal.chart_views_by_year(
+            diary,
+            out / "views_by_year.png",
+            grain="year",
+            reviewed_films=reviewed_films,
+            top_n=100,
+        )
+    )
+    labels = [t.get_text() for t in texts]
+    assert "Most reviewed years" in labels
+    assert any(t.startswith("1. ") for t in labels)
+    assert any(t.startswith("6. ") for t in labels)  # second column
+    assert any(t.startswith("9. ") for t in labels)  # third column starts at rank 9 (5|3|3)
+    assert any(t.startswith("11. ") for t in labels)
+    # Number-then-symbol tip on at least one year.
+    assert any(t.endswith(f" {REVIEW_NOTE}") or t == f"1 {REVIEW_NOTE}" or REVIEW_NOTE in t for t in labels)
+    # No reviews → panel omitted.
+    bare = _texts_on_save(
+        lambda cal: cal.chart_views_by_year(
+            diary,
+            out / "views_by_year_bare.png",
+            grain="year",
+            reviewed_films=None,
+        )
+    )
+    assert "Most reviewed years" not in {t.get_text() for t in bare}
 
 
 def test_views_by_year_reviews_follow_review_date_not_watch(
@@ -1485,10 +1560,13 @@ def test_views_by_year_reviews_follow_review_date_not_watch(
 
     assert index_years == [2024, 2026]
     assert captured["reviewed"] == [0, 1]
-    tip = f"{REVIEW_NOTE} 1"
+    tip = f"1 {REVIEW_NOTE}"
     assert any(t.get_text() == tip for t in texts)
     # Film-level bug would also put ≡ on 2024; date-bound has a single tip.
     assert sum(1 for t in texts if t.get_text() == tip) == 1
+    # Year grain with reviews → Most reviewed years panel (2026 ranked first).
+    assert any(t.get_text() == "Most reviewed years" for t in texts)
+    assert any(t.get_text().startswith("1. 2026 ") for t in texts)
 
 
 def test_weekday_month_reviews_follow_review_date(tmp_path: Path | None = None):
@@ -1522,9 +1600,9 @@ def test_weekday_month_reviews_follow_review_date(tmp_path: Path | None = None):
     )
     labels = {t.get_text() for t in texts}
     assert "Most reviewed weekdays" in labels
-    # Rank head and ≡ are separate text artists; Saturday owns the review.
+    # Rank head, bold count, then bold ≡ are separate text artists; Saturday owns the review.
     assert any(t.get_text().startswith("1. Sat ") for t in texts)
-    assert any(t.get_text().startswith(f"{REVIEW_NOTE} ") for t in texts)
+    assert any(t.get_text() == REVIEW_NOTE for t in texts)
     # Thursday was the watch day — must not be Most reviewed #1.
     assert not any(t.get_text().startswith("1. Thu ") for t in texts)
 
@@ -1592,11 +1670,14 @@ def test_most_liked_list_is_compact_on_tall_hbar(tmp_path: Path | None = None):
         fig.canvas.draw()
         renderer = fig.canvas.get_renderer()
         ax = fig.axes[0]
+        # Rank heads are separate from bold count + ♥ (number-then-symbol order).
         liked_prefixes = [
             t
             for t in ax.texts
-            if LIKED_HEART in t.get_text()
-            and any(t.get_text().startswith(f"{r}. ") for r in (1, 2, 3, 4))
+            if any(
+                t.get_text().startswith(f"{r}. {labels[i]} ")
+                for r, i in ((1, 0), (2, 1), (3, 10), (4, 18))
+            )
         ]
         liked_prefixes.sort(key=lambda t: -t.get_window_extent(renderer=renderer).y0)
         captured["liked"] = liked_prefixes
@@ -1735,6 +1816,8 @@ if __name__ == "__main__":
     test_top_rewatches_side_panel_no_most_liked_library_reviews()
     test_release_years_rating_labels_include_engagement_counts()
     test_views_count_bars_show_avg_or_dash()
+    test_most_reviewed_years_column_sizes_rebalance_short_remainder()
+    test_most_reviewed_years_panel_wraps_five_per_column()
     test_views_by_year_reviews_follow_review_date_not_watch()
     test_weekday_month_reviews_follow_review_date()
     test_weekday_month_most_liked_is_two_lists()

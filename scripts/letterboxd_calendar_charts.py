@@ -81,6 +81,7 @@ from letterboxd_top_charts import (  # noqa: E402
     count_avg_text_style,
     count_liked_among_keys,
     count_reviewed_among_keys,
+    draw_most_reviewed_years_panel,
     draw_watch_year_most_liked_panel,
     film_title_with_engagement_marks,
     film_title_with_liked_heart,
@@ -438,7 +439,7 @@ def _place_liked_tip_above_separate(
     fontsize=7,
     y_gap=None,
 ) -> None:
-    """Vertical columns: ``♥ N □ M`` on its own tip line above count+avg."""
+    """Vertical columns: ``N ♥ □ M ≡`` on its own tip line above count+avg."""
     if not xs:
         return
     n = len(xs)
@@ -497,7 +498,7 @@ def _place_count_avg_above_totals(
     Pass ``avg_labels=None`` for a single tip per column (default: count).
     Pass ``percent_count=True`` for Letterboxd rating distribution: bold
     ``NN.NN%`` plus ``(count)`` (the bin is already the x-axis).
-    When liked/reviewed counts are set, ``♥ N □ M`` (N/M > 0) sits on a
+    When liked/reviewed counts are set, ``N ♥ □ M ≡`` (N/M > 0) sits on a
     separate line above the primary tip row (vertical column layout).
     """
     tip_kwargs = dict(
@@ -889,7 +890,7 @@ def _place_count_avg_above_bars(
 ) -> None:
     """Count in regular white, mean beside it, pair centered on the bar.
 
-    Vertical columns: optional ``♥ N □ M`` on a separate tip line above that pair.
+    Vertical columns: optional ``N ♥ □ M ≡`` on a separate tip line above that pair.
     """
     specs = []
     tip_xs = []
@@ -1000,12 +1001,17 @@ def chart_views_by_year(
     liked_keys=None,
     reviewed_films=None,
     reviewed_keys=None,
+    top_n: int = TOP_N_DEFAULT,
 ) -> None:
     """Film watches by watch year / month / day.
 
     Likes (♥) stay unique liked films among diary watches in each bucket.
     Reviews (≡) use review Date in the same grain — not film presence among
     watches. ``reviewed_keys`` is ignored (call-site compatibility).
+
+    On the year grain only: when any bar tip has a review count > 0, a top-left
+    **Most reviewed years** panel lists those years (same date-bound counts),
+    five entries per column wrapping right, capped by ``top_n``.
     """
     del reviewed_keys
     dates = df["Watched Date"].dropna()
@@ -1029,10 +1035,24 @@ def chart_views_by_year(
     bar_colors = [colors.get(y, LOGO_BLUE_HEX) for y in color_years]
     phrase = GRAIN_PHRASE.get(grain, "by year")
 
+    reviewed_counts = review_counts_by_date_grain(
+        reviewed_films, counts.index, grain=grain
+    )
+    most_reviewed_years: list[tuple[str, int]] = []
+    if grain == "year":
+        year_review_map = {
+            str(int(year)): int(n)
+            for year, n in zip(counts.index, reviewed_counts)
+            if int(n) > 0
+        }
+        most_reviewed_years = rank_most_reviewed(year_review_map, top_n)
+
     n = len(labels)
     # Wider than the count-only chart: each bar carries a count and a mean.
+    # Extra height when the year chart hosts a Most reviewed years inset.
     fig_w = max(12.0, min(18.0, n * 0.72)) if grain == "year" else max(10.0, min(18.0, n * 0.42))
-    fig, ax = plt.subplots(figsize=(fig_w, 6))
+    fig_h = 6.4 if most_reviewed_years else 6.0
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     x = np.arange(n)
     bars = ax.bar(x, values, color=bar_colors, width=0.8)
     ax.set_title(f"Film watches {phrase}")
@@ -1052,7 +1072,11 @@ def chart_views_by_year(
     # The mean sits beside the count, so the pair needs a smaller face than a lone number.
     if rotation == 0 and n > 12:
         fontsize = min(fontsize, 7)
-    ax.set_ylim(0, ymax * (1.22 if rotation == 0 else 1.34))
+    # Extra headroom when the Most reviewed years panel sits in the top-left.
+    top_pad = 1.28 if most_reviewed_years else (1.22 if rotation == 0 else 1.34)
+    if most_reviewed_years and rotation != 0:
+        top_pad = max(top_pad, 1.40)
+    ax.set_ylim(0, ymax * top_pad)
     fig.tight_layout()
     _place_count_avg_above_bars(
         fig,
@@ -1064,10 +1088,10 @@ def chart_views_by_year(
         fontsize=fontsize,
         rotation=rotation,
         liked_counts=_liked_counts_by_watch_grain(df, counts.index, grain, liked_keys),
-        reviewed_counts=review_counts_by_date_grain(
-            reviewed_films, counts.index, grain=grain
-        ),
+        reviewed_counts=reviewed_counts,
     )
+    if most_reviewed_years:
+        draw_most_reviewed_years_panel(fig, ax, most_reviewed_years)
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
 
@@ -1967,6 +1991,7 @@ def main(argv: list[str] | None = None) -> int:
             span_end=span_end,
             liked_keys=liked_keys,
             reviewed_films=reviewed_films,
+            top_n=opts.top_n,
         )
         chart_decade_rating(
             diary,
