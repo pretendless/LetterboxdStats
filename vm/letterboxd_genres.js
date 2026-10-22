@@ -879,31 +879,23 @@ function withDefaultButton(rows, label, data) {
   return { inline_keyboard: [...rows, [button(label, data)]] };
 }
 
-/** Neutral object/symbol emojis only — no hand or face glyphs. */
+/** Neutral object/symbol emojis only — no hand or face glyphs.
+ *  Numeric presets (tops, threshold, years) stay plain numbers — no emoji.
+ */
 export const WIZARD_EMOJI_YES = "✅";
 export const WIZARD_EMOJI_NO = "❌";
 export const WIZARD_EMOJI_DEFAULT_MODE = "✅";
 export const WIZARD_EMOJI_CUSTOMIZE = "⚙️";
 export const WIZARD_EMOJI_PASTE = "📋";
-export const WIZARD_EMOJI_TOP_10 = "🔟";
-export const WIZARD_EMOJI_TOP_20 = "2️⃣0️⃣";
-export const WIZARD_EMOJI_TOP_30 = "3️⃣0️⃣";
-export const WIZARD_EMOJI_TOP_50 = "5️⃣0️⃣";
-export const WIZARD_EMOJI_MIN_1 = "1️⃣";
-export const WIZARD_EMOJI_MIN_3 = "3️⃣";
-export const WIZARD_EMOJI_MIN_4 = "4️⃣";
-export const WIZARD_EMOJI_MIN_5 = "5️⃣";
 export const WIZARD_EMOJI_FULL_PERIOD = "📅";
 export const WIZARD_EMOJI_CUSTOM_RANGE = "✏️";
-export const WIZARD_EMOJI_LAST_3Y = "🕒";
-export const WIZARD_EMOJI_LAST_5Y = "🕔";
 export const WIZARD_EMOJI_DONE = "✔️";
 export const WIZARD_EMOJI_NONE = "🚫";
-export const WIZARD_EMOJI_YEAR = "📆";
 
-function defaultButtonLabel(emoji, detail = "") {
+function defaultButtonLabel(emoji = "", detail = "") {
+  const mark = emoji ? ` ${emoji}` : "";
   const tail = detail ? ` (${detail})` : "";
-  return `Default ${emoji}${tail}`;
+  return `Default${mark}${tail}`;
 }
 
 export function letterboxdModeKeyboard() {
@@ -920,24 +912,20 @@ export function letterboxdModeKeyboard() {
 export function letterboxdTopKeyboard() {
   return withDefaultButton(
     [[
-      button(`${WIZARD_EMOJI_TOP_10} 10`, "lb:n:10"),
-      button(`${WIZARD_EMOJI_TOP_20} 20`, "lb:n:20"),
-      button(`${WIZARD_EMOJI_TOP_30} 30`, "lb:n:30"),
-      button(`${WIZARD_EMOJI_TOP_50} 50`, "lb:n:50"),
+      button("10", "lb:n:10"),
+      button("20", "lb:n:20"),
+      button("30", "lb:n:30"),
+      button("50", "lb:n:50"),
     ]],
-    defaultButtonLabel(WIZARD_EMOJI_TOP_20, "20"),
+    defaultButtonLabel("", "20"),
     "lb:n:20",
   );
 }
 
 export function letterboxdMinKeyboard() {
   return withDefaultButton(
-    [[
-      button(`${WIZARD_EMOJI_MIN_1} 1`, "lb:m:1"),
-      button(`${WIZARD_EMOJI_MIN_3} 3`, "lb:m:3"),
-      button(`${WIZARD_EMOJI_MIN_5} 5`, "lb:m:5"),
-    ]],
-    defaultButtonLabel(WIZARD_EMOJI_MIN_4, "4"),
+    [[button("1", "lb:m:1"), button("3", "lb:m:3"), button("5", "lb:m:5")]],
+    defaultButtonLabel("", "4"),
     "lb:m:4",
   );
 }
@@ -975,16 +963,13 @@ export function recentWatchYears(now = new Date(), count = 5) {
 
 export function letterboxdRangeKeyboard(now = new Date()) {
   const years = recentWatchYears(now, 5).map((year) =>
-    button(`${WIZARD_EMOJI_YEAR} ${year}`, `lb:yr:${year}`),
+    button(String(year), `lb:yr:${year}`),
   );
   return {
     inline_keyboard: [
       years.slice(0, 3),
       years.slice(3),
-      [
-        button(`${WIZARD_EMOJI_LAST_3Y} Last 3 years`, "lb:y:3"),
-        button(`${WIZARD_EMOJI_LAST_5Y} Last 5 years`, "lb:y:5"),
-      ],
+      [button("Last 3 years", "lb:y:3"), button("Last 5 years", "lb:y:5")],
       [button(defaultButtonLabel(WIZARD_EMOJI_FULL_PERIOD, "full"), "lb:full")],
     ],
   };

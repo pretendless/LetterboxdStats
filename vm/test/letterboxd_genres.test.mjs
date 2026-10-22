@@ -184,13 +184,13 @@ test("wizard prompts are html, with a default line and examples", () => {
   assert.match(range.messages[0].text, /Default: full period/);
   const labels = range.messages[0].reply_markup.inline_keyboard.flat().map((button) => button.text);
   assert.deepEqual(labels, [
-    "📆 2026",
-    "📆 2025",
-    "📆 2024",
-    "📆 2023",
-    "📆 2022",
-    "🕒 Last 3 years",
-    "🕔 Last 5 years",
+    "2026",
+    "2025",
+    "2024",
+    "2023",
+    "2022",
+    "Last 3 years",
+    "Last 5 years",
     "Default 📅 (full)",
   ]);
   const top = advanceLetterboxdWizard(
@@ -200,7 +200,7 @@ test("wizard prompts are html, with a default line and examples", () => {
   );
   assert.equal(top.state.topN, 20);
   assert.equal(top.state.step, "min_rated");
-  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default 4️⃣ (4)");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default (4)");
   const minText = top.messages[0].text;
   assert.match(minText, /<b>Threshold<\/b>/);
   assert.match(minText, /Minimum rated films/);
@@ -212,7 +212,7 @@ test("wizard prompts are html, with a default line and examples", () => {
   assert.match(minText, /Default: 4/);
   assert.deepEqual(
     top.messages[0].reply_markup.inline_keyboard[0].map((button) => button.text),
-    ["1️⃣ 1", "3️⃣ 3", "5️⃣ 5"],
+    ["1", "3", "5"],
   );
   assert.equal(top.messages[0].reply_markup.inline_keyboard[0][0].callback_data, "lb:m:1");
   assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].callback_data, "lb:m:4");
@@ -433,13 +433,13 @@ test("every wizard keyboard has a one-tap default button alone on the bottom row
   assert.equal(mode.inline_keyboard[0][1].text, "📋 Paste settings");
   assert.equal(last(mode), "Default ✅");
   assert.equal(lastRow(mode).length, 1);
-  assert.equal(last(letterboxdTopKeyboard()), "Default 2️⃣0️⃣ (20)");
+  assert.equal(last(letterboxdTopKeyboard()), "Default (20)");
   assert.equal(lastRow(letterboxdTopKeyboard()).length, 1);
   assert.deepEqual(
     letterboxdMinKeyboard().inline_keyboard[0].map((button) => button.text),
-    ["1️⃣ 1", "3️⃣ 3", "5️⃣ 5"],
+    ["1", "3", "5"],
   );
-  assert.equal(last(letterboxdMinKeyboard()), "Default 4️⃣ (4)");
+  assert.equal(last(letterboxdMinKeyboard()), "Default (4)");
   assert.equal(letterboxdMinKeyboard().inline_keyboard.at(-1)[0].callback_data, "lb:m:4");
   assert.equal(lastRow(letterboxdMinKeyboard()).length, 1);
   assert.equal(last(letterboxdYesNoKeyboard("lb:rew", "no")), "Default ❌");
@@ -458,14 +458,14 @@ test("every wizard keyboard has a one-tap default button alone on the bottom row
   assert.equal(lastRow(letterboxdPeriodKeyboard()).length, 1);
   assert.equal(last(letterboxdUndatedKeyboard()), "Default ❌");
   assert.equal(last(letterboxdYesNoKeyboard("lb:und", "нет")), "Default ❌");
-  // Choice buttons: context symbols (no hands/faces); Yes/No capitalized; Default shows default emoji.
+  // Non-numeric choices keep symbols; numeric presets are plain numbers.
   assert.deepEqual(
     letterboxdYesNoKeyboard("lb:likes").inline_keyboard[0].map((b) => b.text),
     ["✅ Yes", "❌ No"],
   );
   assert.deepEqual(
     letterboxdTopKeyboard().inline_keyboard[0].map((b) => b.text),
-    ["🔟 10", "2️⃣0️⃣ 20", "3️⃣0️⃣ 30", "5️⃣0️⃣ 50"],
+    ["10", "20", "30", "50"],
   );
 });
 
