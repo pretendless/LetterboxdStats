@@ -34,6 +34,15 @@ from letterboxd_palette import (
     FG,
     GRID,
     HALO,
+    INSET_PANEL_DATE_FONTSIZE,
+    INSET_PANEL_EDGE_PAD_PX,
+    INSET_PANEL_FONTSIZE,
+    INSET_PANEL_SWATCH_PX,
+    INSET_PANEL_TITLE_FONTSIZE,
+    INSET_PANEL_TOP_REVIEW_WIDTH_FRAC,
+    MARK_LIKE_HEX,
+    MARK_REVIEW_HEX,
+    MARK_STAR_HEX,
     ON_BAR,
     RATING_COLORBAR_LABEL,
     UNDATED_WATCH_YEAR,
@@ -98,12 +107,268 @@ def _mpl_engagement_text(text: str) -> str:
     return str(text or "").replace("\ufe0e", "").replace("\ufe0f", "")
 
 
+def outside_engagement_mark_color(mark: str) -> str:
+    """Logo color for a ♥ / ≡ glyph drawn outside a bar or column fill.
+
+    Inside-bar labels keep ``ON_BAR`` (white); callers must not use this there.
+    """
+    token = _mpl_engagement_text(mark)
+    if token.startswith(LIKED_HEART) or token == LIKED_HEART:
+        return MARK_LIKE_HEX
+    if REVIEW_NOTE and (token.startswith(REVIEW_NOTE) or token == REVIEW_NOTE):
+        return MARK_REVIEW_HEX
+    return FG
+
+
+def engagement_tip_segments(tip: str) -> list[tuple[str, str]]:
+    """Split ``♥ N ≡ M`` into ``(fragment, color)``; marks logo-colored, counts FG."""
+    import re
+
+    text = _mpl_engagement_text(tip).strip()
+    if not text:
+        return []
+    marks = re.escape(LIKED_HEART)
+    if REVIEW_NOTE:
+        marks = f"{marks}|{re.escape(REVIEW_NOTE)}"
+    pattern = re.compile(rf"({marks})(\s*)(\d+)")
+    segments: list[tuple[str, str]] = []
+    pos = 0
+    for match in pattern.finditer(text):
+        if match.start() > pos:
+            segments.append((text[pos : match.start()], FG))
+        mark, gap, num = match.group(1), match.group(2), match.group(3)
+        segments.append((mark, outside_engagement_mark_color(mark)))
+        if gap:
+            segments.append((gap, FG))
+        segments.append((num, FG))
+        pos = match.end()
+    if pos < len(text):
+        segments.append((text[pos:], FG))
+    return segments or [(text, FG)]
+
+
+def title_engagement_segments(title: str) -> list[tuple[str, str]]:
+    """Split a title with trailing ♥/≡ into segments (marks logo-colored)."""
+    text = _mpl_engagement_text(title)
+    if not text:
+        return []
+    marks = ""
+    i = len(text)
+    while i > 0:
+        ch = text[i - 1]
+        if ch == LIKED_HEART or (REVIEW_NOTE and ch == REVIEW_NOTE):
+            marks = ch + marks
+            i -= 1
+            continue
+        break
+    head = text[:i]
+    segments: list[tuple[str, str]] = []
+    if head:
+        segments.append((head, FG))
+    for ch in marks:
+        segments.append((ch, outside_engagement_mark_color(ch)))
+    return segments or [(text, FG)]
+
+
+def _outside_hbar_label_segments(label: str) -> list[tuple[str, str]]:
+    """Outside-bar left label: white name text; ♥/≡ logo-colored (counts FG).
+
+    Handles both bare film marks (``…♥≡``) and category tips (``… ♥ N ≡ M``).
+    """
+    import re
+
+    text = _mpl_engagement_text(label)
+    if not text:
+        return []
+    if LIKED_HEART not in text and not (REVIEW_NOTE and REVIEW_NOTE in text):
+        return [(text, ON_BAR)]
+    mark_chars = re.escape(LIKED_HEART)
+    if REVIEW_NOTE:
+        mark_chars = f"{mark_chars}|{re.escape(REVIEW_NOTE)}"
+    # Tip form: mark + optional spaces + digits; also bare trailing marks.
+    pattern = re.compile(rf"({mark_chars})(\s*\d*)")
+    segments: list[tuple[str, str]] = []
+    pos = 0
+    for match in pattern.finditer(text):
+        if match.start() > pos:
+            segments.append((text[pos : match.start()], ON_BAR))
+        mark, rest = match.group(1), match.group(2)
+        segments.append((mark, outside_engagement_mark_color(mark)))
+        if rest:
+            segments.append((rest, ON_BAR))
+        pos = match.end()
+    if pos < len(text):
+        segments.append((text[pos:], ON_BAR))
+    return segments or [(text, ON_BAR)]
+
+
+def draw_colored_text_segments(
+    ax,
+    x: float,
+    y: float,
+    segments: list[tuple[str, str]],
+    *,
+    fontsize: float,
+    ha: str = "left",
+    va: str = "center",
+    transform=None,
+    fontweight: str = "normal",
+    path_effects=None,
+    clip_on: bool = False,
+    zorder: float | None = None,
+    fontproperties=None,
+    mark_fontweight: str | None = None,
+) -> list:
+    """Draw left-to-right text segments with per-fragment colors.
+
+    ``ha`` other than ``left`` is only exact for a single segment; multi-segment
+    tips/titles should pass ``ha='left'`` (or ``center`` only when one piece).
+    Returns the artists drawn.
+    """
+    if transform is None:
+        transform = ax.transData
+    if not segments:
+        return []
+    # Center/right multi-segment: measure total width then start from the left edge.
+    fig = ax.figure
+    artists: list = []
+    inv = transform.inverted()
+    start_x = float(x)
+    if ha in ("center", "right") and len(segments) > 1:
+        probes = []
+        try:
+            total_w = 0.0
+            for frag, _color in segments:
+                if not frag:
+                    continue
+                p = ax.text(
+                    0,
+                    0,
+                    frag,
+                    transform=transform,
+                    fontsize=fontsize,
+                    fontweight=(
+                        mark_fontweight
+                        if mark_fontweight
+                        and (
+                            LIKED_HEART in frag
+                            or (REVIEW_NOTE and REVIEW_NOTE in frag)
+                        )
+                        else fontweight
+                    ),
+                    alpha=0,
+                    fontproperties=fontproperties,
+                )
+                probes.append(p)
+                fig.canvas.draw()
+                total_w += float(
+                    p.get_window_extent(renderer=fig.canvas.get_renderer()).width
+                )
+            origin = transform.transform((float(x), float(y)))
+            if ha == "center":
+                origin = (origin[0] - total_w / 2.0, origin[1])
+            else:
+                origin = (origin[0] - total_w, origin[1])
+            start_x = float(inv.transform(origin)[0])
+        finally:
+            for p in probes:
+                p.remove()
+        ha_draw = "left"
+    else:
+        ha_draw = ha
+
+    cursor_x = start_x
+    for frag, color in segments:
+        if not frag:
+            continue
+        is_mark = frag in (LIKED_HEART, REVIEW_NOTE) or (
+            len(frag) == 1
+            and (frag == LIKED_HEART or (REVIEW_NOTE and frag == REVIEW_NOTE))
+        )
+        weight = (
+            mark_fontweight
+            if mark_fontweight and is_mark
+            else fontweight
+        )
+        kw = dict(
+            transform=transform,
+            fontsize=fontsize,
+            fontweight=weight,
+            color=color,
+            ha=ha_draw,
+            va=va,
+            clip_on=clip_on,
+        )
+        if path_effects is not None:
+            kw["path_effects"] = path_effects
+        if zorder is not None:
+            kw["zorder"] = zorder
+        if fontproperties is not None and (
+            REVIEW_NOTE and REVIEW_NOTE in frag
+        ):
+            kw["fontproperties"] = fontproperties
+        artist = ax.text(cursor_x, float(y), frag, **kw)
+        artists.append(artist)
+        if ha_draw == "left":
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            box = artist.get_window_extent(renderer=renderer)
+            cursor_x = float(inv.transform((box.x1, box.y0))[0])
+    return artists
+
+
 def review_mark_fontproperties():
     """Optional font override for the review mark; None uses the theme default.
 
     DejaVu Sans already has U+2261 (like ♥), so charts normally need no override.
     """
     return None
+
+
+def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
+    """Recolor ♥/≡ inside tick labels to logo orange/blue (axis titles outside bars)."""
+    axis_obj = ax.yaxis if str(axis).lower().startswith("y") else ax.xaxis
+    fig = ax.figure
+    fig.canvas.draw()
+    for label in axis_obj.get_ticklabels():
+        text = str(label.get_text() or "")
+        if LIKED_HEART not in text and not (
+            REVIEW_NOTE and REVIEW_NOTE in text
+        ):
+            continue
+        segments = title_engagement_segments(text)
+        # Category form with counts needs tip-style split.
+        if any(ch.isdigit() for ch in text) and (
+            f"{LIKED_HEART} " in text
+            or (REVIEW_NOTE and f"{REVIEW_NOTE} " in text)
+        ):
+            # Rebuild via tip-aware splitter on the engagement tail.
+            segments = _outside_hbar_label_segments(text)
+            # Tick labels use FG for the name (not ON_BAR).
+            segments = [
+                (frag, FG if color == ON_BAR else color) for frag, color in segments
+            ]
+        x, y = label.get_position()
+        transform = label.get_transform()
+        ha = label.get_ha()
+        va = label.get_va()
+        fontsize = label.get_fontsize()
+        weight = label.get_fontweight()
+        label.set_text("")
+        draw_colored_text_segments(
+            ax,
+            float(x),
+            float(y),
+            segments,
+            fontsize=float(fontsize),
+            ha=ha,
+            va=va,
+            transform=transform,
+            fontweight=weight,
+            mark_fontweight="bold",
+            clip_on=False,
+            fontproperties=review_mark_fontproperties(),
+        )
 
 
 def film_title_with_liked_heart(visible_title: str, *, liked: bool) -> str:
@@ -291,6 +556,8 @@ def _draw_ranked_count_mark_line(
     mark_fp = review_mark_fontproperties()
     head, mark_s, count_s = _ranked_mark_line_pieces(rank, name, count, mark)
     use_mark_fp = mark_fp if mark_s.startswith(REVIEW_NOTE) else None
+    mark_glyph = mark_s.strip()
+    mark_color = outside_engagement_mark_color(mark_glyph)
     text_kw = dict(
         transform=transform,
         fontsize=fontsize,
@@ -306,13 +573,15 @@ def _draw_ranked_count_mark_line(
     renderer = fig.canvas.get_renderer()
     hb = head_artist.get_window_extent(renderer=renderer)
     cursor_x, _yc = inv.transform((hb.x1, hb.y0))
+    mark_kw = dict(text_kw)
+    mark_kw["color"] = mark_color
     mark_artist = ax.text(
         float(cursor_x),
         y,
         mark_s,
         fontweight="bold",
         fontproperties=use_mark_fp,
-        **text_kw,
+        **mark_kw,
     )
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
@@ -895,7 +1164,8 @@ def seat_inset_panel_in_axes(
 
     obstacles, renderer = _axes_plot_obstacles(fig, ax)
     axes_box = ax.get_window_extent(renderer=renderer)
-    edge_pad = max(4.0, fontsize * 0.5)
+    # Readable gap from axes edge (not flush to the corner spine).
+    edge_pad = max(float(INSET_PANEL_EDGE_PAD_PX), float(fontsize) * 1.25)
     if prefer_left:
         x0_disp = float(axes_box.x0) + edge_pad
     else:
@@ -1060,7 +1330,7 @@ def seat_inset_panel_bottom_right(
     for attempt in range(max(0, int(max_bumps)) + 1):
         obstacles, renderer = _axes_plot_obstacles(fig, ax)
         axes_box = ax.get_window_extent(renderer=renderer)
-        edge_pad = max(4.0, fontsize * 0.5)
+        edge_pad = max(float(INSET_PANEL_EDGE_PAD_PX), float(fontsize) * 1.25)
         y0_disp = float(axes_box.y0) + edge_pad
         y1_disp = y0_disp + panel_h_px
         x1_target = float(axes_box.x1) - edge_pad
@@ -1123,18 +1393,19 @@ def draw_top_review_panel(
     review: dict | None,
     *,
     corner: str = "bottom_right",
-    fontsize: float = 7,
-    title_fontsize: float = 8,
-    date_fontsize: float = 6.5,
+    fontsize: float = INSET_PANEL_FONTSIZE,
+    title_fontsize: float = INSET_PANEL_TITLE_FONTSIZE,
+    date_fontsize: float = INSET_PANEL_DATE_FONTSIZE,
     max_body_lines: int = 6,
 ) -> bool:
-    """In-plot Top review panel: title (+♥ + stars), truncated text, date.
+    """In-plot Top review panel: title (+♥), ★/½ on next line, text, date.
 
     ``review`` is ``{"title", "text", "date", "liked"?, "rating"?}`` from the
     Top review picker. When ``liked`` is True, append ♥ after the title (same
-    mark as charts). When ``rating`` is set, append ``★…½`` after the title
-    (and ♥). ``corner`` is ``bottom_right`` (watches / higher / count) or
-    ``top_right`` (lower-rating charts). Body text is already capped
+    mark as charts). When ``rating`` is set, draw ``★…½`` on its **own line
+    below the title** (omit the star line entirely when unrated). ``corner``
+    is ``bottom_right`` (watches / higher / count) or ``top_right``
+    (lower-rating charts). Body text is already capped
     (``TOP_REVIEW_MAX_CHARS``); layout may wrap and ellipsize further if the
     panel height is tight. Returns True when drawn. Panel fill is the logo
     charcoal gradient (same as No date bars), top→bottom.
@@ -1146,10 +1417,7 @@ def draw_top_review_panel(
     stars = format_top_review_rating_stars(review.get("rating"))
 
     def _compose_title(name: str) -> str:
-        text = film_title_with_liked_heart(name, liked=liked)
-        if stars:
-            text = f"{text} {stars}"
-        return text
+        return film_title_with_liked_heart(name, liked=liked)
 
     title = _compose_title(base_title)
     body = str(review.get("text") or "").strip()
@@ -1162,10 +1430,13 @@ def draw_top_review_panel(
     inv = ax.transAxes.inverted()
 
     axes_box = ax.get_window_extent(renderer=renderer)
-    panel_w_px = max(120.0, float(axes_box.width) * 0.28)
-    pad_x_px = max(6.0, fontsize * 0.9)
-    pad_y_px = max(5.0, fontsize * 0.7)
+    panel_w_px = max(
+        140.0, float(axes_box.width) * float(INSET_PANEL_TOP_REVIEW_WIDTH_FRAC)
+    )
+    pad_x_px = max(7.0, fontsize * 1.0)
+    pad_y_px = max(6.0, fontsize * 0.8)
     title_gap_px = max(3.0, title_fontsize * 0.35)
+    stars_gap_px = max(2.5, fontsize * 0.3)
     date_gap_px = max(3.0, date_fontsize * 0.35)
     inner_w = max(40.0, panel_w_px - 2 * pad_x_px)
 
@@ -1205,7 +1476,7 @@ def draw_top_review_panel(
     title_w, title_h = _measure(title, fs=title_fontsize, weight="bold")
     shown_title = title
     if title_w > inner_w:
-        # Truncate the film name only; keep ♥ and star suffix intact.
+        # Truncate the film name only; keep ♥ suffix intact.
         lo, hi = 1, len(base_title)
         best = _compose_title(base_title[:1] + "…")
         while lo <= hi:
@@ -1219,6 +1490,10 @@ def draw_top_review_panel(
                 hi = mid - 1
         shown_title = best
         _, title_h = _measure(shown_title, fs=title_fontsize, weight="bold")
+
+    stars_h = 0.0
+    if stars:
+        _, stars_h = _measure(stars, fs=fontsize)
 
     body_lines = _wrap_line(body, fs=fontsize, max_w=inner_w)
     if not body_lines:
@@ -1240,6 +1515,7 @@ def draw_top_review_panel(
     panel_h_px = (
         2 * pad_y_px
         + title_h
+        + (stars_gap_px + stars_h if stars else 0.0)
         + title_gap_px
         + body_h
         + (date_gap_px + date_h if date_s else 0.0)
@@ -1277,20 +1553,40 @@ def draw_top_review_panel(
 
     cursor_y = y1_disp - pad_y_px
     tx, ty = inv.transform((x0_disp + pad_x_px, cursor_y))
-    ax.text(
+    # Title in FG; trailing ♥ (when liked) is logo orange.
+    draw_colored_text_segments(
+        ax,
         float(tx),
         float(ty),
-        shown_title,
-        transform=ax.transAxes,
+        title_engagement_segments(shown_title),
         fontsize=title_fontsize,
-        fontweight="bold",
-        color=FG,
         ha="left",
         va="top",
+        transform=ax.transAxes,
+        fontweight="bold",
+        mark_fontweight="bold",
         clip_on=True,
         zorder=21,
     )
-    cursor_y -= title_h + title_gap_px
+    cursor_y -= title_h
+    if stars:
+        cursor_y -= stars_gap_px
+        sx, sy = inv.transform((x0_disp + pad_x_px, cursor_y))
+        # Entire ★/½ string (including U+00BD ½) is logo green.
+        ax.text(
+            float(sx),
+            float(sy),
+            stars,
+            transform=ax.transAxes,
+            fontsize=fontsize,
+            color=MARK_STAR_HEX,
+            ha="left",
+            va="top",
+            clip_on=True,
+            zorder=21,
+        )
+        cursor_y -= stars_h
+    cursor_y -= title_gap_px
     for line in body_lines:
         lx, ly = inv.transform((x0_disp + pad_x_px, cursor_y))
         ax.text(
@@ -1329,8 +1625,8 @@ def draw_most_reviewed_years_panel(
     ax,
     ranked: list[tuple[str, int]] | None,
     *,
-    fontsize: float = 7,
-    title_fontsize: float = 8,
+    fontsize: float = INSET_PANEL_FONTSIZE,
+    title_fontsize: float = INSET_PANEL_TITLE_FONTSIZE,
     entries_per_column: int = 5,
     title: str = "Most reviewed years",
 ) -> bool:
@@ -1389,11 +1685,11 @@ def draw_most_reviewed_years_panel(
             count_digits = max(count_digits, len(str(int(count))))
     reserve_count = int("9" * count_digits)
 
-    col_gap_px = max(16.0, fontsize * 2.2)
-    row_gap_px = max(3.0, fontsize * 0.45)
-    title_gap_px = max(3.0, title_fontsize * 0.4)
-    pad_x_px = max(6.0, fontsize * 0.9)
-    pad_y_px = max(5.0, fontsize * 0.7)
+    col_gap_px = max(18.0, fontsize * 2.3)
+    row_gap_px = max(3.5, fontsize * 0.5)
+    title_gap_px = max(3.5, title_fontsize * 0.4)
+    pad_x_px = max(7.0, fontsize * 1.0)
+    pad_y_px = max(6.0, fontsize * 0.8)
 
     col_w_px = 0.0
     line_h = 0.0
@@ -1504,10 +1800,10 @@ def draw_swatch_legend_panel(
     entries: list[tuple[str, object]],
     *,
     title: str,
-    fontsize: float = 7,
-    title_fontsize: float = 8,
+    fontsize: float = INSET_PANEL_FONTSIZE,
+    title_fontsize: float = INSET_PANEL_TITLE_FONTSIZE,
     entries_per_column: int = 5,
-    swatch_px: float = 10.0,
+    swatch_px: float = INSET_PANEL_SWATCH_PX,
 ) -> bool:
     """In-plot legend panel: colored swatches + labels (genre stacks, etc.).
 
@@ -1563,13 +1859,13 @@ def draw_swatch_legend_panel(
     sample.remove()
     title_probe.remove()
 
-    swatch = max(6.0, float(swatch_px))
-    swatch_gap = max(4.0, fontsize * 0.55)
-    col_gap_px = max(12.0, fontsize * 1.6)
-    row_gap_px = max(3.0, fontsize * 0.4)
-    title_gap_px = max(3.0, title_fontsize * 0.4)
-    pad_x_px = max(6.0, fontsize * 0.9)
-    pad_y_px = max(5.0, fontsize * 0.7)
+    swatch = max(7.0, float(swatch_px))
+    swatch_gap = max(4.5, fontsize * 0.55)
+    col_gap_px = max(14.0, fontsize * 1.7)
+    row_gap_px = max(3.5, fontsize * 0.45)
+    title_gap_px = max(3.5, title_fontsize * 0.4)
+    pad_x_px = max(7.0, fontsize * 1.0)
+    pad_y_px = max(6.0, fontsize * 0.8)
     col_w_px = swatch + swatch_gap + sample_w
 
     for col in columns:
@@ -1712,22 +2008,20 @@ def _place_liked_tip_inline_after(
         tip = format_engagement_tip(liked_n, reviewed_n)
         if not tip or artist is None:
             continue
-        tip_draw = _mpl_engagement_text(tip)
         bbox = artist.get_window_extent(renderer=renderer)
         x_data, _y = ax.transData.inverted().transform((bbox.x1 + 10, bbox.y0))
-        # Optional mark font when theme default lacks ≡ (normally unused).
-        use_fp = tip_fp if REVIEW_NOTE in tip_draw else None
-        ax.text(
+        draw_colored_text_segments(
+            ax,
             x_data,
             artist.get_position()[1],
-            tip_draw,
-            va="center",
-            ha="left",
+            engagement_tip_segments(tip),
             fontsize=fontsize,
-            color=FG,
+            ha="left",
+            va="center",
             fontweight="bold",
+            mark_fontweight="bold",
             clip_on=False,
-            fontproperties=use_fp,
+            fontproperties=tip_fp,
         )
 
 
@@ -1798,6 +2092,7 @@ def chart_stacked_count_hbar(
         left_stack += vals
     ax.set_yticks(y)
     ax.set_yticklabels(labels)
+    recolor_ticklabel_engagement_marks(ax, axis="y")
     ax.set_xlabel(xlabel)
     ax.set_title(title)
     ax.xaxis.grid(True, color=GRID, linewidth=0.8)
@@ -2039,6 +2334,7 @@ def chart_rating_vbar(
     bars = ax.bar(x, avgs, color=colors, width=0.78, edgecolor="none")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=45, ha="right")
+    recolor_ticklabel_engagement_marks(ax, axis="x")
     ax.set_ylim(0, 5.55)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
@@ -2319,51 +2615,71 @@ def chart_rating_hbar(
         clip_inside = inside
         # Optional mark font when theme default lacks ≡ (normally unused).
         note_fp = review_mark_fontproperties()
-        main_shown = shown
-        note_part = ""
-        if note_fp is not None and REVIEW_NOTE in shown:
-            split_at = shown.index(REVIEW_NOTE)
-            main_shown = shown[:split_at]
-            note_part = shown[split_at:]
-        txt = ax.text(
-            pad_left,
-            yi,
-            main_shown,
-            ha="left",
-            va="center",
-            fontsize=name_fs,
-            fontweight="bold",
-            color=ON_BAR,
-            path_effects=stroke,
-            clip_on=clip_inside,
-            zorder=5,
-        )
-        if clip_inside:
-            # Hard clip to the bar rectangle — name cannot draw past the tip.
-            txt.set_clip_path(bar)
-        anchor = txt
-        if note_part:
-            fig.canvas.draw()
-            renderer = fig.canvas.get_renderer()
-            bb = txt.get_window_extent(renderer=renderer)
-            x_note = float(ax.transData.inverted().transform((bb.x1, bb.y0))[0])
-            note_artist = ax.text(
-                x_note,
+        if inside:
+            # Inside the bar: whole label stays ON_BAR (white), including ♥/≡.
+            main_shown = shown
+            note_part = ""
+            if note_fp is not None and REVIEW_NOTE in shown:
+                split_at = shown.index(REVIEW_NOTE)
+                main_shown = shown[:split_at]
+                note_part = shown[split_at:]
+            txt = ax.text(
+                pad_left,
                 yi,
-                note_part,
+                main_shown,
                 ha="left",
                 va="center",
                 fontsize=name_fs,
                 fontweight="bold",
                 color=ON_BAR,
                 path_effects=stroke,
-                clip_on=clip_inside,
+                clip_on=True,
+                zorder=5,
+            )
+            txt.set_clip_path(bar)
+            anchor = txt
+            if note_part:
+                fig.canvas.draw()
+                renderer = fig.canvas.get_renderer()
+                bb = txt.get_window_extent(renderer=renderer)
+                x_note = float(ax.transData.inverted().transform((bb.x1, bb.y0))[0])
+                note_artist = ax.text(
+                    x_note,
+                    yi,
+                    note_part,
+                    ha="left",
+                    va="center",
+                    fontsize=name_fs,
+                    fontweight="bold",
+                    color=ON_BAR,
+                    path_effects=stroke,
+                    clip_on=True,
+                    zorder=5,
+                    fontproperties=note_fp,
+                )
+                note_artist.set_clip_path(bar)
+                anchor = note_artist
+        else:
+            # Outside the bar: name white; ♥ orange / ≡ blue (logo brand).
+            segs = _outside_hbar_label_segments(shown)
+            artists = draw_colored_text_segments(
+                ax,
+                pad_left,
+                yi,
+                segs,
+                fontsize=name_fs,
+                ha="left",
+                va="center",
+                fontweight="bold",
+                mark_fontweight="bold",
+                path_effects=stroke,
+                clip_on=False,
                 zorder=5,
                 fontproperties=note_fp,
             )
-            if clip_inside:
-                note_artist.set_clip_path(bar)
-            anchor = note_artist
+            anchor = artists[-1] if artists else ax.text(
+                pad_left, yi, shown, alpha=0
+            )
         rows_drawn.append((anchor, inside, yi, avg, rated))
 
     # Overflowing labels push the mean past their right edge so the two never overlap.

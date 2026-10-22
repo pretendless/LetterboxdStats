@@ -155,6 +155,28 @@ def test_no_date_legend_swatch_is_logo_gray_gradient():
         plt.close(fig)
 
 
+def test_outside_engagement_mark_colors_use_logo_brand():
+    """♥ → orange, ≡ → blue outside bars; tip segments keep counts on FG."""
+    import matplotlib.colors as mcolors
+    from letterboxd_palette import FG, MARK_LIKE_HEX, MARK_REVIEW_HEX
+    from letterboxd_top_charts import (
+        engagement_tip_segments,
+        outside_engagement_mark_color,
+    )
+
+    assert outside_engagement_mark_color(LIKED_HEART) == MARK_LIKE_HEX
+    assert outside_engagement_mark_color(REVIEW_NOTE) == MARK_REVIEW_HEX
+    segs = engagement_tip_segments(f"{LIKED_HEART} 2 {REVIEW_NOTE} 3")
+    by_frag = {frag: color for frag, color in segs}
+    assert by_frag[LIKED_HEART] == MARK_LIKE_HEX
+    assert by_frag[REVIEW_NOTE] == MARK_REVIEW_HEX
+    assert by_frag["2"] == FG
+    assert by_frag["3"] == FG
+    # Colors round-trip as the brand hexes.
+    assert mcolors.to_hex(MARK_LIKE_HEX).lower() == "#ff8000"
+    assert mcolors.to_hex(MARK_REVIEW_HEX).lower() == "#40bcf4"
+
+
 def test_liked_heart_helpers_use_black_heart_suit():
     """Film truncation, category counts, tips, and Most liked ranking."""
     assert LIKED_HEART == "\u2665"
@@ -1295,18 +1317,24 @@ def test_release_years_rating_labels_include_engagement_counts(
         )
     finally:
         charts.save_dark_figure = real_save
-    joined = "\n".join(t.get_text() for t in captured["texts"])
-    label = f"1. 2001 {LIKED_HEART} 10 {REVIEW_NOTE} 12"
-    assert label in joined
-    assert f"2. 1999 {REVIEW_NOTE} 3" in joined
-    assert f"3. 1988 {LIKED_HEART} 2" in joined
-    assert "4. 1977" in joined
-    assert f"4. 1977 {LIKED_HEART}" not in joined
-    assert f"4. 1977 {REVIEW_NOTE}" not in joined
-    # Short year name → whole label outside; tip after it (no overlap).
-    by_text = {t.get_text(): t for t in captured["texts"]}
-    assert by_text[label].get_clip_on() is False
-    assert captured["extent"]["4.50"].x0 > captured["extent"][label].x1
+    texts = [t.get_text() for t in captured["texts"]]
+    # Outside labels split into name + colored ♥/≡ + counts.
+    assert any(t.startswith("1. 2001") for t in texts)
+    assert LIKED_HEART in texts
+    assert REVIEW_NOTE in texts
+    assert any(t.strip() == "10" for t in texts)
+    assert any(t.strip() == "12" for t in texts)
+    assert any(t.startswith("2. 1999") for t in texts)
+    assert any(t.startswith("3. 1988") for t in texts)
+    assert any(t.startswith("4. 1977") for t in texts)
+    # Year 1977 has no engagement marks on its row head.
+    row4 = next(t for t in captured["texts"] if t.get_text().startswith("4. 1977"))
+    assert LIKED_HEART not in row4.get_text()
+    assert REVIEW_NOTE not in row4.get_text()
+    # Short year name → outside; mean tip past the label head.
+    row1 = next(t for t in captured["texts"] if t.get_text().startswith("1. 2001"))
+    assert row1.get_clip_on() is False
+    assert captured["extent"]["4.50"].x0 > captured["extent"][row1.get_text()].x1
 
 
 def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
@@ -1370,21 +1398,42 @@ def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
     finally:
         charts.save_dark_figure = real_save
 
-    by_text = {t.get_text(): t for t in captured["texts"]}
-    short_outside = f"2. A24 {LIKED_HEART} 4 {REVIEW_NOTE} 1"
-    assert short_outside in by_text
-    assert by_text[short_outside].get_clip_on() is False
-    assert captured["extent"]["2.50"].x0 > captured["extent"][short_outside].x1
+    import matplotlib.colors as mcolors
+    from letterboxd_palette import MARK_LIKE_HEX, MARK_REVIEW_HEX, ON_BAR
 
-    # Overflow long name: 15 chars + ... + spaced ♥ N / ≡ M, tip after.
-    overflow = f"3. di Bonaventura... {LIKED_HEART} 1 {REVIEW_NOTE} 2"
-    assert overflow in by_text
-    assert by_text[overflow].get_clip_on() is False
-    assert captured["extent"]["0.60"].x0 > captured["extent"][overflow].x1
+    # Outside labels are split so ♥/≡ can take logo colors.
+    a24_head = next(t for t in captured["texts"] if t.get_text().startswith("2. A24"))
+    assert a24_head.get_clip_on() is False
+    a24_box = captured["extent"][a24_head.get_text()]
+    assert captured["extent"]["2.50"].x0 > a24_box.x1
+    outside_hearts = [
+        t
+        for t in captured["texts"]
+        if t.get_text() == LIKED_HEART
+        and mcolors.to_hex(t.get_color()).lower() == MARK_LIKE_HEX.lower()
+    ]
+    outside_reviews = [
+        t
+        for t in captured["texts"]
+        if t.get_text() == REVIEW_NOTE
+        and mcolors.to_hex(t.get_color()).lower() == MARK_REVIEW_HEX.lower()
+    ]
+    assert outside_hearts
+    assert outside_reviews
+
+    # Overflow long name head is outside; engagement marks follow as separate artists.
+    overflow_head = next(
+        t for t in captured["texts"] if t.get_text().startswith("3. di Bonaventura")
+    )
+    assert overflow_head.get_clip_on() is False
+    assert "..." in overflow_head.get_text()
+    overflow_box = captured["extent"][overflow_head.get_text()]
+    assert captured["extent"]["0.60"].x0 > overflow_box.x1
     short_bar = min(captured["bars"], key=lambda box: box.width)
-    assert captured["extent"][overflow].x0 < short_bar.x1 < captured["extent"][overflow].x1
+    # Head starts inside/left of the short bar tip; colored marks continue past.
+    assert overflow_box.x0 < short_bar.x1
 
-    # Long inside label keeps engagement; tip sits past the bar (not under the name).
+    # Long inside label keeps engagement in one ON_BAR string; tip past the bar.
     inside_labels = [
         t for t in captured["texts"] if t.get_text().startswith("1. ") and LIKED_HEART in t.get_text()
     ]
@@ -1393,6 +1442,7 @@ def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
     assert inside.get_clip_on() is True
     assert REVIEW_NOTE in inside.get_text()
     assert inside.get_text().endswith(f"{REVIEW_NOTE} 2")
+    assert mcolors.to_hex(inside.get_color()).lower() == ON_BAR.lower()
     long_bar = max(captured["bars"], key=lambda box: box.width)
     assert captured["extent"]["4.60"].x0 > long_bar.x1
 
@@ -1633,6 +1683,11 @@ def test_most_reviewed_years_panel_wraps_five_per_column(
     assert captured["axes_bottom"] < captured["panel_y"] <= captured["axes_top"]
     mid_x = (captured["axes_left"] + captured["axes_right"]) / 2
     assert captured["panel_x"] < mid_x
+    # Not flush to the corner: title (near panel top/left) keeps an edge margin.
+    from letterboxd_palette import INSET_PANEL_EDGE_PAD_PX
+
+    assert captured["panel_x"] >= captured["axes_left"] + INSET_PANEL_EDGE_PAD_PX * 0.5
+    assert captured["panel_y"] <= captured["axes_top"] - INSET_PANEL_EDGE_PAD_PX * 0.35
     # Title is near the panel top; bottom-aligned seat still keeps it ≥ bar top.
     assert captured["panel_y"] >= captured["tall_bar_top"] - 8.0
     # No reviews → panel omitted.
@@ -2013,6 +2068,7 @@ def test_rating_hbar_worst_skips_short_slate(tmp_path: Path | None = None):
 
 if __name__ == "__main__":
     test_display_lang()
+    test_outside_engagement_mark_colors_use_logo_brand()
     test_liked_heart_helpers_use_black_heart_suit()
     test_review_mark_helpers_use_identical_to()
     test_no_date_legend_swatch_is_logo_gray_gradient()

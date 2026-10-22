@@ -92,6 +92,7 @@ from letterboxd_top_charts import (  # noqa: E402
     format_liked_tip,
     rank_most_liked,
     rank_most_reviewed,
+    recolor_ticklabel_engagement_marks,
 )
 from letterboxd_ratings import (  # noqa: E402
     MIN_RATED_FOR_TOP,
@@ -470,8 +471,8 @@ def _place_liked_tip_above_separate(
         y0, y1 = ax.get_ylim()
         gap = max((y1 - y0) * 0.028, 0.15)
     from letterboxd_top_charts import (
-        REVIEW_NOTE,
-        _mpl_engagement_text,
+        draw_colored_text_segments,
+        engagement_tip_segments,
         review_mark_fontproperties,
     )
 
@@ -480,19 +481,18 @@ def _place_liked_tip_above_separate(
         tip = format_engagement_tip(liked_n, reviewed_n)
         if not tip:
             continue
-        tip_draw = _mpl_engagement_text(tip)
-        use_fp = tip_fp if REVIEW_NOTE in tip_draw else None
-        ax.text(
+        draw_colored_text_segments(
+            ax,
             xi,
             float(y) + gap,
-            tip_draw,
+            engagement_tip_segments(tip),
+            fontsize=fontsize,
             ha="center",
             va="bottom",
-            fontsize=fontsize,
-            color=FG,
             fontweight="bold",
+            mark_fontweight="bold",
             clip_on=False,
-            fontproperties=use_fp,
+            fontproperties=tip_fp,
         )
 
 
@@ -1927,6 +1927,7 @@ def chart_top_rewatches(
         left += vals
     ax.set_yticks(y)
     ax.set_yticklabels(labels)
+    recolor_ticklabel_engagement_marks(ax, axis="y")
     ax.set_xlabel("Diary entries")
     ax.set_title("Most often in the diary — color is watch year")
     ax.xaxis.grid(True, color=GRID, linewidth=0.8)

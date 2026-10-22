@@ -290,9 +290,20 @@ def test_genre_spectrum_color_map_stable_across_subsets():
     assert genre_spectrum_color_map([]) == {}
 
 
+def test_brand_mark_hexes_match_logo_circles():
+    """Outside-bar ♥/≡ and Top review ★/½ use Letterboxd brand logo hexes."""
+    from letterboxd_palette import MARK_LIKE_HEX, MARK_REVIEW_HEX, MARK_STAR_HEX
+
+    assert MARK_LIKE_HEX.lower() == "#ff8000"
+    assert MARK_STAR_HEX.lower() == "#00e054"
+    assert MARK_REVIEW_HEX.lower() == "#40bcf4"
+
+
 def test_inset_panel_uses_undated_charcoal_gradient():
     """Inset panels: same No date charcoal map, logo-native top→bottom + border."""
     from letterboxd_palette import (
+        INSET_PANEL_BOXSTYLE,
+        INSET_PANEL_EDGE_PAD_PX,
         UNDATED_LOGO_BOTTOM_HEX,
         UNDATED_LOGO_TOP_HEX,
         paint_inset_panel_logo_background,
@@ -304,6 +315,8 @@ def test_inset_panel_uses_undated_charcoal_gradient():
     cmap = undated_charcoal_colormap()
     assert mcolors.to_hex(cmap(0.0)).lower() == UNDATED_LOGO_TOP_HEX.lower()
     assert mcolors.to_hex(cmap(1.0)).lower() == UNDATED_LOGO_BOTTOM_HEX.lower()
+    assert "pad=0" in INSET_PANEL_BOXSTYLE
+    assert INSET_PANEL_EDGE_PAD_PX >= 8.0
 
     fig, ax = plt.subplots(figsize=(4, 3))
     ax.bar([0, 1], [1, 2])
@@ -311,18 +324,21 @@ def test_inset_panel_uses_undated_charcoal_gradient():
     before_fancy = sum(
         1 for p in ax.patches if p.__class__.__name__ == "FancyBboxPatch"
     )
-    border = paint_inset_panel_logo_background(
+    chrome = paint_inset_panel_logo_background(
         ax, 0.1, 0.4, 0.4, 0.4, transform=ax.transAxes, zorder=20
     )
-    assert border is not None
-    assert border.get_facecolor()[3] == 0.0  # edge-only chrome
+    assert chrome is not None
+    # Opaque face + stroke on one FancyBbox (fill reaches the contour).
+    face = chrome.get_facecolor()
+    assert face[3] > 0.5
+    assert mcolors.to_hex(face[:3]).lower() == UNDATED_LOGO_TOP_HEX.lower()
     assert len(ax.images) == before_images + 1
     # Panel image samples the undated charcoal map.
     assert ax.images[-1].cmap is cmap
     assert (
         sum(1 for p in ax.patches if p.__class__.__name__ == "FancyBboxPatch")
-        == before_fancy + 2
-    )  # clip + border
+        == before_fancy + 1
+    )  # single chrome patch (underlay + border)
     # Gradient uses imshow, not Rectangle strips (bar-height tests count Rectangles).
     assert sum(1 for p in ax.patches if p.__class__.__name__ == "Rectangle") == 2
     plt.close(fig)
@@ -335,5 +351,6 @@ if __name__ == "__main__":
     test_discrete_ranks_use_logo_knots_then_even_midpoints()
     test_rating_scale_uses_full_range_and_same_anchors()
     test_genre_spectrum_color_map_stable_across_subsets()
+    test_brand_mark_hexes_match_logo_circles()
     test_inset_panel_uses_undated_charcoal_gradient()
     print("ok")

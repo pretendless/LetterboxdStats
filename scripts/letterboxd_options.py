@@ -21,7 +21,7 @@ Most liked / Most reviewed panels, search-keyword lines, and inside-bar marks.
 When False, that mark is omitted (same as having no likes / reviews).
 
 show_top_review (default True) draws an in-plot panel on listed ranking charts
-(title, optional ★/½ for the pick rating, truncated review text, date). Corner:
+(title, optional ★/½ on the next line for the pick rating, truncated review text, date). Corner:
 bottom-right on watches/count / higher-rating; top-right on lower-rating.
 Walks drawn ranks until a row has a qualifying review; among that row’s reviews
 prefers highest Rating (count tops, Most often, higher-rating) or lowest

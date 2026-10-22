@@ -297,6 +297,8 @@ export const SEARCH_MATCH_FIELDS = [
 
 // U+2665 only for likes. Review mark: U+2261 ≡ (same text dingbat rules as ♥; no VS15).
 // Keep in sync with REVIEW_MARK in letterboxd_top_charts.py.
+// Chart brand colors: ♥ #ff8000, ≡ #40bcf4 (see MARK_*_HEX in letterboxd_palette.py).
+// Telegram HTML parse_mode has no color tags, so search lines stay bold only.
 const LIKED_HEART = "\u2665";
 const REVIEW_MARK = "\u2261";
 
