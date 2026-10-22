@@ -290,6 +290,15 @@ def test_genre_spectrum_color_map_stable_across_subsets():
     assert genre_spectrum_color_map([]) == {}
 
 
+def test_brand_mark_hexes_match_logo_circles():
+    """Outside-bar ♥/≡ and Top review ★/½ use Letterboxd brand logo hexes."""
+    from letterboxd_palette import MARK_LIKE_HEX, MARK_REVIEW_HEX, MARK_STAR_HEX
+
+    assert MARK_LIKE_HEX.lower() == "#ff8000"
+    assert MARK_STAR_HEX.lower() == "#00e054"
+    assert MARK_REVIEW_HEX.lower() == "#40bcf4"
+
+
 def test_inset_panel_uses_undated_charcoal_gradient():
     """Inset panels: same No date charcoal map, logo-native top→bottom + border."""
     from letterboxd_palette import (
@@ -342,5 +351,6 @@ if __name__ == "__main__":
     test_discrete_ranks_use_logo_knots_then_even_midpoints()
     test_rating_scale_uses_full_range_and_same_anchors()
     test_genre_spectrum_color_map_stable_across_subsets()
+    test_brand_mark_hexes_match_logo_circles()
     test_inset_panel_uses_undated_charcoal_gradient()
     print("ok")

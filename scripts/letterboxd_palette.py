@@ -52,6 +52,11 @@ CONNECTOR = "#9A9A9A"
 MARKER_EDGE = "#111111"
 HALO = "#000000"
 ON_BAR = "#FFFFFF"
+# Brand logo circle hexes for outside-bar engagement marks / Top review stars.
+# Distinct from measured LOGO_*_HEX knots used by ``palette_color`` (chart fills).
+MARK_LIKE_HEX = "#ff8000"  # ♥ outside bars / titles / panels / search intent
+MARK_REVIEW_HEX = "#40bcf4"  # ≡ outside bars / titles / panels / search intent
+MARK_STAR_HEX = "#00e054"  # Top review ★ and ½ (entire rating string)
 
 # Median sRGB of each circle's non-overlapping interior in the logo PNG.
 # A 12px erosion drops the white overlap lenses and the fringe; the median

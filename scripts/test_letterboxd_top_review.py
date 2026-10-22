@@ -64,11 +64,17 @@ def test_format_top_review_rating_stars() -> None:
 
 
 def test_top_review_panel_stars_on_own_line() -> None:
-    """★/½ is a separate text artist below the title; omitted when unrated."""
+    """★/½ is a separate text artist below the title; omitted when unrated.
+
+    The entire rating string (full stars and U+00BD ½) is logo green.
+    """
     import matplotlib
+    import matplotlib.colors as mcolors
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from letterboxd_palette import MARK_LIKE_HEX, MARK_STAR_HEX
+    from letterboxd_top_charts import LIKED_HEART
 
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.bar([0, 1, 2], [2, 5, 3])
@@ -89,6 +95,15 @@ def test_top_review_panel_stars_on_own_line() -> None:
     title_lines = [t for t in labels if "Star Film" in t]
     assert title_lines
     assert all("★" not in t and "½" not in t for t in title_lines)
+    star_artists = [t for t in ax.texts if t.get_text() == "★★★½"]
+    assert star_artists
+    star_hex = mcolors.to_hex(star_artists[0].get_color()).lower()
+    assert star_hex == MARK_STAR_HEX.lower()
+    # ½ is part of the same green string (not a separate FG glyph).
+    assert "½" in star_artists[0].get_text()
+    heart_artists = [t for t in ax.texts if t.get_text() == LIKED_HEART]
+    assert heart_artists
+    assert mcolors.to_hex(heart_artists[0].get_color()).lower() == MARK_LIKE_HEX.lower()
     plt.close(fig)
 
     fig2, ax2 = plt.subplots(figsize=(7, 4))
