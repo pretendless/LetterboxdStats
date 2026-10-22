@@ -432,6 +432,8 @@ def _rank_named(
             reviewed_count = count_reviewed_among_keys(
                 st.get("_keys") or (), st.get("_reviewed_keys") or ()
             )
+        key_src = st.get("_all_keys") or st.get("_keys") or ()
+        film_keys = tuple(str(k) for k in key_src if k is not None and str(k))
         rows.append(
             {
                 "name": name,
@@ -440,6 +442,7 @@ def _rank_named(
                 "rated": rated,
                 "liked_count": liked_count,
                 "reviewed_count": reviewed_count,
+                "film_keys": film_keys,
             }
         )
     if by_avg:
@@ -490,11 +493,14 @@ def _paired_ranks(
     limit_count=TOP_N_DEFAULT,
     limit_rating=TOP_N_DEFAULT,
     min_rated=MIN_RATED_FOR_TOP,
+    *,
+    force_worst: bool = False,
 ):
     """Count top + best rating top + worst rating top (rated ≥ min_rated).
 
     Anti-rating («ниже оценка») is omitted unless ≥ limit_rating entities qualify —
-    no short worst lists (M ≈ top size).
+    no short worst lists (M ≈ top size). ``force_worst`` (Top review on) lifts
+    that full-slate gate so lower-rating charts still emit.
     """
     by_count = _rank_named(stats, min_count=min_count, limit=limit_count, by_avg=False)
     by_rating = _rank_named(
@@ -506,7 +512,7 @@ def _paired_ranks(
         ascending=False,
     )
     by_rating_worst: list = []
-    if _qualifying_rated_n(stats, min_rated=min_rated) >= limit_rating:
+    if force_worst or _qualifying_rated_n(stats, min_rated=min_rated) >= limit_rating:
         by_rating_worst = _rank_named(
             stats,
             min_count=1,
@@ -535,6 +541,7 @@ def aggregate_person_stats(
     include_english=True,
     liked_keys=None,
     reviewed_keys=None,
+    force_worst: bool = False,
 ):
     """Catalog counts (diary∪watched); avgs from ratings.csv ∪ diary joined to catalog."""
     liked = set(liked_keys or ())
@@ -546,10 +553,13 @@ def aggregate_person_stats(
     languages = defaultdict(lambda: dict(blank))
     companies = defaultdict(lambda: dict(blank))
 
-    def bump_count(bucket, name):
+    def bump_count(bucket, name, film_key=None):
         if not name:
             return
-        bucket[name]["count"] += 1
+        st = bucket[name]
+        st["count"] += 1
+        if film_key:
+            st.setdefault("_all_keys", set()).add(str(film_key))
 
     def bump_rating(bucket, name, rating, film_key):
         if not name:
@@ -592,9 +602,10 @@ def aggregate_person_stats(
     # Counts: diary viewings + watched-only films (catalog).
     for _, row in catalog.iterrows():
         meta = cache.get(_cache_key(row)) or {}
+        film_key = _cache_key(row)
 
-        def count_only(bucket, name, _row):
-            bump_count(bucket, name)
+        def count_only(bucket, name, _row, _fk=film_key):
+            bump_count(bucket, name, _fk)
 
         apply_meta(count_only, row, meta)
 
@@ -620,7 +631,12 @@ def aggregate_person_stats(
     # still require unique rated films ≥ T, not this hit count.
     watch_min = int(min_rated)
     countries_c, countries_r, countries_w = _paired_ranks(
-        countries, min_count=1, limit_count=top_n, limit_rating=top_n, min_rated=min_rated
+        countries,
+        min_count=1,
+        limit_count=top_n,
+        limit_rating=top_n,
+        min_rated=min_rated,
+        force_worst=force_worst,
     )
     directors_c, directors_r, directors_w = _paired_ranks(
         directors,
@@ -628,6 +644,7 @@ def aggregate_person_stats(
         limit_count=top_n,
         limit_rating=top_n,
         min_rated=min_rated,
+        force_worst=force_worst,
     )
     actors_c, actors_r, actors_w = _paired_ranks(
         actors,
@@ -635,9 +652,15 @@ def aggregate_person_stats(
         limit_count=top_n,
         limit_rating=top_n,
         min_rated=min_rated,
+        force_worst=force_worst,
     )
     languages_c, languages_r, languages_w = _paired_ranks(
-        languages, min_count=1, limit_count=top_n, limit_rating=top_n, min_rated=min_rated
+        languages,
+        min_count=1,
+        limit_count=top_n,
+        limit_rating=top_n,
+        min_rated=min_rated,
+        force_worst=force_worst,
     )
     companies_c, companies_r, companies_w = _paired_ranks(
         companies,
@@ -645,6 +668,7 @@ def aggregate_person_stats(
         limit_count=top_n,
         limit_rating=top_n,
         min_rated=min_rated,
+        force_worst=force_worst,
     )
     return {
         "countries": countries_c,
@@ -682,6 +706,7 @@ def rank_genres(
     min_rated=MIN_RATED_FOR_TOP,
     liked_keys=None,
     reviewed_keys=None,
+    force_worst: bool = False,
 ):
     """Genre tops: catalog hits; avg from ratings.csv ∪ diary joined to catalog."""
     liked = set(liked_keys or ())
@@ -690,9 +715,11 @@ def rank_genres(
         lambda: {"count": 0, "rating_sum": 0.0, "rated": 0, "rating_n": 0, "liked": 0, "reviewed": 0}
     )
     for _, row in catalog.iterrows():
+        film_key = _cache_key(row)
         for g in row.get("Genre list") or []:
             if g:
                 stats[g]["count"] += 1
+                stats[g].setdefault("_all_keys", set()).add(film_key)
     if film_ratings is None:
         from letterboxd_export import merged_film_ratings
 
@@ -736,6 +763,7 @@ def rank_genres(
         limit_count=limit_count,
         limit_rating=limit_rating,
         min_rated=min_rated,
+        force_worst=force_worst,
     )
     total_hits = sum(int(st["count"]) for st in stats.values()) or 1
     for row in by_count:
@@ -1047,6 +1075,8 @@ def chart_deep_count_tops(
     exclude_keywords=(),
     liked_keys=None,
     reviewed_keys=None,
+    reviewed_films=None,
+    show_top_review: bool = False,
 ) -> dict:
     """Watch-year stacked count charts for TMDB deep entities.
 
@@ -1061,7 +1091,7 @@ def chart_deep_count_tops(
     maps = avg_maps or {}
     watch_min = int(min_rated)
 
-    def names(field):
+    def names(field, *, filtered: bool = True):
         def _fn(row):
             meta = _cache_meta_for_row(row, cache)
             if field == "languages":
@@ -1071,6 +1101,8 @@ def chart_deep_count_tops(
                 raw = list(meta.get("cast") or [])
             else:
                 raw = list(meta.get(field) or [])
+            if not filtered:
+                return [n for n in raw if n]
             return _filter_entity_names(
                 field,
                 raw,
@@ -1081,6 +1113,10 @@ def chart_deep_count_tops(
             )
 
         return _fn
+
+    need_unfiltered = show_top_review and (
+        not include_usa or not include_english or not include_drama or not include_comedy
+    )
 
     specs = [
         (
@@ -1137,6 +1173,7 @@ def chart_deep_count_tops(
         if not path:
             continue
 
+        unfiltered_fn = None
         if field == "genres":
             # Diary Genre list (TMDB) — same stacked count family as countries/actors.
             def genre_names(
@@ -1155,8 +1192,19 @@ def chart_deep_count_tops(
                 )
 
             names_for_row = genre_names
+            if need_unfiltered:
+
+                def genre_names_all(row, _cache=cache):
+                    gl = row.get("Genre list")
+                    if isinstance(gl, (list, tuple)) and gl:
+                        return [str(g) for g in gl if g]
+                    return list(_cache_meta_for_row(row, _cache).get("genres") or [])
+
+                unfiltered_fn = genre_names_all
         else:
             names_for_row = names(field)
+            if need_unfiltered:
+                unfiltered_fn = names(field, filtered=False)
 
         # Country also exposed via chart_watches_by_country for back-compat.
         made[key] = chart_diary_entity_stacked(
@@ -1174,11 +1222,23 @@ def chart_deep_count_tops(
             liked_keys=liked_keys,
             reviewed_keys=reviewed_keys,
             catalog=catalog,
+            names_for_row_unfiltered=unfiltered_fn,
+            reviewed_films=reviewed_films,
+            show_top_review=show_top_review,
         )
     return made
 
 
-def chart_deep_rating_tops(deep: dict, paths: dict, *, top_n=TOP_N_DEFAULT, min_rated=MIN_RATED_FOR_TOP) -> dict:
+def chart_deep_rating_tops(
+    deep: dict,
+    paths: dict,
+    *,
+    top_n=TOP_N_DEFAULT,
+    min_rated=MIN_RATED_FOR_TOP,
+    allow_short_worst: bool = False,
+    reviewed_films=None,
+    show_top_review: bool = False,
+) -> dict:
     """Blue→green→red horizontal avg charts for TMDB «выше» + «ниже оценка» tops."""
     footer = "Source: Letterboxd diary/watched + TMDB metadata"
     made = {}
@@ -1266,6 +1326,9 @@ def chart_deep_rating_tops(deep: dict, paths: dict, *, top_n=TOP_N_DEFAULT, min_
             footer=footer,
             limit=top_n,
             ascending=ascending,
+            allow_short_worst=allow_short_worst and ascending,
+            reviewed_films=reviewed_films,
+            show_top_review=show_top_review,
         )
     return made
 
@@ -1599,10 +1662,18 @@ def main():
     # Rating tops: catalog counts + ratings.csv ∪ diary (best + worst).
     # (genre_share_by_viewing_year.png removed — not sent to Telegram.)
     # show_likes / show_reviews off → empty sets (omit ♥ / ≡ everywhere).
+    # Top review loads reviews.csv for text even when ≡ marks are off.
     liked_films = load_liked_films(sys.argv[1]) if opts.show_likes else None
     liked_keys = liked_film_keys(liked_films)
-    reviewed_films = load_reviewed_films(sys.argv[1]) if opts.show_reviews else None
+    reviews_frame = (
+        load_reviewed_films(sys.argv[1])
+        if (opts.show_reviews or opts.show_top_review)
+        else None
+    )
+    reviewed_films = reviews_frame if opts.show_reviews else None
     reviewed_keys = reviewed_film_keys(reviewed_films)
+    top_review_films = reviews_frame if opts.show_top_review else None
+    force_worst = bool(opts.show_top_review)
     top_for_report, genres_by_rating, genres_by_rating_worst, genre_avgs = rank_genres(
         catalog,
         film_ratings=film_ratings,
@@ -1613,6 +1684,7 @@ def main():
         min_rated=opts.min_rated,
         liked_keys=liked_keys,
         reviewed_keys=reviewed_keys,
+        force_worst=force_worst,
     )
     gate = rated_gate_phrase(opts.min_rated)
     made_genre_best = chart_rating_hbar(
@@ -1622,6 +1694,8 @@ def main():
         footer=footer,
         limit=opts.top_n,
         ascending=False,
+        reviewed_films=top_review_films,
+        show_top_review=opts.show_top_review,
     )
     made_genre_worst = chart_rating_hbar(
         genres_by_rating_worst,
@@ -1630,6 +1704,9 @@ def main():
         footer=footer,
         limit=opts.top_n,
         ascending=True,
+        allow_short_worst=force_worst,
+        reviewed_films=top_review_films,
+        show_top_review=opts.show_top_review,
     )
 
     deep = aggregate_person_stats(
@@ -1644,6 +1721,7 @@ def main():
         include_english=opts.include_english,
         liked_keys=liked_keys,
         reviewed_keys=reviewed_keys,
+        force_worst=force_worst,
     )
     # Count tops: catalog hits stacked by watch year (No date = watched-only).
     count_paths = {
@@ -1671,6 +1749,8 @@ def main():
         exclude_keywords=opts.exclude_keywords,
         liked_keys=liked_keys,
         reviewed_keys=reviewed_keys,
+        reviewed_films=top_review_films,
+        show_top_review=opts.show_top_review,
     )
     rating_paths = {
         "average_rating_by_country": "average_rating_by_country.png",
@@ -1685,7 +1765,13 @@ def main():
         "worst_average_rating_by_studio": "worst_average_rating_by_studio.png",
     }
     made_ratings = chart_deep_rating_tops(
-        deep, rating_paths, top_n=opts.top_n, min_rated=opts.min_rated
+        deep,
+        rating_paths,
+        top_n=opts.top_n,
+        min_rated=opts.min_rated,
+        allow_short_worst=force_worst,
+        reviewed_films=top_review_films,
+        show_top_review=opts.show_top_review,
     )
 
     genre_summary = {
@@ -1719,6 +1805,7 @@ def main():
         "include_rewatch_in_averages": bool(opts.include_rewatch_in_averages),
         "show_likes": bool(opts.show_likes),
         "show_reviews": bool(opts.show_reviews),
+        "show_top_review": bool(opts.show_top_review),
         "include_usa": bool(opts.include_usa),
         "include_english": bool(opts.include_english),
         "include_drama": bool(opts.include_drama),

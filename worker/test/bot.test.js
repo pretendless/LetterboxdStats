@@ -242,6 +242,7 @@ test("custom range 2021-06.2022 dispatches 2021-01-01 through 2022-06-30", async
   await say("нет"); // rewatches in averages (default)
   await say("да"); // show likes (default)
   await say("да"); // show reviews (default)
+  await say("нет"); // top review (default off)
   await say("да"); // exclusions gate
   await say("да"); // USA
   await say("нет"); // English
@@ -262,6 +263,7 @@ test("custom range 2021-06.2022 dispatches 2021-01-01 through 2022-06-30", async
   assert.equal(dispatch.body.inputs.include_rewatch_in_averages, "false");
   assert.equal(dispatch.body.inputs.show_likes, "true");
   assert.equal(dispatch.body.inputs.show_reviews, "true");
+  assert.equal(dispatch.body.inputs.show_top_review, "false");
   assert.equal(dispatch.body.inputs.include_usa, "true");
   assert.equal(dispatch.body.inputs.include_english, "false");
   assert.equal(dispatch.body.inputs.include_drama, "true");
@@ -395,9 +397,10 @@ test("profile card is English, within Telegram limits, and distinct from /start"
   assert.doesNotMatch(`${ABOUT}\n${DESCRIPTION}`, /[А-Яа-яЁё]/);
   assert.match(DESCRIPTION, /\/start,\s+then the ZIP/);
   assert.match(DESCRIPTION, /paste settings/);
-  assert.match(DESCRIPTION, /Exclude \(USA\/English\/Drama\/Comedy \+ keywords\)/);
+  assert.match(DESCRIPTION, /Exclude on count tops/);
   assert.match(DESCRIPTION, /Search keywords/);
-  assert.match(DESCRIPTION, /likes \(♥\) and reviews \(≡\)/);
+  assert.match(DESCRIPTION, /likes \(♥\), reviews \(≡\)/);
+  assert.match(DESCRIPTION, /Top review/);
   assert.match(DESCRIPTION, /rewatches in averages/);
   assert.doesNotMatch(DESCRIPTION, /^Example:$/m);
   assert.doesNotMatch(DESCRIPTION, /ZIP file/);

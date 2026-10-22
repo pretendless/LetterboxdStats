@@ -105,6 +105,10 @@ Wizard / Actions / `ChartOptions.include_rewatch_in_averages` (env `LETTERBOXD_I
 
 Wizard / Actions / `ChartOptions.show_likes` / `show_reviews` (env `LETTERBOXD_SHOW_LIKES` / `LETTERBOXD_SHOW_REVIEWS`). Both default **true**. When false, that mark is omitted everywhere (tips, titles, Most liked / Most reviewed, search lines, inside-bar labels) by clearing liked / reviewed keys before chart and search builders. Settings summary: `Likes: yes/no.` and `Reviews: yes/no.`; paste accepts them (missing → yes).
 
+## Top review panel
+
+Wizard / Actions / `ChartOptions.show_top_review` (env `LETTERBOXD_SHOW_TOP_REVIEW`). Default **false**. When true, listed ranking charts get a bottom-right in-plot panel: film title (year), review text truncated to `TOP_REVIEW_MAX_CHARS` (280) with ellipsis, and review Date. Topmost visual row of that chart; among reviews for films in that category, shortest text wins. Exclude hiding the true count-top suppresses the panel. Also forces lower-rating charts to emit (lifts full-slate gate). Settings summary: `Top review: yes/no.`; paste missing → no.
+
 ## Non-date quantitative count charts
 
 Unit for bar lengths when the category is release metadata or person/genre/studio/language/country (not watch time): **catalog hits** = every diary row + one row per watched-only film already in the period-scoped catalog (`include_undated` still gates whether watched-only enter that catalog). Dated rows stack by watch year; undated rows use the `No date` segment (`UNDATED_WATCH_YEAR` in `letterboxd_palette.py`), painted with the logo charcoal gradient along the bar axis (not on the year colormap). Same unit as `genre_summary` count lists. The extra-stats **Rating distribution** bottom panel also stacks undated rated catalog entries (ratings.csv / watched-only rated) under **No date**; tip `%` / count / ♥ include them. Do **not** invent watch years for watched-only on watch-year / weekday / month / pace / most-often-in-diary charts (those stay diary-dated only).

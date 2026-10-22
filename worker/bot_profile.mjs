@@ -11,9 +11,9 @@ export const DESCRIPTION =
   "Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export ZIP.\n" +
   "\n" +
   "/start, then the ZIP. Default, Customize, or paste settings. Customize: tops 1–100, " +
-  "threshold for average tops, rewatches in averages, likes (♥) and reviews (≡), " +
-  "Exclude (USA/English/Drama/Comedy + keywords) on count tops, Search keywords, and watch period. " +
-  "/stop leaves the questions. A chart run that has already started stops too.\n" +
+  "threshold, rewatches in averages, likes (♥), reviews (≡), Top review (off by default; " +
+  "bottom-right shortest-review panel; unlocks lower-rating charts), Exclude on count tops, " +
+  "Search keywords, watch period. /stop leaves the questions. A started chart run stops too.\n" +
   "\n" +
   "Author:\n" +
   "https://www.last.fm/user/pretendless\n" +

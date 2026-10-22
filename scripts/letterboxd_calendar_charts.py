@@ -42,6 +42,7 @@ from letterboxd_export import (  # noqa: E402
     load_liked_films,
     load_reviewed_films,
     most_reviewed_by_row_count,
+    pick_shortest_review,
     ratings_for_catalog,
     review_counts_by_date_grain,
     reviewed_film_keys,
@@ -82,6 +83,7 @@ from letterboxd_top_charts import (  # noqa: E402
     count_liked_among_keys,
     count_reviewed_among_keys,
     draw_most_reviewed_years_panel,
+    draw_top_review_panel,
     draw_watch_year_most_liked_panel,
     film_title_with_engagement_marks,
     film_title_with_liked_heart,
@@ -165,6 +167,7 @@ def build_diary_summary(
     min_rated: int = MIN_RATED_FOR_TOP,
     liked_keys: set[str] | frozenset | None = None,
     reviewed_keys: set[str] | frozenset | None = None,
+    force_worst: bool = False,
 ) -> dict:
     """Compact stats for the Telegram HTML report (no TMDB).
 
@@ -291,6 +294,13 @@ def build_diary_summary(
                 .apply(lambda s: set(str(k) for k in s.tolist()))
                 .to_dict()
             )
+            # Catalog film keys per release year (for Top review pick).
+            all_keys_by_year = (
+                with_release.assign(_fk=film_name_year_key(with_release))
+                .groupby("release_year")["_fk"]
+                .apply(lambda s: set(str(k) for k in s.tolist()))
+                .to_dict()
+            )
             for year, row in rated_by_year.iterrows():
                 rated_n = int(row["rated"])
                 if not passes_rated_threshold(rated_n, min_rated=min_rated):
@@ -307,11 +317,15 @@ def build_diary_summary(
                         "reviewed_count": count_reviewed_among_keys(
                             keys_by_year.get(year) or (), reviewed
                         ),
+                        "film_keys": tuple(
+                            sorted(all_keys_by_year.get(year) or ())
+                        ),
                     }
                 )
             top_rated_release_years.sort(key=lambda r: (-r["avg"], -r["rated"], -r["year"]))
-            # Anti-rating only when a full top-M of qualifying years exists.
-            if len(top_rated_release_years) >= top_n:
+            # Anti-rating only when a full top-M of qualifying years exists
+            # (unless Top review forces lower-rating charts).
+            if force_worst or len(top_rated_release_years) >= top_n:
                 worst_rated_release_years = sorted(
                     top_rated_release_years,
                     key=lambda r: (r["avg"], -r["rated"], r["year"]),
@@ -1782,6 +1796,8 @@ def chart_top_rewatches(
     liked_keys: set[str] | frozenset | None = None,
     reviewed_keys: set[str] | frozenset | None = None,
     reviewed_films: pd.DataFrame | None = None,
+    show_top_review: bool = False,
+    top_review_films: pd.DataFrame | None = None,
 ) -> bool:
     """Horizontal stacked bars of rewatched films, colored by watch year.
 
@@ -1818,6 +1834,24 @@ def chart_top_rewatches(
     )
     keywords = tuple(exclude_keywords or ())
     multi = grouped[grouped["count"] >= 2].sort_values("count", ascending=False)
+    # Unfiltered #1 — if Exclude hides it, omit the Top review panel.
+    raw_top_key = None
+    if not multi.empty:
+        raw_top_key = multi.index[0]
+        raw_row = multi.iloc[0]
+        raw_year = raw_row["Year"]
+        raw_year_s = f" ({int(raw_year)})" if pd.notna(raw_year) else ""
+        raw_title = str(raw_row["Name"])
+        raw_label = f"{raw_title}{raw_year_s}"
+        exclude_hid_top = bool(
+            keywords
+            and (
+                label_matches_exclude_keywords(raw_label, keywords)
+                or label_matches_exclude_keywords(raw_title, keywords)
+            )
+        )
+    else:
+        exclude_hid_top = False
     eligible = []
     for key_id, row in multi.iterrows():
         year_val = row["Year"]
@@ -1832,6 +1866,8 @@ def chart_top_rewatches(
     kept_rows = eligible[:limit]
     if not kept_rows:
         return False
+    # Topmost visual = first eligible (highest diary count).
+    visual_top_key = kept_rows[0][0]
     # No Most liked on this chart. Most reviewed = library-wide, count > 1 only.
     most_reviewed = most_reviewed_by_row_count(
         reviewed_films, limit, min_reviews=2
@@ -1941,6 +1977,14 @@ def chart_top_rewatches(
             path_effects=style["path_effects"],
             clip_on=False,
         )
+    panel_review = None
+    if show_top_review and not exclude_hid_top and visual_top_key is not None:
+        panel_review = pick_shortest_review(
+            top_review_films if top_review_films is not None else reviewed_films,
+            {str(visual_top_key)},
+        )
+    if panel_review:
+        draw_top_review_panel(fig, ax, panel_review)
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
     return True
@@ -1968,11 +2012,19 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
         # show_likes / show_reviews off → empty sets (omit ♥ / ≡ everywhere).
+        # Top review loads reviews.csv for text even when ≡ marks are off.
         liked_keys = liked_film_keys(
             load_liked_films(zip_path) if opts.show_likes else None
         )
-        reviewed_films = load_reviewed_films(zip_path) if opts.show_reviews else None
+        reviews_frame = (
+            load_reviewed_films(zip_path)
+            if (opts.show_reviews or opts.show_top_review)
+            else None
+        )
+        reviewed_films = reviews_frame if opts.show_reviews else None
         reviewed_keys = reviewed_film_keys(reviewed_films)
+        top_review_films = reviews_frame if opts.show_top_review else None
+        force_worst = bool(opts.show_top_review)
         # Date-sensitive charts: diary only (need Watched Date).
         span_start, span_end = resolve_watch_bounds(diary, opts.date_from, opts.date_to)
         grain = watch_time_grain(span_start, span_end)
@@ -2029,6 +2081,8 @@ def main(argv: list[str] | None = None) -> int:
             liked_keys=liked_keys,
             reviewed_keys=reviewed_keys,
             reviewed_films=reviewed_films,
+            show_top_review=opts.show_top_review,
+            top_review_films=top_review_films,
         )
         summary = build_diary_summary(
             diary,
@@ -2039,6 +2093,7 @@ def main(argv: list[str] | None = None) -> int:
             min_rated=opts.min_rated,
             liked_keys=liked_keys,
             reviewed_keys=reviewed_keys,
+            force_worst=force_worst,
         )
         summary["date_from"] = opts.date_from or ""
         summary["date_to"] = opts.date_to or ""
@@ -2046,6 +2101,7 @@ def main(argv: list[str] | None = None) -> int:
         summary["include_rewatch_in_averages"] = bool(opts.include_rewatch_in_averages)
         summary["show_likes"] = bool(opts.show_likes)
         summary["show_reviews"] = bool(opts.show_reviews)
+        summary["show_top_review"] = bool(opts.show_top_review)
         summary["watch_time_grain"] = grain
         summary["exclude_keywords"] = list(opts.exclude_keywords or ())
         year_avgs = release_year_avg_lookup(ratings_for_catalog(catalog, film_ratings))
@@ -2059,12 +2115,16 @@ def main(argv: list[str] | None = None) -> int:
             exclude_keywords=opts.exclude_keywords,
             liked_keys=liked_keys,
             reviewed_keys=reviewed_keys,
+            reviewed_films=top_review_films,
+            show_top_review=opts.show_top_review,
         )
         made_release_rating = chart_release_years_by_rating(
             summary.get("top_rated_release_years") or [],
             Path("average_rating_by_release_year.png"),
             limit=opts.top_n,
             min_rated=opts.min_rated,
+            reviewed_films=top_review_films,
+            show_top_review=opts.show_top_review,
         )
         made_release_worst = chart_release_years_by_rating(
             summary.get("worst_rated_release_years") or [],
@@ -2072,6 +2132,9 @@ def main(argv: list[str] | None = None) -> int:
             limit=opts.top_n,
             ascending=True,
             min_rated=opts.min_rated,
+            allow_short_worst=force_worst,
+            reviewed_films=top_review_films,
+            show_top_review=opts.show_top_review,
         )
         summary["charts"] = {
             "average_rating_by_year": bool(made_rating),
