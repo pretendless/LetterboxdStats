@@ -37,6 +37,7 @@ import pandas as pd  # noqa: E402
 
 from letterboxd_export import (  # noqa: E402
     film_name_year_key,
+    TOP_REVIEW_PREFER_HIGHEST_RATING,
     liked_film_keys,
     load_export,
     load_liked_films,
@@ -1979,9 +1980,13 @@ def chart_top_rewatches(
         )
     panel_review = None
     if show_top_review and not exclude_hid_top:
+        # Count / rewatch tops: highest review Rating (then shortest), not
+        # shortest-text alone.
         panel_review = pick_top_review_walking_ranks(
             top_review_films if top_review_films is not None else reviewed_films,
             ({key} for key in rank_order_keys),
+            prefer=TOP_REVIEW_PREFER_HIGHEST_RATING,
+            liked_keys=liked,
         )
     if panel_review:
         draw_top_review_panel(fig, ax, panel_review)
@@ -2125,6 +2130,8 @@ def main(argv: list[str] | None = None) -> int:
             min_rated=opts.min_rated,
             reviewed_films=top_review_films,
             show_top_review=opts.show_top_review,
+            film_ratings=film_ratings,
+            liked_keys=liked_keys,
         )
         made_release_worst = chart_release_years_by_rating(
             summary.get("worst_rated_release_years") or [],
@@ -2135,6 +2142,8 @@ def main(argv: list[str] | None = None) -> int:
             allow_short_worst=force_worst,
             reviewed_films=top_review_films,
             show_top_review=opts.show_top_review,
+            film_ratings=film_ratings,
+            liked_keys=liked_keys,
         )
         summary["charts"] = {
             "average_rating_by_year": bool(made_rating),

@@ -22,8 +22,10 @@ When False, that mark is omitted (same as having no likes / reviews).
 
 show_top_review (default False) draws a bottom-right in-plot panel on listed
 ranking charts (title, truncated review text, date). Walks drawn ranks until
-a row has a qualifying review (shortest text in that row). When True it also
-lifts the full-slate gate so lower-rating charts still emit.
+a row has a qualifying review; among that row’s reviews prefers highest Rating
+(count tops, Most often, higher-rating) or lowest (lower-rating), then shortest
+text. Liked films get ♥ after the panel title. When True it also lifts the
+full-slate gate so lower-rating charts still emit.
 
 Optional search keywords are separate: after all chart PNGs, each keyword
 gets a Telegram film list where the substring matches film metadata

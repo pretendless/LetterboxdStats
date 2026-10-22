@@ -82,7 +82,7 @@ def test_pick_shortest_review_wins() -> None:
 
 
 def test_pick_walks_to_first_reviewed_rank() -> None:
-    """Rank 1 has no review → use rank 2's shortest; omit only if none qualify."""
+    """Rank 1 has no review → use rank 2's highest; omit only if none qualify."""
     reviews = pd.DataFrame(
         [
             {
@@ -110,7 +110,52 @@ def test_pick_walks_to_first_reviewed_rank() -> None:
     assert picked is not None
     assert picked["title"] == "Second (1959)"
     assert picked["text"] == "from rank two"
+    assert picked["liked"] is False
     assert pick_top_review_walking_ranks(reviews, [{"None|||1900"}]) is None
+
+
+def test_count_tops_prefer_highest_rating_not_shortest() -> None:
+    """Watches/count tops: highest Rating wins over a shorter unrated review."""
+    reviews = pd.DataFrame(
+        [
+            {
+                "Name": "I'm Still Here",
+                "Year": 2010,
+                "Date": pd.Timestamp("2020-08-25"),
+                "Review": "it wouldn’t surprise me if he still got that shit up on his beard",
+                "Rating": 4.5,
+            },
+            {
+                "Name": "Who Killed Captain Alex?",
+                "Year": 2010,
+                "Date": pd.Timestamp("2026-08-01"),
+                "Review": "true art",
+                "Rating": float("nan"),
+            },
+        ]
+    )
+    keys = {"I'm Still Here|||2010", "Who Killed Captain Alex?|||2010"}
+    # Default prefer = highest_rating (count tops).
+    picked = pick_review_among_keys(reviews, keys)
+    assert picked is not None
+    assert picked["title"] == "I'm Still Here (2010)"
+    assert "beard" in picked["text"]
+    assert picked["liked"] is False
+
+    # Shortest would wrongly prefer "true art".
+    short = pick_review_among_keys(
+        reviews, keys, prefer=TOP_REVIEW_PREFER_SHORTEST
+    )
+    assert short is not None
+    assert short["title"] == "Who Killed Captain Alex? (2010)"
+
+    liked = pick_review_among_keys(
+        reviews,
+        keys,
+        liked_keys={"I'm Still Here|||2010"},
+    )
+    assert liked is not None
+    assert liked["liked"] is True
 
 
 def test_higher_rating_prefers_highest_then_shortest() -> None:
@@ -155,7 +200,7 @@ def test_higher_rating_prefers_highest_then_shortest() -> None:
     assert low["title"] == "Low (2002)"
     assert low["text"] == "y"
 
-    # Count tops keep shortest regardless of rating.
+    # Legacy shortest mode still available for tests.
     short = pick_review_among_keys(
         reviews, keys, prefer=TOP_REVIEW_PREFER_SHORTEST
     )
@@ -303,6 +348,7 @@ def main() -> int:
     test_truncate_top_review_text_280()
     test_pick_shortest_review_wins()
     test_pick_walks_to_first_reviewed_rank()
+    test_count_tops_prefer_highest_rating_not_shortest()
     test_higher_rating_prefers_highest_then_shortest()
     test_rating_prefer_uses_film_ratings_fallback()
     with TemporaryDirectory() as tmp:

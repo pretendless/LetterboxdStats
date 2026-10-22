@@ -370,24 +370,27 @@ def pick_review_among_keys(
     film_keys,
     *,
     max_chars: int = TOP_REVIEW_MAX_CHARS,
-    prefer: str = TOP_REVIEW_PREFER_SHORTEST,
+    prefer: str = TOP_REVIEW_PREFER_HIGHEST_RATING,
     film_ratings: pd.DataFrame | dict | None = None,
+    liked_keys: set[str] | frozenset | None = None,
 ) -> dict | None:
     """Among reviews for ``film_keys``, pick one non-empty Review text.
 
     ``prefer``:
-      - ``shortest`` — shortest text (watches / count tops, Most often).
       - ``highest_rating`` — highest review-row Rating (else film rating lookup);
-        then shortest text; then Name/Year/Date.
-      - ``lowest_rating`` — lowest Rating; same tie-breaks.
+        then shortest text; then Name/Year/Date. Default for watches/count tops,
+        Most often in the diary, and higher-rating charts.
+      - ``lowest_rating`` — lowest Rating; same tie-breaks (lower-rating charts).
+      - ``shortest`` — shortest text only (legacy / tests; not used by charts).
 
     Rating comes from reviews.csv ``Rating`` (diary rating on that review row).
     When missing, optional ``film_ratings`` (merged Name+Year frame or key→float
     map) fills the gap. Unrated rows sort last for both rating preferences.
 
-    Returns ``{"title", "text", "date"}`` or None. ``text`` is truncated to
-    ``max_chars`` with ellipsis; ``title`` is ``Name (Year)``; ``date`` is the
-    review Date as YYYY-MM-DD when available.
+    Returns ``{"title", "text", "date", "liked"}`` or None. ``text`` is truncated
+    to ``max_chars`` with ellipsis; ``title`` is ``Name (Year)``; ``date`` is the
+    review Date as YYYY-MM-DD when available; ``liked`` is True when the picked
+    film key is in ``liked_keys`` (likes/films.csv).
     """
     if reviewed_films is None or getattr(reviewed_films, "empty", True):
         return None
@@ -433,7 +436,8 @@ def pick_review_among_keys(
             kind="mergesort",
         )
     row = work.iloc[0]
-    title = film_key_display_label(str(row["_film_key"]))
+    film_key = str(row["_film_key"])
+    title = film_key_display_label(film_key)
     date_val = row.get("Date")
     date_str = ""
     if pd.notna(date_val):
@@ -441,10 +445,12 @@ def pick_review_among_keys(
             date_str = pd.Timestamp(date_val).strftime("%Y-%m-%d")
         except (TypeError, ValueError):
             date_str = ""
+    liked = set(str(k) for k in (liked_keys or ()) if k is not None and str(k))
     return {
         "title": title,
         "text": truncate_top_review_text(str(row["_text"]), max_chars=max_chars),
         "date": date_str,
+        "liked": film_key in liked,
     }
 
 
@@ -468,15 +474,17 @@ def pick_top_review_walking_ranks(
     ranked_film_key_sets,
     *,
     max_chars: int = TOP_REVIEW_MAX_CHARS,
-    prefer: str = TOP_REVIEW_PREFER_SHORTEST,
+    prefer: str = TOP_REVIEW_PREFER_HIGHEST_RATING,
     film_ratings: pd.DataFrame | dict | None = None,
+    liked_keys: set[str] | frozenset | None = None,
 ) -> dict | None:
     """Walk drawn ranks (highest first); use the first set with a qualifying review.
 
     Each entry in ``ranked_film_key_sets`` is the film keys for one visual row
     (rank 1, then 2, …). Among that row's reviews, ``prefer`` chooses:
-    shortest (count tops), highest_rating / lowest_rating (rating charts).
-    Returns None only when no row in the drawn top has a review.
+    highest_rating (count tops, Most often, higher-rating charts) or
+    lowest_rating (lower-rating charts). Returns None only when no row in the
+    drawn top has a review.
     """
     for film_keys in ranked_film_key_sets or ():
         picked = pick_review_among_keys(
@@ -485,6 +493,7 @@ def pick_top_review_walking_ranks(
             max_chars=max_chars,
             prefer=prefer,
             film_ratings=film_ratings,
+            liked_keys=liked_keys,
         )
         if picked is not None:
             return picked
