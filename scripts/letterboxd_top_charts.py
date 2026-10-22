@@ -202,6 +202,21 @@ def _outside_hbar_label_segments(label: str) -> list[tuple[str, str]]:
     return segments or [(text, ON_BAR)]
 
 
+def _figure_renderer(fig):
+    """Return a canvas renderer; draw the figure only when none exists yet.
+
+    Text.get_window_extent(renderer=…) can measure newly added artists without
+    another full ``canvas.draw()``. Per-fragment redraws were the main chart
+    slowdown after logo-colored ♥/≡ segments (dozens of draws per hbar).
+    """
+    canvas = fig.canvas
+    renderer = getattr(canvas, "renderer", None)
+    if renderer is None:
+        canvas.draw()
+        renderer = canvas.get_renderer()
+    return renderer
+
+
 def draw_colored_text_segments(
     ax,
     x: float,
@@ -233,6 +248,7 @@ def draw_colored_text_segments(
     fig = ax.figure
     artists: list = []
     inv = transform.inverted()
+    renderer = _figure_renderer(fig)
     start_x = float(x)
     if ha in ("center", "right") and len(segments) > 1:
         probes = []
@@ -260,9 +276,8 @@ def draw_colored_text_segments(
                     fontproperties=fontproperties,
                 )
                 probes.append(p)
-                fig.canvas.draw()
                 total_w += float(
-                    p.get_window_extent(renderer=fig.canvas.get_renderer()).width
+                    p.get_window_extent(renderer=renderer).width
                 )
             origin = transform.transform((float(x), float(y)))
             if ha == "center":
@@ -310,8 +325,6 @@ def draw_colored_text_segments(
         artist = ax.text(cursor_x, float(y), frag, **kw)
         artists.append(artist)
         if ha_draw == "left":
-            fig.canvas.draw()
-            renderer = fig.canvas.get_renderer()
             box = artist.get_window_extent(renderer=renderer)
             cursor_x = float(inv.transform((box.x1, box.y0))[0])
     return artists
@@ -326,7 +339,13 @@ def review_mark_fontproperties():
 
 
 def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
-    """Recolor ♥/≡ inside tick labels to logo orange/blue (axis titles outside bars)."""
+    """Recolor ♥/≡ inside tick labels to logo orange/blue (axis titles outside bars).
+
+    Hides the original tick Text (``set_visible(False)``) before drawing the
+    colored segments. ``set_text("")`` is not enough: measuring draws inside
+    ``draw_colored_text_segments`` restore FixedFormatter strings and the
+    title appears twice (gutter + near the bar zero-line).
+    """
     axis_obj = ax.yaxis if str(axis).lower().startswith("y") else ax.xaxis
     fig = ax.figure
     fig.canvas.draw()
@@ -354,7 +373,8 @@ def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
         va = label.get_va()
         fontsize = label.get_fontsize()
         weight = label.get_fontweight()
-        label.set_text("")
+        # Survive later canvas.draw() / tight_layout (unlike set_text("")).
+        label.set_visible(False)
         draw_colored_text_segments(
             ax,
             float(x),
@@ -568,9 +588,8 @@ def _draw_ranked_count_mark_line(
     )
     if zorder is not None:
         text_kw["zorder"] = zorder
+    renderer = _figure_renderer(fig)
     head_artist = ax.text(x, y, head, fontweight="normal", **text_kw)
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
     hb = head_artist.get_window_extent(renderer=renderer)
     cursor_x, _yc = inv.transform((hb.x1, hb.y0))
     mark_kw = dict(text_kw)
@@ -583,8 +602,6 @@ def _draw_ranked_count_mark_line(
         fontproperties=use_mark_fp,
         **mark_kw,
     )
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
     mb = mark_artist.get_window_extent(renderer=renderer)
     nx, _ny = inv.transform((mb.x1, mb.y0))
     count_artist = ax.text(
@@ -594,8 +611,6 @@ def _draw_ranked_count_mark_line(
         fontweight="bold",
         **text_kw,
     )
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
     cb = count_artist.get_window_extent(renderer=renderer)
     hb = head_artist.get_window_extent(renderer=renderer)
     mb = mark_artist.get_window_extent(renderer=renderer)
@@ -1450,8 +1465,9 @@ def draw_top_review_panel(
             fontweight=weight,
             alpha=0,
         )
-        fig.canvas.draw()
-        ren = fig.canvas.get_renderer()
+        # Reuse the renderer from the initial draw — wrapping used to
+        # canvas.draw() once per word trial (O(words) full redraws).
+        ren = _figure_renderer(fig)
         box = probe.get_window_extent(renderer=ren)
         probe.remove()
         return float(box.width), float(box.height)
@@ -1868,6 +1884,7 @@ def draw_swatch_legend_panel(
     pad_y_px = max(6.0, fontsize * 0.8)
     col_w_px = swatch + swatch_gap + sample_w
 
+    renderer = _figure_renderer(fig)
     for col in columns:
         for name, _color in col:
             probe = ax.text(
@@ -1878,8 +1895,6 @@ def draw_swatch_legend_panel(
                 fontsize=fontsize,
                 alpha=0,
             )
-            fig.canvas.draw()
-            renderer = fig.canvas.get_renderer()
             w = (
                 swatch
                 + swatch_gap
@@ -2639,8 +2654,7 @@ def chart_rating_hbar(
             txt.set_clip_path(bar)
             anchor = txt
             if note_part:
-                fig.canvas.draw()
-                renderer = fig.canvas.get_renderer()
+                renderer = _figure_renderer(fig)
                 bb = txt.get_window_extent(renderer=renderer)
                 x_note = float(ax.transData.inverted().transform((bb.x1, bb.y0))[0])
                 note_artist = ax.text(

@@ -300,7 +300,7 @@ def test_brand_mark_hexes_match_logo_circles():
 
 
 def test_inset_panel_uses_undated_charcoal_gradient():
-    """Inset panels: same No date charcoal map, logo-native top→bottom + border."""
+    """Inset panels: visible No date charcoal gradient, clipped to rounded contour."""
     from letterboxd_palette import (
         INSET_PANEL_BOXSTYLE,
         INSET_PANEL_EDGE_PAD_PX,
@@ -324,21 +324,36 @@ def test_inset_panel_uses_undated_charcoal_gradient():
     before_fancy = sum(
         1 for p in ax.patches if p.__class__.__name__ == "FancyBboxPatch"
     )
-    chrome = paint_inset_panel_logo_background(
+    border = paint_inset_panel_logo_background(
         ax, 0.1, 0.4, 0.4, 0.4, transform=ax.transAxes, zorder=20
     )
-    assert chrome is not None
-    # Opaque face + stroke on one FancyBbox (fill reaches the contour).
-    face = chrome.get_facecolor()
-    assert face[3] > 0.5
-    assert mcolors.to_hex(face[:3]).lower() == UNDATED_LOGO_TOP_HEX.lower()
-    assert len(ax.images) == before_images + 1
-    # Panel image samples the undated charcoal map.
-    assert ax.images[-1].cmap is cmap
+    assert border is not None
+    # Stroke-only border; opaque underlay is a separate FancyBbox below the gradient.
+    assert border.get_facecolor()[3] == 0.0
+    fancy = [p for p in ax.patches if p.__class__.__name__ == "FancyBboxPatch"]
+    assert len(fancy) == before_fancy + 2  # underlay + border
+    underlay = next(
+        p for p in fancy if p is not border and p.get_facecolor()[3] > 0.5
+    )
     assert (
-        sum(1 for p in ax.patches if p.__class__.__name__ == "FancyBboxPatch")
-        == before_fancy + 1
-    )  # single chrome patch (underlay + border)
+        mcolors.to_hex(underlay.get_facecolor()[:3]).lower()
+        == UNDATED_LOGO_TOP_HEX.lower()
+    )
+    assert len(ax.images) == before_images + 1
+    im = ax.images[-1]
+    # Visible top→bottom gradient (not buried under an opaque face).
+    assert im.cmap is cmap
+    assert im.get_clip_on() is True
+    assert im.get_clip_path() is not None
+    assert im.get_zorder() > underlay.get_zorder()
+    assert im.get_zorder() < border.get_zorder()
+    arr = im.get_array()
+    assert float(arr[0, 0]) < float(arr[-1, 0])  # origin upper: top t=0, bottom t=1
+    top_hex = mcolors.to_hex(cmap(float(arr[0, 0]))).lower()
+    bot_hex = mcolors.to_hex(cmap(float(arr[-1, 0]))).lower()
+    assert top_hex == UNDATED_LOGO_TOP_HEX.lower()
+    assert bot_hex == UNDATED_LOGO_BOTTOM_HEX.lower()
+    assert top_hex != bot_hex
     # Gradient uses imshow, not Rectangle strips (bar-height tests count Rectangles).
     assert sum(1 for p in ax.patches if p.__class__.__name__ == "Rectangle") == 2
     plt.close(fig)
