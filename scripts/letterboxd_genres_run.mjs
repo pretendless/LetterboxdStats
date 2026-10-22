@@ -318,8 +318,10 @@ function formatSearchFilmLine(film, index) {
   const ratingText = ratings.length
     ? ratings.map((slot) => escapeHtml(slot == null || slot === "" ? "—" : slot)).join(", ")
     : "";
-  const heart = film && film.liked ? ` ${LIKED_HEART}` : "";
-  const review = film && film.reviewed && REVIEW_MARK ? ` ${REVIEW_MARK}` : "";
+  // Bold ♥ / ≡ like chart engagement tips (mark only; no count on search lines).
+  const heart = film && film.liked ? ` <b>${LIKED_HEART}</b>` : "";
+  const review =
+    film && film.reviewed && REVIEW_MARK ? ` <b>${REVIEW_MARK}</b>` : "";
   const base = `${index}. ${name} (${escapeHtml(year)})${heart}${review}`;
   return ratingText ? `${base}: ${ratingText}` : base;
 }

@@ -1254,7 +1254,7 @@ def test_top_rewatches_side_panel_no_most_liked_library_reviews(
 def test_release_years_rating_labels_include_engagement_counts(
     tmp_path: Path | None = None,
 ):
-    """Release years higher/lower: in-bar ``1. 2001 ♥ 10 ≡ 12`` when counts > 0."""
+    """Release years: ``1. 2001 ♥ 10 ≡ 12``; year names <15 overflow then tip."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-release-year-engage")
     out.mkdir(parents=True, exist_ok=True)
     rows = [
@@ -1266,11 +1266,16 @@ def test_release_years_rating_labels_include_engagement_counts(
     # Capture text artists from chart_rating_hbar via save hook on top_charts.
     import letterboxd_top_charts as charts
 
-    captured: list = []
+    captured: dict = {"texts": [], "extent": {}}
     real_save = charts.save_dark_figure
 
     def grab(fig, dest, **kwargs):
-        captured.extend([t.get_text() for ax in fig.axes for t in ax.texts])
+        ax = fig.axes[0]
+        renderer = fig.canvas.get_renderer()
+        captured["texts"] = list(ax.texts)
+        captured["extent"] = {
+            t.get_text(): t.get_window_extent(renderer=renderer) for t in ax.texts
+        }
         return real_save(fig, dest, **kwargs)
 
     charts.save_dark_figure = grab
@@ -1283,13 +1288,106 @@ def test_release_years_rating_labels_include_engagement_counts(
         )
     finally:
         charts.save_dark_figure = real_save
-    joined = "\n".join(captured)
-    assert f"1. 2001 {LIKED_HEART} 10 {REVIEW_NOTE} 12" in joined
+    joined = "\n".join(t.get_text() for t in captured["texts"])
+    label = f"1. 2001 {LIKED_HEART} 10 {REVIEW_NOTE} 12"
+    assert label in joined
     assert f"2. 1999 {REVIEW_NOTE} 3" in joined
     assert f"3. 1988 {LIKED_HEART} 2" in joined
     assert "4. 1977" in joined
     assert f"4. 1977 {LIKED_HEART}" not in joined
     assert f"4. 1977 {REVIEW_NOTE}" not in joined
+    # Short year name → whole label outside; tip after it (no overlap).
+    by_text = {t.get_text(): t for t in captured["texts"]}
+    assert by_text[label].get_clip_on() is False
+    assert captured["extent"]["4.50"].x0 > captured["extent"][label].x1
+
+
+def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
+    tmp_path: Path | None = None,
+):
+    """Ellipsis reserves ♥/≡ inside; name <15 or short bar → whole label outside then tip."""
+    import letterboxd_top_charts as charts
+
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-avg-engage-overflow")
+    out.mkdir(parents=True, exist_ok=True)
+    long_name = "Happy Madison Productions International Studios"
+    rows = [
+        # Long bar + long name + engagement: stay inside; name may ellipsize before ♥/≡.
+        {
+            "name": long_name,
+            "avg": 4.6,
+            "rated": 12,
+            "liked_count": 3,
+            "reviewed_count": 2,
+        },
+        # Short natural name: whole label outside even on a mid rating.
+        {
+            "name": "A24",
+            "avg": 2.5,
+            "rated": 5,
+            "liked_count": 4,
+            "reviewed_count": 1,
+        },
+        # Short bar + long name: 15 chars + ... + engagement outside.
+        {
+            "name": "di Bonaventura Pictures",
+            "avg": 0.6,
+            "rated": 3,
+            "liked_count": 1,
+            "reviewed_count": 2,
+        },
+    ]
+    captured: dict = {}
+    real_save = charts.save_dark_figure
+
+    def grab(fig, dest, **kwargs):
+        ax = fig.axes[0]
+        renderer = fig.canvas.get_renderer()
+        captured["texts"] = list(ax.texts)
+        captured["extent"] = {
+            t.get_text(): t.get_window_extent(renderer=renderer) for t in ax.texts
+        }
+        captured["bars"] = [
+            patch.get_window_extent(renderer=renderer) for patch in ax.patches
+        ]
+        real_save(fig, dest, **kwargs)
+
+    charts.save_dark_figure = grab
+    try:
+        assert chart_rating_hbar(
+            rows,
+            out / "engage-overflow.png",
+            title="Studios — lower rating",
+            limit=3,
+        )
+    finally:
+        charts.save_dark_figure = real_save
+
+    by_text = {t.get_text(): t for t in captured["texts"]}
+    short_outside = f"2. A24 {LIKED_HEART} 4 {REVIEW_NOTE} 1"
+    assert short_outside in by_text
+    assert by_text[short_outside].get_clip_on() is False
+    assert captured["extent"]["2.50"].x0 > captured["extent"][short_outside].x1
+
+    # Overflow long name: 15 chars + ... + spaced ♥/≡, tip after.
+    overflow = f"3. di Bonaventura... {LIKED_HEART} 1 {REVIEW_NOTE} 2"
+    assert overflow in by_text
+    assert by_text[overflow].get_clip_on() is False
+    assert captured["extent"]["0.60"].x0 > captured["extent"][overflow].x1
+    short_bar = min(captured["bars"], key=lambda box: box.width)
+    assert captured["extent"][overflow].x0 < short_bar.x1 < captured["extent"][overflow].x1
+
+    # Long inside label keeps engagement; tip sits past the bar (not under the name).
+    inside_labels = [
+        t for t in captured["texts"] if t.get_text().startswith("1. ") and LIKED_HEART in t.get_text()
+    ]
+    assert len(inside_labels) == 1
+    inside = inside_labels[0]
+    assert inside.get_clip_on() is True
+    assert REVIEW_NOTE in inside.get_text()
+    assert inside.get_text().endswith(f"{REVIEW_NOTE} 2")
+    long_bar = max(captured["bars"], key=lambda box: box.width)
+    assert captured["extent"]["4.60"].x0 > long_bar.x1
 
 def test_views_count_bars_show_avg_or_dash(tmp_path: Path | None = None):
     """Year and day count bars: white count, bold colored mean, dash if unrated."""
@@ -1622,6 +1720,7 @@ if __name__ == "__main__":
     test_rating_hbar_long_names_no_overlap()
     test_short_bars_overflow_fifteen_chars_long_bars_keep_name_inside()
     test_ellipsis_reaches_the_bar_tip_when_more_than_fifteen_fit()
+    test_avg_hbar_engagement_reserves_space_and_short_name_overflows()
     test_rating_hbar_worst_skips_short_slate()
     test_watches_by_genre_stacked_count()
     test_non_date_count_charts_include_watched_only()

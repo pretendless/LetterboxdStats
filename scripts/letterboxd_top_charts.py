@@ -432,7 +432,7 @@ def draw_watch_year_most_liked_panel(
     Line spacing is compact (display-pixel gaps from measured text height). It
     does not stretch to fill the axes or track bar y-positions on tall hbars.
 
-    Review rows use ``REVIEW_MARK`` (U+2261 ≡).
+    Review rows use bold ``REVIEW_MARK`` (U+2261 ≡) plus a bold count.
     """
     from matplotlib.lines import Line2D
 
@@ -554,8 +554,8 @@ def draw_watch_year_most_liked_panel(
 
         mark_fp = review_mark_fontproperties()
         for rank, (name, count) in enumerate(rank_rows, start=1):
-            # Rank: ``1. Name `` + mark (♥ or ≡) + space + bold count.
-            # Latin and marks stay on DejaVu (theme default).
+            # Rank: ``1. Name `` + bold mark (♥ or ≡) + space + bold count.
+            # Latin and marks stay on DejaVu (theme default). ≡ matches ♥ N weight.
             mark_draw = _mpl_engagement_text(mark)
             head = f"{rank}. {name} "
             head_artist = ax.text(
@@ -581,7 +581,7 @@ def draw_watch_year_most_liked_panel(
                 f"{mark_draw} ",
                 transform=ax.transAxes,
                 fontsize=fontsize,
-                fontweight="normal",
+                fontweight="bold",
                 color=FG,
                 ha="left",
                 va="top",
@@ -1034,20 +1034,20 @@ def chart_rating_hbar(
 ) -> bool:
     """Horizontal bars for TMDB avg tops.
 
-    Names are white with a black stroke and start inside the bar. The label is
-    measured against the bar width minus a small end pad. A bar that holds at
-    least ``SHORT_BAR_NAME_CHARS`` name characters keeps the label inside,
-    ellipsized only when the full name does not fit, so the text reaches nearly
-    to the tip. A shorter bar shows exactly that many characters plus ``...``
-    and overflows to the right past the tip.
+    Names are white with a black stroke. Rank + name + optional ``♥ N`` /
+    ``≡ M`` form one left label. A bar that holds the full label (or at least
+    ``SHORT_BAR_NAME_CHARS`` name characters plus the engagement suffix) keeps
+    that label inside; the name ellipsizes earlier so ♥/≡ still fit. When the
+    natural name is shorter than that threshold, or the bar cannot hold fifteen
+    name characters plus engagement, the whole left label overflows to the
+    right of the bar tip; the mean/(n) tip sits after it with a clear gap.
+    Long-name overflow uses fifteen characters + ``...`` then ♥/≡.
     ascending=False → best at top; True → worst at top.
     The mean to the right is bold and colored on the rating scale. The rated-film
     count sits beside it in regular light text as ``(12)``.
 
-    Category rows may set ``liked_count`` / ``reviewed_count`` (films in that
-    average): the label becomes ``Name ♥ N □ M`` when counts > 0. Film-title
-    rows may set ``liked`` / ``reviewed`` True: bare marks append after the
-    visible title, including after ``...`` truncation.
+    Category rows may set ``liked_count`` / ``reviewed_count``. Film-title rows
+    may set ``liked`` / ``reviewed`` True (bare marks after the visible title).
     """
     import matplotlib.patheffects as path_effects
 
@@ -1135,6 +1135,21 @@ def chart_rating_hbar(
                 hi = mid - 1
         return best
 
+    def engagement_suffix(
+        *,
+        film_liked: bool,
+        film_reviewed: bool,
+        liked_count: int,
+        reviewed_count: int,
+    ) -> str:
+        """Bare ♥/≡ for film rows; `` ♥ N ≡ M`` for category counts; else empty."""
+        if film_liked or film_reviewed:
+            return film_title_with_engagement_marks(
+                "", liked=film_liked, reviewed=film_reviewed
+            )
+        tip = format_engagement_tip(liked_count, reviewed_count)
+        return f" {tip}" if tip else ""
+
     rows_drawn = []
     for (
         yi,
@@ -1162,39 +1177,51 @@ def chart_rating_hbar(
         yi, avg = float(yi), float(avg)
         prefix = f"{rank}. "
         name = str(label)
+        engage = engagement_suffix(
+            film_liked=film_liked,
+            film_reviewed=film_reviewed,
+            liked_count=liked_count,
+            reviewed_count=reviewed_count,
+        )
+        engage_px = name_width(engage) if engage else 0.0
         inside_px = max(0.0, x_px(avg, yi) - end_pad_px - x_px(pad_left, yi))
-        fitted = name_chars_that_fit(prefix, name, inside_px)
-        inside = fitted >= len(name) or fitted >= SHORT_BAR_NAME_CHARS
-        if inside:
-            shown = _fit_text_to_px(
+        # Reserve engagement width so name ellipsizes earlier when needed.
+        name_budget_px = max(0.0, inside_px - engage_px)
+        fitted = name_chars_that_fit(prefix, name, name_budget_px)
+        full_w = name_width(prefix + name + engage)
+
+        if len(name) < SHORT_BAR_NAME_CHARS:
+            # Short natural name: whole left label outside, tip follows.
+            shown = prefix + name + engage
+            inside = False
+        elif full_w <= inside_px:
+            shown = prefix + name + engage
+            inside = True
+        elif fitted >= SHORT_BAR_NAME_CHARS:
+            # Keep inside: truncate name into the reserved budget, then ♥/≡.
+            name_part = _fit_text_to_px(
                 ax,
                 renderer,
                 prefix + name,
-                inside_px,
+                name_budget_px,
                 fontsize=name_fs,
                 fontweight="bold",
                 path_effects=stroke,
                 ellipsis=NAME_ELLIPSIS,
             )
+            shown = name_part + engage
+            inside = True
         else:
-            shown = prefix + name[:SHORT_BAR_NAME_CHARS].rstrip() + NAME_ELLIPSIS
-        # Hearts / review marks sit after the visible (possibly truncated) title.
-        if film_liked or film_reviewed:
-            shown = film_title_with_engagement_marks(
-                shown, liked=film_liked, reviewed=film_reviewed
+            # Short bar / long name: 15 chars + ... + engagement, overflowing.
+            shown = (
+                prefix
+                + name[:SHORT_BAR_NAME_CHARS].rstrip()
+                + NAME_ELLIPSIS
+                + engage
             )
-        elif liked_count > 0 or reviewed_count > 0:
-            shown = category_label_with_engagement_counts(
-                shown, liked_count, reviewed_count
-            )
-        # Keep marks readable: do not clip them away inside short bars.
-        clip_inside = (
-            inside
-            and not film_liked
-            and not film_reviewed
-            and liked_count <= 0
-            and reviewed_count <= 0
-        )
+            inside = False
+
+        clip_inside = inside
         # Optional mark font when theme default lacks ≡ (normally unused).
         note_fp = review_mark_fontproperties()
         main_shown = shown
@@ -1235,10 +1262,12 @@ def chart_rating_hbar(
                 fontweight="bold",
                 color=ON_BAR,
                 path_effects=stroke,
-                clip_on=False,
+                clip_on=clip_inside,
                 zorder=5,
                 fontproperties=note_fp,
             )
+            if clip_inside:
+                note_artist.set_clip_path(bar)
             anchor = note_artist
         rows_drawn.append((anchor, inside, yi, avg, rated))
 
@@ -1255,7 +1284,10 @@ def chart_rating_hbar(
         mean_x = avg + mean_after_bar
         if not inside:
             label_end = txt.get_window_extent(renderer=renderer).x1 + overflow_gap_px
-            mean_x = max(mean_x, float(ax.transData.inverted().transform((label_end, 0))[0]))
+            mean_x = max(
+                mean_x,
+                float(ax.transData.inverted().transform((label_end, 0))[0]),
+            )
         # Mean is bold and rating-colored; ``(k)`` stays regular light text beside it.
         mean_label = f"{avg:.2f}"
         style = count_avg_text_style(mean_label)
