@@ -53,10 +53,10 @@ CONNECTOR = "#9A9A9A"
 MARKER_EDGE = "#111111"
 HALO = "#000000"
 ON_BAR = "#FFFFFF"
-# Brand logo circle hexes for outside-bar engagement marks / Top review stars.
+# Brand hexes for engagement marks / Top review stars (always, including inside bars).
 # Distinct from measured LOGO_*_HEX knots used by ``palette_color`` (chart fills).
-MARK_LIKE_HEX = "#ff8000"  # ♥ outside bars / titles / panels / search intent
-MARK_REVIEW_HEX = "#40bcf4"  # ≡ outside bars / titles / panels / search intent
+MARK_LIKE_HEX = "#ff8000"  # ♥ everywhere (bars, tips, panels, titles, search)
+MARK_REVIEW_HEX = "#40bcf4"  # ≡ everywhere (same places); keep bold where already bold
 MARK_STAR_HEX = "#00e054"  # Top review ★ and ½ (entire rating string)
 
 # Median sRGB of each circle's non-overlapping interior in the logo PNG.
