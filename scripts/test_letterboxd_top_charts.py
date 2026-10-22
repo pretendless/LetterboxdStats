@@ -41,6 +41,7 @@ from letterboxd_top_charts import (
     count_liked_among_keys,
     count_reviewed_among_keys,
     display_lang,
+    draw_most_reviewed_years_panel,
     draw_swatch_legend_panel,
     draw_watch_year_most_liked_panel,
     film_title_with_engagement_marks,
@@ -1503,14 +1504,14 @@ def test_spectral_stack_color_map_red_to_violet_bottom_to_top():
 
 
 def test_swatch_legend_panel_draws_title_and_names(tmp_path: Path | None = None):
-    """In-plot swatch legend seats top-right with spectral stack order."""
+    """In-plot swatch legend seats top-left with spectral stack order."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-swatch-legend")
     out.mkdir(parents=True, exist_ok=True)
     from letterboxd_palette import save_dark_figure
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    # Tall left / short right so top-right can sit near tallest-bar height.
-    ax.bar([0, 1, 2, 3, 4], [10, 9, 3, 2, 2], color="#3FB7EB", width=0.8)
+    # Short left / tall right so top-left can sit near tallest-bar height.
+    ax.bar([0, 1, 2, 3, 4], [2, 2, 3, 9, 10], color="#3FB7EB", width=0.8)
     ax.set_ylim(0, 12)
     names = ["War", "Drama", "Science Fiction", "Action", "Comedy", "Crime"]
     cmap = spectral_stack_color_map(names)
@@ -1524,13 +1525,13 @@ def test_swatch_legend_panel_draws_title_and_names(tmp_path: Path | None = None)
     assert "6 most common genres" in labels
     assert "Science Fiction" in labels
     assert "War" in labels
-    # Panel title sits on the right half of the axes.
+    # Panel title sits on the left half of the axes.
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     title = next(t for t in ax.texts if t.get_text() == "6 most common genres")
     axes_box = ax.get_window_extent(renderer=renderer)
     title_box = title.get_window_extent(renderer=renderer)
-    assert title_box.x0 > (axes_box.x0 + axes_box.x1) / 2
+    assert title_box.x1 < (axes_box.x0 + axes_box.x1) / 2
     plt.close(fig)
 
 
@@ -1541,11 +1542,11 @@ def test_most_reviewed_years_panel_wraps_five_per_column(
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-most-reviewed-years")
     out.mkdir(parents=True, exist_ok=True)
     # Eleven watch years; eleven review years → columns 5|3|3 (not 5|5|1).
-    # Tall early / short late bars: top-right can align near tallest-bar top.
+    # Short early / tall late bars: top-left can align near tallest-bar top.
     rows = []
     reviews = []
     for i, year in enumerate(range(2014, 2025)):
-        watch_n = 40 if year < 2020 else 2
+        watch_n = 2 if year < 2020 else 40
         for w in range(watch_n):
             rows.append(
                 {
@@ -1628,10 +1629,10 @@ def test_most_reviewed_years_panel_wraps_five_per_column(
     ymax_data = 40
     # Tip pad 1.22; seating may add slight ylim for clearance.
     assert captured["ylim"][1] <= ymax_data * 1.22 * (1.04**4) + 1e-6
-    # Panel seats inside axes, on the right half, at/above the tallest-bar shelf.
+    # Panel seats inside axes, on the left half, at/above the tallest-bar shelf.
     assert captured["axes_bottom"] < captured["panel_y"] <= captured["axes_top"]
     mid_x = (captured["axes_left"] + captured["axes_right"]) / 2
-    assert captured["panel_x"] > mid_x
+    assert captured["panel_x"] < mid_x
     # Title is near the panel top; bottom-aligned seat still keeps it ≥ bar top.
     assert captured["panel_y"] >= captured["tall_bar_top"] - 8.0
     # No reviews → panel omitted.
@@ -1644,6 +1645,88 @@ def test_most_reviewed_years_panel_wraps_five_per_column(
         )
     )
     assert "Most reviewed years" not in {t.get_text() for t in bare}
+
+
+def test_most_reviewed_years_panel_no_column_overlap_with_5digit_counts(
+    tmp_path: Path | None = None,
+):
+    """Column gutters clear even when ≡ counts use 4–5 digits (not a 3-digit floor)."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-mry-5digit")
+    out.mkdir(parents=True, exist_ok=True)
+    from letterboxd_palette import save_dark_figure
+    from collections import defaultdict
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    # Short left so the top-left panel can sit at the tallest-bar shelf.
+    ax.bar(range(8), [2, 3, 4, 5, 8, 12, 20, 28], color="#3FB7EB", width=0.8)
+    ax.set_ylim(0, 34)
+    ranked = [
+        ("2021", 12345),
+        ("2020", 9999),
+        ("2022", 8888),
+        ("2023", 7777),
+        ("2025", 6666),
+        ("2024", 5555),
+        ("2026", 4444),
+        ("2019", 3333),
+    ]
+    assert draw_most_reviewed_years_panel(fig, ax, ranked)
+    save_dark_figure(fig, out / "panel.png")
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    title = next(t for t in ax.texts if t.get_text() == "Most reviewed years")
+    axes_box = ax.get_window_extent(renderer=renderer)
+    title_box = title.get_window_extent(renderer=renderer)
+    assert title_box.x1 < (axes_box.x0 + axes_box.x1) / 2
+    # Group visible panel line pieces by row (same top y); columns must not overlap.
+    rows = defaultdict(list)
+    for t in ax.texts:
+        if t.get_alpha() == 0 or t.get_text() == "Most reviewed years":
+            continue
+        box = t.get_window_extent(renderer=renderer)
+        # Keep artists inside/near the title's horizontal band (the inset).
+        if box.y1 < title_box.y0 - 80 or box.y0 > title_box.y1 + 5:
+            continue
+        if box.x0 < title_box.x0 - 20:
+            continue
+        rows[round(box.y1, 0)].append(box)
+    assert len(rows) >= 4
+    for y, boxes in rows.items():
+        boxes = sorted(boxes, key=lambda b: b.x0)
+        for left, right in zip(boxes, boxes[1:]):
+            # Adjacent pieces in one line may abut; only flag when a later
+            # piece starts before an earlier piece ends by more than a hair
+            # *and* there is a gap large enough that they are separate columns
+            # — simpler: full line span pieces are sequential. Detect column
+            # crash by ensuring sorted x0 is non-decreasing and each box's x0
+            # is ≥ previous x1 - 0.5px.
+            assert right.x0 >= left.x1 - 0.5, (
+                f"overlap at y~{y}: prev x1={left.x1:.1f} next x0={right.x0:.1f}"
+            )
+    # Explicitly: first-column count (5 digits) must end before second-column rank.
+    heads = [t for t in ax.texts if t.get_text().startswith("1. ")]
+    seconds = [t for t in ax.texts if t.get_text().startswith("6. ")]
+    assert heads and seconds
+    # Find count artist belonging to rank 1 (bold digits after ≡ on that row).
+    h1 = heads[0].get_window_extent(renderer=renderer)
+    # Pieces on rank-1 row: head, mark, count — take rightmost before col2 head.
+    row1 = sorted(
+        (
+            t.get_window_extent(renderer=renderer)
+            for t in ax.texts
+            if t.get_alpha() != 0
+            and abs(t.get_window_extent(renderer=renderer).y1 - h1.y1) < 1.0
+        ),
+        key=lambda b: b.x0,
+    )
+    s6 = seconds[0].get_window_extent(renderer=renderer)
+    col1_right = max(b.x1 for b in row1 if b.x1 <= s6.x0 + 1.0 or b.x0 < s6.x0)
+    # Prefer the last piece that starts before col2.
+    col1_right = max(b.x1 for b in row1 if b.x0 < s6.x0)
+    assert s6.x0 - col1_right >= 8.0, (
+        f"column gutter too tight: gap={s6.x0 - col1_right:.1f}px"
+    )
+    plt.close(fig)
 
 
 def test_views_by_year_reviews_follow_review_date_not_watch(
@@ -1966,6 +2049,7 @@ if __name__ == "__main__":
     test_spectral_stack_color_map_red_to_violet_bottom_to_top()
     test_swatch_legend_panel_draws_title_and_names()
     test_most_reviewed_years_panel_wraps_five_per_column()
+    test_most_reviewed_years_panel_no_column_overlap_with_5digit_counts()
     test_views_by_year_reviews_follow_review_date_not_watch()
     test_weekday_month_reviews_follow_review_date()
     test_weekday_month_most_liked_is_two_lists()

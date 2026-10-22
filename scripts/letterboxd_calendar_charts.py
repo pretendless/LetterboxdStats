@@ -1012,7 +1012,7 @@ def chart_views_by_year(
     On the year grain only: when any bar tip has a review count > 0, a
     **Most reviewed years** panel lists those years (same date-bound counts),
     five entries per column wrapping right, capped by ``top_n``. The panel
-    seats top-right at the tallest-bar shelf, and rises only when it would
+    seats top-left at the tallest-bar shelf, and rises only when it would
     overlap bars or tips.
     """
     del reviewed_keys
@@ -1051,7 +1051,7 @@ def chart_views_by_year(
 
     n = len(labels)
     # Wider than the count-only chart: each bar carries a count and a mean.
-    # Most reviewed years seats top-right inside the axes (ylim pad only if needed).
+    # Most reviewed years seats top-left inside the axes (ylim pad only if needed).
     fig_w = max(12.0, min(18.0, n * 0.72)) if grain == "year" else max(10.0, min(18.0, n * 0.42))
     fig_h = 6.0
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
