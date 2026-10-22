@@ -120,9 +120,9 @@ An empty chat shows the description below, with Telegram's own Start button unde
 
 Description (what Telegram shows on an unused/empty chat, and “What can this bot do?”):
 
-> Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export.
+> Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export ZIP.
 >
-> /start, then the ZIP. Next, keep the usual chart set or choose your own: top size from 1 to 100, a rating-count threshold for average tops, whether rewatches count in averages, optional exclusions from count tops, and a watch period. /stop leaves the questions. A chart run that has already started stops too.
+> /start, then the ZIP. Default, Customize, or paste settings. Customize: tops 1–100, threshold for average tops, rewatches in averages, likes (♥) and reviews (≡), Exclude (USA/English/Drama/Comedy + keywords) on count tops, Search keywords, and watch period. /stop leaves the questions. A chart run that has already started stops too.
 >
 > Author:
 > https://www.last.fm/user/pretendless
@@ -131,7 +131,7 @@ Description (what Telegram shows on an unused/empty chat, and “What can this b
 
 Short description (profile page / shared-link blurb only, ≤120 chars — not the empty-chat card; one Telegram contact here, full https URLs in the long description):
 
-> Letterboxd Stats. Charts from a Letterboxd export. /start opens the wizard. Contact: @prtdz
+> Letterboxd Stats. Charts from a Letterboxd export ZIP. /start opens the wizard. Contact: @prtdz
 
 Commands: start — Start a Letterboxd chart report. stop — Cancel the wizard or a running report.
 

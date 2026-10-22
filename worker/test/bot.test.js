@@ -386,7 +386,7 @@ test("profile card is English, within Telegram limits, and distinct from /start"
   assert.equal(DESCRIPTION.includes(ABOUT), false);
   assert.equal(
     ABOUT,
-    "Letterboxd Stats. Charts from a Letterboxd export. /start opens the wizard. Contact: @prtdz",
+    "Letterboxd Stats. Charts from a Letterboxd export ZIP. /start opens the wizard. Contact: @prtdz",
   );
   for (const word of ["Letterboxd", "charts", "export"]) {
     assert.match(ABOUT, new RegExp(word, "i"));
@@ -394,6 +394,11 @@ test("profile card is English, within Telegram limits, and distinct from /start"
   }
   assert.doesNotMatch(`${ABOUT}\n${DESCRIPTION}`, /[А-Яа-яЁё]/);
   assert.match(DESCRIPTION, /\/start,\s+then the ZIP/);
+  assert.match(DESCRIPTION, /paste settings/);
+  assert.match(DESCRIPTION, /Exclude \(USA\/English\/Drama\/Comedy \+ keywords\)/);
+  assert.match(DESCRIPTION, /Search keywords/);
+  assert.match(DESCRIPTION, /likes \(♥\) and reviews \(≡\)/);
+  assert.match(DESCRIPTION, /rewatches in averages/);
   assert.doesNotMatch(DESCRIPTION, /^Example:$/m);
   assert.doesNotMatch(DESCRIPTION, /ZIP file/);
   assert.match(DESCRIPTION, /^Author:$/m);

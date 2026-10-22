@@ -5,13 +5,14 @@
 // Description and /start use different sentences. Search words: Letterboxd, charts, export.
 
 export const ABOUT =
-  "Letterboxd Stats. Charts from a Letterboxd export. /start opens the wizard. Contact: @prtdz";
+  "Letterboxd Stats. Charts from a Letterboxd export ZIP. /start opens the wizard. Contact: @prtdz";
 
 export const DESCRIPTION =
-  "Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export.\n" +
+  "Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export ZIP.\n" +
   "\n" +
-  "/start, then the ZIP. Next, keep the usual chart set or choose your own: " +
-  "top size from 1 to 100, a rating-count threshold for average tops, whether rewatches count in averages, whether to show likes and reviews, optional exclusions from count tops, and a watch period. " +
+  "/start, then the ZIP. Default, Customize, or paste settings. Customize: tops 1–100, " +
+  "threshold for average tops, rewatches in averages, likes (♥) and reviews (≡), " +
+  "Exclude (USA/English/Drama/Comedy + keywords) on count tops, Search keywords, and watch period. " +
   "/stop leaves the questions. A chart run that has already started stops too.\n" +
   "\n" +
   "Author:\n" +
