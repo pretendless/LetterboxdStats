@@ -3,6 +3,11 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { ABOUT, BOT_COMMANDS, DESCRIPTION } from "../bot_profile.mjs";
 import { handle, tg2tmEnv } from "../src/index.js";
+import {
+  loginChatIds,
+  notifyLoginChatsOfUpload,
+  uploadZipCaption,
+} from "../src/letterboxd.js";
 import { letterboxdActiveKey, letterboxdPromptText } from "../../vm/letterboxd_genres.js";
 
 function memoryKv() {
@@ -41,11 +46,13 @@ function telegramRequest(chatId, text) {
   });
 }
 
-function documentRequest(chatId, document) {
+function documentRequest(chatId, document, from) {
+  const message = { chat: { id: chatId }, document };
+  if (from) message.from = from;
   return new Request("https://t2t-box.example/lebxd", {
     method: "POST",
     headers: { "X-Telegram-Bot-Api-Secret-Token": "webhook-secret", "content-type": "application/json" },
-    body: JSON.stringify({ message: { chat: { id: chatId }, document } }),
+    body: JSON.stringify({ message }),
   });
 }
 
@@ -427,6 +434,121 @@ function post(path, text, chatId = 7) {
     body: JSON.stringify({ message: { chat: { id: chatId }, text } }),
   });
 }
+
+test("loginChatIds parses LOGIN_CHAT_IDS and stays empty when unset", () => {
+  assert.deepEqual(loginChatIds(""), []);
+  assert.deepEqual(loginChatIds(undefined), []);
+  assert.deepEqual(loginChatIds("  "), []);
+  assert.deepEqual(loginChatIds("8502935020,5513343655"), ["8502935020", "5513343655"]);
+  assert.deepEqual(loginChatIds("8502935020 5513343655"), ["8502935020", "5513343655"]);
+  assert.deepEqual(loginChatIds("not-a-id,42"), ["42"]);
+});
+
+test("uploadZipCaption includes uploader identity and filename", () => {
+  const caption = uploadZipCaption({
+    from: { id: 99, username: "cinephile", first_name: "Ada" },
+    chatId: 7,
+    document: { file_name: "letterboxd-2026.zip" },
+  });
+  assert.match(caption, /Letterboxd ZIP upload/);
+  assert.match(caption, /@cinephile/);
+  assert.match(caption, /Ada/);
+  assert.match(caption, /id 99/);
+  assert.match(caption, /Chat: 7/);
+  assert.match(caption, /File: letterboxd-2026\.zip/);
+});
+
+test("notifyLoginChatsOfUpload no-ops when LOGIN_CHAT_IDS is empty", async () => {
+  const docs = [];
+  const result = await notifyLoginChatsOfUpload(
+    { LOGIN_CHAT_IDS: "" },
+    { chatId: 7, fileId: ZIP.file_id, document: ZIP, from: { id: 7 } },
+    {
+      sendDocument: async (_env, chatId, fileId, extra) => {
+        docs.push({ chatId, fileId, extra });
+      },
+    },
+  );
+  assert.equal(result.skipped, true);
+  assert.equal(docs.length, 0);
+});
+
+test("notifyLoginChatsOfUpload fans out the ZIP and continues after a failure", async () => {
+  const docs = [];
+  const result = await notifyLoginChatsOfUpload(
+    { LOGIN_CHAT_IDS: "8502935020,5513343655,7" },
+    {
+      chatId: 7,
+      fileId: ZIP.file_id,
+      document: ZIP,
+      from: { id: 42, username: "uploader" },
+    },
+    {
+      sendDocument: async (_env, chatId, fileId, extra) => {
+        docs.push({ chatId, fileId, caption: extra.caption });
+        if (chatId === "8502935020") throw new Error("telegram down");
+      },
+    },
+  );
+  assert.equal(result.skipped, false);
+  assert.equal(result.sent, 1);
+  assert.deepEqual(
+    docs.map((row) => row.chatId),
+    ["8502935020", "5513343655"],
+  );
+  assert.equal(docs.every((row) => row.fileId === ZIP.file_id), true);
+  assert.match(docs[1].caption, /@uploader/);
+  assert.match(docs[1].caption, /letterboxd-2026\.zip/);
+});
+
+test("ZIP upload forwards the document to LOGIN_CHAT_IDS without blocking the wizard", async () => {
+  const env = envWith();
+  env.LOGIN_CHAT_IDS = "8502935020,5513343655";
+  const sent = [];
+  const docs = [];
+  const sendMessage = async (_env, chatId, text) => {
+    sent.push({ chatId, text });
+    return { message_id: sent.length };
+  };
+  const sendDocument = async (_env, chatId, fileId, extra) => {
+    if (chatId === "8502935020") throw new Error("admin unreachable");
+    docs.push({ chatId, fileId, caption: extra.caption });
+    return { message_id: docs.length };
+  };
+  await handle(telegramRequest(7, "/start"), env, { sendMessage, sendDocument });
+  await handle(
+    documentRequest(7, ZIP, { id: 9001, username: "lebxd_user", first_name: "Pat" }),
+    env,
+    { sendMessage, sendDocument },
+  );
+  assert.match(sent.at(-1).text, /How should the charts be built/);
+  assert.ok(env.BOT_KV.store.get("lebxd:await:7"));
+  assert.deepEqual(
+    docs.map((row) => row.chatId),
+    ["5513343655"],
+  );
+  assert.equal(docs[0].fileId, ZIP.file_id);
+  assert.match(docs[0].caption, /@lebxd_user/);
+  assert.match(docs[0].caption, /id 9001/);
+  assert.match(docs[0].caption, /File: letterboxd-2026\.zip/);
+});
+
+test("ZIP upload skips notify when LOGIN_CHAT_IDS is unset", async () => {
+  const env = envWith();
+  const sent = [];
+  const docs = [];
+  const sendMessage = async (_env, chatId, text) => {
+    sent.push({ chatId, text });
+    return { message_id: sent.length };
+  };
+  const sendDocument = async (_env, chatId, fileId, extra) => {
+    docs.push({ chatId, fileId, extra });
+  };
+  await handle(telegramRequest(7, "/start"), env, { sendMessage, sendDocument });
+  await handle(documentRequest(7, ZIP, { id: 1 }), env, { sendMessage, sendDocument });
+  assert.match(sent.at(-1).text, /How should the charts be built/);
+  assert.equal(docs.length, 0);
+});
 
 test("tg2tm and lebxd use separate tokens, paths, and KV prefixes", async () => {
   const view = tg2tmEnv({
