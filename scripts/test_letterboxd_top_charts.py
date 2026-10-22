@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd
-
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from letterboxd_palette import (
     FG,
@@ -28,6 +28,7 @@ from letterboxd_top_charts import (
     REVIEW_MARK,
     REVIEW_NOTE,
     TOP_N_DEFAULT,
+    categorical_color_map_by_name_length,
     category_label_with_engagement_counts,
     category_label_with_liked_count,
     chart_rating_hbar,
@@ -39,17 +40,20 @@ from letterboxd_top_charts import (
     count_liked_among_keys,
     count_reviewed_among_keys,
     display_lang,
+    draw_swatch_legend_panel,
     draw_watch_year_most_liked_panel,
     film_title_with_engagement_marks,
     film_title_with_liked_heart,
     format_engagement_tip,
     format_liked_tip,
     format_reviewed_tip,
+    inset_panel_column_sizes,
     most_reviewed_years_column_sizes,
     normalize_most_liked_sections,
     normalize_most_reviewed_sections,
     rank_most_liked,
     rank_most_reviewed,
+    sort_labels_by_name_length,
 )
 
 
@@ -159,10 +163,10 @@ def test_liked_heart_helpers_use_black_heart_suit():
     truncated = "Some long titl..."
     assert film_title_with_liked_heart(truncated, liked=True) == f"{truncated}{LIKED_HEART}"
     assert category_label_with_liked_count("Drama", 0) == "Drama"
-    assert category_label_with_liked_count("Drama", 12) == f"Drama 12 {LIKED_HEART}"
+    assert category_label_with_liked_count("Drama", 12) == f"Drama {LIKED_HEART} 12"
     assert format_liked_tip(0) is None
     assert format_liked_tip(-1) is None
-    assert format_liked_tip(3) == f"3 {LIKED_HEART}"
+    assert format_liked_tip(3) == f"{LIKED_HEART} 3"
     assert count_liked_among_keys({"A|||1", "B|||2"}, {"B|||2", "C|||3"}) == 1
     ranked = rank_most_liked(
         {"Nolan": 12, "Villeneuve": 4, "Nobody": 0, "Fincher": 12},
@@ -170,9 +174,9 @@ def test_liked_heart_helpers_use_black_heart_suit():
     )
     assert ranked == [("Fincher", 12), ("Nolan", 12), ("Villeneuve", 4)]
     assert rank_most_liked({"A": 0, "B": 0}, 5) == []
-    # Numbered Most liked line shape (panel draws rank + bold count then mark).
+    # Numbered Most liked line shape (panel draws rank + bold mark then count).
     name, count = ranked[0]
-    assert f"1. {name} {count} {LIKED_HEART}" == f"1. Fincher 12 {LIKED_HEART}"
+    assert f"1. {name} {LIKED_HEART} {count}" == f"1. Fincher {LIKED_HEART} 12"
     # Single list → one "Most liked" section; empty stays empty.
     assert normalize_most_liked_sections(ranked) == [("Most liked", ranked)]
     assert normalize_most_liked_sections([]) == []
@@ -229,14 +233,14 @@ def test_review_mark_helpers_use_identical_to():
         == f"{truncated}{REVIEW_NOTE}"
     )
     assert category_label_with_engagement_counts("Drama", 0, 0) == "Drama"
-    assert category_label_with_engagement_counts("Drama", 12, 0) == f"Drama 12 {LIKED_HEART}"
+    assert category_label_with_engagement_counts("Drama", 12, 0) == f"Drama {LIKED_HEART} 12"
     assert (
         category_label_with_engagement_counts("Drama", 12, 5)
-        == f"Drama 12 {LIKED_HEART} 5 {REVIEW_NOTE}"
+        == f"Drama {LIKED_HEART} 12 {REVIEW_NOTE} 5"
     )
     assert format_reviewed_tip(0) is None
-    assert format_reviewed_tip(3) == f"3 {REVIEW_NOTE}"
-    assert format_engagement_tip(2, 3) == f"2 {LIKED_HEART} 3 {REVIEW_NOTE}"
+    assert format_reviewed_tip(3) == f"{REVIEW_NOTE} 3"
+    assert format_engagement_tip(2, 3) == f"{LIKED_HEART} 2 {REVIEW_NOTE} 3"
     assert count_reviewed_among_keys({"A|||1", "B|||2"}, {"B|||2"}) == 1
     ranked = rank_most_reviewed({"Nolan": 5, "Nobody": 0}, top_n=3)
     assert ranked == [("Nolan", 5)]
@@ -1290,10 +1294,10 @@ def test_release_years_rating_labels_include_engagement_counts(
     finally:
         charts.save_dark_figure = real_save
     joined = "\n".join(t.get_text() for t in captured["texts"])
-    label = f"1. 2001 10 {LIKED_HEART} 12 {REVIEW_NOTE}"
+    label = f"1. 2001 {LIKED_HEART} 10 {REVIEW_NOTE} 12"
     assert label in joined
-    assert f"2. 1999 3 {REVIEW_NOTE}" in joined
-    assert f"3. 1988 2 {LIKED_HEART}" in joined
+    assert f"2. 1999 {REVIEW_NOTE} 3" in joined
+    assert f"3. 1988 {LIKED_HEART} 2" in joined
     assert "4. 1977" in joined
     assert f"4. 1977 {LIKED_HEART}" not in joined
     assert f"4. 1977 {REVIEW_NOTE}" not in joined
@@ -1365,13 +1369,13 @@ def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
         charts.save_dark_figure = real_save
 
     by_text = {t.get_text(): t for t in captured["texts"]}
-    short_outside = f"2. A24 4 {LIKED_HEART} 1 {REVIEW_NOTE}"
+    short_outside = f"2. A24 {LIKED_HEART} 4 {REVIEW_NOTE} 1"
     assert short_outside in by_text
     assert by_text[short_outside].get_clip_on() is False
     assert captured["extent"]["2.50"].x0 > captured["extent"][short_outside].x1
 
-    # Overflow long name: 15 chars + ... + spaced N ♥ / M ≡, tip after.
-    overflow = f"3. di Bonaventura... 1 {LIKED_HEART} 2 {REVIEW_NOTE}"
+    # Overflow long name: 15 chars + ... + spaced ♥ N / ≡ M, tip after.
+    overflow = f"3. di Bonaventura... {LIKED_HEART} 1 {REVIEW_NOTE} 2"
     assert overflow in by_text
     assert by_text[overflow].get_clip_on() is False
     assert captured["extent"]["0.60"].x0 > captured["extent"][overflow].x1
@@ -1386,7 +1390,7 @@ def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
     inside = inside_labels[0]
     assert inside.get_clip_on() is True
     assert REVIEW_NOTE in inside.get_text()
-    assert inside.get_text().endswith(f"2 {REVIEW_NOTE}")
+    assert inside.get_text().endswith(f"{REVIEW_NOTE} 2")
     long_bar = max(captured["bars"], key=lambda box: box.width)
     assert captured["extent"]["4.60"].x0 > long_bar.x1
 
@@ -1445,6 +1449,55 @@ def test_most_reviewed_years_column_sizes_rebalance_short_remainder():
     assert most_reviewed_years_column_sizes(13) == [5, 4, 4]
     assert most_reviewed_years_column_sizes(14) == [5, 5, 4]
     assert most_reviewed_years_column_sizes(16) == [5, 5, 3, 3]
+    # Shared helper alias used by genre legend panels.
+    assert inset_panel_column_sizes(12) == [5, 4, 3]
+    assert inset_panel_column_sizes is most_reviewed_years_column_sizes
+
+
+def test_sort_labels_by_name_length_longest_first():
+    """Genre legend order: longest names first; alpha tie-break; colors follow."""
+    names = ["War", "Drama", "Science Fiction", "Action", "Comedy", "Crime"]
+    ordered = sort_labels_by_name_length(names)
+    assert ordered[0] == "Science Fiction"
+    assert ordered[-1] == "War"
+    # Equal length: alphabetical (Action before Comedy before Crime / Drama).
+    assert ordered.index("Action") < ordered.index("Comedy")
+    assert ordered.index("Comedy") < ordered.index("Crime")
+    cmap = categorical_color_map_by_name_length(names)
+    assert set(cmap) == set(names)
+    # First in length order gets the first categorical color.
+    from letterboxd_palette import categorical_colors
+
+    expected = categorical_colors(len(ordered))
+    assert cmap[ordered[0]] == expected[0]
+    assert cmap[ordered[-1]] == expected[-1]
+
+
+def test_swatch_legend_panel_draws_title_and_names(tmp_path: Path | None = None):
+    """In-plot swatch legend seats inside axes with title + length-sorted names."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-swatch-legend")
+    out.mkdir(parents=True, exist_ok=True)
+    import letterboxd_top_charts as charts
+    from letterboxd_palette import categorical_colors, save_dark_figure
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    # Short left bars leave empty space for the panel.
+    ax.bar([0, 1, 2, 3, 4], [2, 3, 8, 9, 10], color="#3FB7EB", width=0.8)
+    ax.set_ylim(0, 12)
+    names = ["War", "Drama", "Science Fiction", "Action", "Comedy", "Crime"]
+    ordered = sort_labels_by_name_length(names)
+    colors = categorical_colors(len(ordered))
+    entries = list(zip(ordered, colors))
+    assert draw_swatch_legend_panel(
+        fig, ax, entries, title="6 most common genres"
+    )
+    path = out / "swatch.png"
+    save_dark_figure(fig, path)
+    labels = {t.get_text() for t in ax.texts}
+    assert "6 most common genres" in labels
+    assert "Science Fiction" in labels
+    assert "War" in labels
+    plt.close(fig)
 
 
 def test_most_reviewed_years_panel_wraps_five_per_column(
@@ -1454,20 +1507,23 @@ def test_most_reviewed_years_panel_wraps_five_per_column(
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-most-reviewed-years")
     out.mkdir(parents=True, exist_ok=True)
     # Eleven watch years; eleven review years → columns 5|3|3 (not 5|5|1).
+    # Early years are short so the panel can seat low/left without raising ylim.
     rows = []
     reviews = []
     for i, year in enumerate(range(2014, 2025)):
-        rows.append(
-            {
-                "Name": f"Film{year}",
-                "Year": 1990 + i,
-                "Rating": 3.5,
-                "Watched Date": f"{year}-06-01",
-            }
-        )
+        watch_n = 1 if year < 2020 else 40
+        for w in range(watch_n):
+            rows.append(
+                {
+                    "Name": f"Film{year}_{w}",
+                    "Year": 1990 + i,
+                    "Rating": 3.5,
+                    "Watched Date": f"{year}-06-{(w % 27) + 1:02d}",
+                }
+            )
         reviews.append(
             {
-                "Name": f"Film{year}",
+                "Name": f"Film{year}_0",
                 "Year": 1990 + i,
                 "Date": pd.Timestamp(f"{year}-07-01"),
             }
@@ -1475,26 +1531,68 @@ def test_most_reviewed_years_panel_wraps_five_per_column(
     diary = pd.DataFrame(rows)
     diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
     reviewed_films = pd.DataFrame(reviews)
-    texts = _texts_on_save(
-        lambda cal: cal.chart_views_by_year(
+    captured: dict = {"texts": []}
+    import letterboxd_calendar_charts as cal
+
+    real_save = cal.save_dark_figure
+
+    def grab(fig, dest, **kwargs):
+        ax = fig.axes[0]
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        captured["texts"] = [t for a in fig.axes for t in a.texts]
+        captured["ylim"] = ax.get_ylim()
+        captured["fig_h"] = float(fig.get_size_inches()[1])
+        title = next(
+            (t for t in ax.texts if t.get_text() == "Most reviewed years"), None
+        )
+        assert title is not None
+        captured["panel_y"] = float(title.get_window_extent(renderer=renderer).y1)
+        axes_box = ax.get_window_extent(renderer=renderer)
+        captured["axes_top"] = float(axes_box.y1)
+        captured["axes_bottom"] = float(axes_box.y0)
+        bar_tops = sorted(
+            (float(p.get_window_extent(renderer=renderer).y1) for p in ax.patches),
+            reverse=True,
+        )
+        captured["tall_bar_top"] = bar_tops[0]
+        real_save(fig, dest, **kwargs)
+
+    cal.save_dark_figure = grab
+    try:
+        cal.chart_views_by_year(
             diary,
             out / "views_by_year.png",
             grain="year",
             reviewed_films=reviewed_films,
             top_n=100,
         )
-    )
-    labels = [t.get_text() for t in texts]
+    finally:
+        cal.save_dark_figure = real_save
+    labels = [t.get_text() for t in captured["texts"]]
     assert "Most reviewed years" in labels
     assert any(t.startswith("1. ") for t in labels)
     assert any(t.startswith("6. ") for t in labels)  # second column
     assert any(t.startswith("9. ") for t in labels)  # third column starts at rank 9 (5|3|3)
     assert any(t.startswith("11. ") for t in labels)
-    # Number-then-symbol tip on at least one year.
-    assert any(t.endswith(f" {REVIEW_NOTE}") or t == f"1 {REVIEW_NOTE}" or REVIEW_NOTE in t for t in labels)
+    # Symbol-then-number tip / panel mark on at least one year.
+    assert any(
+        t.startswith(f"{REVIEW_NOTE} ") or t == f"{REVIEW_NOTE} 1" or REVIEW_NOTE in t
+        for t in labels
+    )
+    # No figure-height bump; ylim stays tip pad (not panel parking).
+    assert captured["fig_h"] == 6.0
+    ymax_data = 40
+    # rotation==0 for n=11 → top_pad 1.22
+    assert captured["ylim"][1] <= ymax_data * 1.22 + 1e-6
+    # Panel seats inside axes (not perched above via ylim expansion).
+    assert captured["axes_bottom"] < captured["panel_y"] <= captured["axes_top"]
+    # With short early bars, the panel is not stuck at the axes top.
+    axes_h = captured["axes_top"] - captured["axes_bottom"]
+    assert captured["panel_y"] < captured["axes_top"] - axes_h * 0.08
     # No reviews → panel omitted.
     bare = _texts_on_save(
-        lambda cal: cal.chart_views_by_year(
+        lambda c: c.chart_views_by_year(
             diary,
             out / "views_by_year_bare.png",
             grain="year",
@@ -1560,7 +1658,7 @@ def test_views_by_year_reviews_follow_review_date_not_watch(
 
     assert index_years == [2024, 2026]
     assert captured["reviewed"] == [0, 1]
-    tip = f"1 {REVIEW_NOTE}"
+    tip = f"{REVIEW_NOTE} 1"
     assert any(t.get_text() == tip for t in texts)
     # Film-level bug would also put ≡ on 2024; date-bound has a single tip.
     assert sum(1 for t in texts if t.get_text() == tip) == 1
@@ -1600,9 +1698,12 @@ def test_weekday_month_reviews_follow_review_date(tmp_path: Path | None = None):
     )
     labels = {t.get_text() for t in texts}
     assert "Most reviewed weekdays" in labels
-    # Rank head, bold count, then bold ≡ are separate text artists; Saturday owns the review.
+    # Rank head, bold ≡, then bold count are separate text artists; Saturday owns the review.
     assert any(t.get_text().startswith("1. Sat ") for t in texts)
-    assert any(t.get_text() == REVIEW_NOTE for t in texts)
+    assert any(
+        t.get_text() == REVIEW_NOTE or t.get_text() == f"{REVIEW_NOTE} "
+        for t in texts
+    )
     # Thursday was the watch day — must not be Most reviewed #1.
     assert not any(t.get_text().startswith("1. Thu ") for t in texts)
 
@@ -1670,7 +1771,7 @@ def test_most_liked_list_is_compact_on_tall_hbar(tmp_path: Path | None = None):
         fig.canvas.draw()
         renderer = fig.canvas.get_renderer()
         ax = fig.axes[0]
-        # Rank heads are separate from bold count + ♥ (number-then-symbol order).
+        # Rank heads are separate from bold ♥ + count (symbol-then-number order).
         liked_prefixes = [
             t
             for t in ax.texts
@@ -1817,6 +1918,8 @@ if __name__ == "__main__":
     test_release_years_rating_labels_include_engagement_counts()
     test_views_count_bars_show_avg_or_dash()
     test_most_reviewed_years_column_sizes_rebalance_short_remainder()
+    test_sort_labels_by_name_length_longest_first()
+    test_swatch_legend_panel_draws_title_and_names()
     test_most_reviewed_years_panel_wraps_five_per_column()
     test_views_by_year_reviews_follow_review_date_not_watch()
     test_weekday_month_reviews_follow_review_date()

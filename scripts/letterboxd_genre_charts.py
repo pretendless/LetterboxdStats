@@ -62,7 +62,6 @@ from letterboxd_options import (  # noqa: E402
 from letterboxd_palette import (  # noqa: E402
     FG,
     apply_dark_chart_theme,
-    categorical_colors,
     save_dark_figure,
     style_axes,
 )
@@ -72,12 +71,15 @@ from letterboxd_ratings import (  # noqa: E402
 )
 from letterboxd_top_charts import (  # noqa: E402
     TOP_N_DEFAULT,
+    categorical_color_map_by_name_length,
     chart_diary_entity_stacked,
     chart_rating_hbar,
     count_avg_text_style,
     count_liked_among_keys,
     count_reviewed_among_keys,
     display_lang,
+    draw_swatch_legend_panel,
+    sort_labels_by_name_length,
 )
 
 apply_dark_chart_theme()
@@ -1363,30 +1365,30 @@ def main():
         )
         if not label_matches_exclude_keywords(g, exclude_keywords)
     ]
+    # Frequency picks the top N; legend/palette order is descending name length.
     top_genres = [g for g, _ in Counter(all_genres_diary).most_common(12)]
+    genre_colors = categorical_color_map_by_name_length(top_genres)
     yearly = {}
     for y in years:
         subset = diary[diary["Watched Date"].dt.year == y]
         yearly[y] = {g: int(subset["Genre list"].apply(lambda gs: g in gs).sum()) for g in top_genres}
-    fig, ax = plt.subplots(figsize=(15, 7))
+    fig, ax = plt.subplots(figsize=(14, 7))
     bottom = np.zeros(len(years))
-    colors = categorical_colors(len(top_genres)) if top_genres else []
-    for idx, genre in enumerate(top_genres):
+    # Stack in frequency order; colors follow the length-sorted map.
+    for genre in top_genres:
         vals = np.array([yearly[y][genre] for y in years])
-        ax.bar(years, vals, bottom=bottom, label=genre, color=colors[idx], width=0.82)
+        ax.bar(
+            years,
+            vals,
+            bottom=bottom,
+            label=genre,
+            color=genre_colors[genre],
+            width=0.82,
+        )
         bottom += vals
     ax.set_title("Watches by genre and year")
     ax.set_xlabel("Watch year"); ax.set_ylabel("Watches (genres are summed)")
     ax.set_xticks(years); ax.tick_params(axis="x", rotation=45)
-    if top_genres:
-        leg = ax.legend(
-            title="12 most common genres",
-            bbox_to_anchor=(1.02, 1),
-            loc="upper left",
-            labelcolor=FG,
-        )
-        if leg is not None and leg.get_title() is not None:
-            leg.get_title().set_color(FG)
     style_axes(ax)
     # Count + mean diary rating above each watch-year stack.
     year_means = {}
@@ -1399,7 +1401,8 @@ def main():
     ymax = float(bottom.max()) if len(bottom) else 1.0
     ax.set_ylim(0, ymax * 1.18 if ymax else 1.0)
     fig.text(0.01, 0.01, footer, fontsize=7, color=FG)
-    fig.tight_layout(rect=[0, 0.03, 0.84, 1])
+    # Full axes width — genre legend seats inside the plot (no side gutter).
+    fig.tight_layout(rect=[0, 0.03, 1, 1])
     pending = []
     for xi, total, year in zip(years, bottom, years):
         y_lab = float(total) + ymax * 0.02
@@ -1447,6 +1450,16 @@ def main():
 
         _shift(count_artist, cb, start)
         _shift(avg_artist, ab, start + cb.width + 4)
+    if top_genres:
+        legend_entries = [
+            (g, genre_colors[g]) for g in sort_labels_by_name_length(top_genres)
+        ]
+        draw_swatch_legend_panel(
+            fig,
+            ax,
+            legend_entries,
+            title="12 most common genres",
+        )
     save_dark_figure(fig, "genre_counts_by_viewing_year.png")
     plt.close(fig)
 
@@ -1480,27 +1493,23 @@ def main():
             for g in decade_df.groupby("Genre")["Views"].sum().nlargest(10).index
             if not label_matches_exclude_keywords(g, exclude_keywords)
         ]
+        genre_colors = categorical_color_map_by_name_length(common)
         p = decade_df[decade_df["Genre"].isin(common)].pivot_table(
             index="Decade", columns="Genre", values="Views", aggfunc="sum", fill_value=0
         ).sort_index()
-        fig, ax = plt.subplots(figsize=(13, 6))
+        # Stack in pivot column order; colors follow the length-sorted map.
+        stack_colors = [genre_colors[c] for c in p.columns]
+        fig, ax = plt.subplots(figsize=(12, 6))
         p.plot(
             kind="bar",
             stacked=True,
             ax=ax,
-            color=categorical_colors(p.shape[1]),
+            color=stack_colors,
             width=0.82,
+            legend=False,
         )
         ax.set_title("Watches by release decade and genre")
         ax.set_xlabel("Release decade"); ax.set_ylabel("Watch count")
-        leg = ax.legend(
-            title="10 most common genres",
-            bbox_to_anchor=(1.02, 1),
-            loc="upper left",
-            labelcolor=FG,
-        )
-        if leg is not None and leg.get_title() is not None:
-            leg.get_title().set_color(FG)
         style_axes(ax)
         totals = p.sum(axis=1)
         decade_avgs = {}
@@ -1513,7 +1522,8 @@ def main():
         ymax = float(totals.max()) if len(totals) else 1.0
         ax.set_ylim(0, ymax * 1.18 if ymax else 1.0)
         fig.text(0.01, 0.01, footer, fontsize=7, color=FG)
-        fig.tight_layout(rect=[0, 0.03, 0.83, 1])
+        # Full axes width — genre legend seats inside the plot (no side gutter).
+        fig.tight_layout(rect=[0, 0.03, 1, 1])
         pending = []
         for xi, (decade, total) in enumerate(totals.items()):
             y_lab = float(total) + ymax * 0.02
@@ -1563,6 +1573,16 @@ def main():
 
             _shift(count_artist, cb, start)
             _shift(avg_artist, ab, start + cb.width + 4)
+        if common:
+            legend_entries = [
+                (g, genre_colors[g]) for g in sort_labels_by_name_length(common)
+            ]
+            draw_swatch_legend_panel(
+                fig,
+                ax,
+                legend_entries,
+                title="10 most common genres",
+            )
         save_dark_figure(fig, "genre_by_release_decade.png")
         plt.close(fig)
 
