@@ -263,17 +263,24 @@ def truncate_top_review_text(
     return f"{cut}{TOP_REVIEW_ELLIPSIS}"
 
 
+# Top-review among-row preference after walk-down finds a reviewed rank.
+TOP_REVIEW_PREFER_SHORTEST = "shortest"
+TOP_REVIEW_PREFER_HIGHEST_RATING = "highest_rating"
+TOP_REVIEW_PREFER_LOWEST_RATING = "lowest_rating"
+
+
 def load_reviewed_films(zip_path: Path | str) -> pd.DataFrame:
     """Parse top-level reviews.csv if present. Empty frame when missing (not an error).
 
-    Keeps every review row with Name + Year + Date (review logged date) and
-    Review text when present. Multiple rows for the same film are retained so
-    watch-date charts can bucket by Date and Top review can pick among texts.
+    Keeps every review row with Name + Year + Date (review logged date),
+    Review text, and Rating (diary rating on that review row when Letterboxd
+    includes it). Multiple rows for the same film are retained so watch-date
+    charts can bucket by Date and Top review can pick among texts.
     Prefer reviews.csv; never pick deleted/orphaned copies or likes/reviews.csv
     (that file is review-URI likes, not film reviews).
     """
     path = Path(zip_path)
-    empty_cols = ["Name", "Year", "Date", "Review"]
+    empty_cols = ["Name", "Year", "Date", "Review", "Rating"]
     if not path.is_file():
         return pd.DataFrame(columns=empty_cols)
     try:
@@ -317,16 +324,66 @@ def load_reviewed_films(zip_path: Path | str) -> pd.DataFrame:
         df["Review"] = df["Review"].fillna("").astype(str)
     else:
         df["Review"] = ""
-    return df[["Name", "Year", "Date", "Review"]].copy()
+    # Rating already normalized by _normalize_common when the column exists.
+    if "Rating" not in df.columns:
+        df["Rating"] = np.nan
+    return df[["Name", "Year", "Date", "Review", "Rating"]].copy()
 
 
-def pick_shortest_review(
+def _film_rating_lookup(film_ratings: pd.DataFrame | dict | None) -> dict[str, float]:
+    """Name|||Year → float Rating from a merged ratings frame or plain dict."""
+    if film_ratings is None:
+        return {}
+    if isinstance(film_ratings, dict):
+        out: dict[str, float] = {}
+        for key, value in film_ratings.items():
+            if key is None:
+                continue
+            try:
+                rating = float(value)
+            except (TypeError, ValueError):
+                continue
+            if rating > 0:
+                out[str(key)] = rating
+        return out
+    if getattr(film_ratings, "empty", True):
+        return {}
+    work = film_ratings.copy()
+    if "_film_key" not in work.columns:
+        work["_film_key"] = film_name_year_key(work)
+    if "Rating" not in work.columns:
+        return {}
+    out = {}
+    for _, row in work.iterrows():
+        key = str(row["_film_key"])
+        try:
+            rating = float(row["Rating"])
+        except (TypeError, ValueError):
+            continue
+        if rating > 0:
+            out[key] = rating
+    return out
+
+
+def pick_review_among_keys(
     reviewed_films: pd.DataFrame | None,
     film_keys,
     *,
     max_chars: int = TOP_REVIEW_MAX_CHARS,
+    prefer: str = TOP_REVIEW_PREFER_SHORTEST,
+    film_ratings: pd.DataFrame | dict | None = None,
 ) -> dict | None:
-    """Among reviews for ``film_keys``, pick the shortest non-empty Review text.
+    """Among reviews for ``film_keys``, pick one non-empty Review text.
+
+    ``prefer``:
+      - ``shortest`` — shortest text (watches / count tops, Most often).
+      - ``highest_rating`` — highest review-row Rating (else film rating lookup);
+        then shortest text; then Name/Year/Date.
+      - ``lowest_rating`` — lowest Rating; same tie-breaks.
+
+    Rating comes from reviews.csv ``Rating`` (diary rating on that review row).
+    When missing, optional ``film_ratings`` (merged Name+Year frame or key→float
+    map) fills the gap. Unrated rows sort last for both rating preferences.
 
     Returns ``{"title", "text", "date"}`` or None. ``text`` is truncated to
     ``max_chars`` with ellipsis; ``title`` is ``Name (Year)``; ``date`` is the
@@ -349,12 +406,32 @@ def pick_shortest_review(
     if work.empty:
         return None
     work["_len"] = work["_text"].str.len()
-    # Shortest text; stable tie-break by title then date then row order.
-    work = work.sort_values(
-        by=["_len", "Name", "Year", "Date"],
-        ascending=[True, True, True, True],
-        kind="mergesort",
-    )
+
+    mode = str(prefer or TOP_REVIEW_PREFER_SHORTEST).strip().lower()
+    if mode in (TOP_REVIEW_PREFER_HIGHEST_RATING, TOP_REVIEW_PREFER_LOWEST_RATING):
+        lookup = _film_rating_lookup(film_ratings)
+        if "Rating" in work.columns:
+            row_rating = pd.to_numeric(work["Rating"], errors="coerce")
+        else:
+            row_rating = pd.Series(np.nan, index=work.index)
+        fallback = work["_film_key"].map(lambda k: lookup.get(str(k), np.nan))
+        work["_rating"] = row_rating.where(row_rating.notna() & (row_rating > 0), fallback)
+        work["_rating"] = pd.to_numeric(work["_rating"], errors="coerce")
+        rating_asc = mode == TOP_REVIEW_PREFER_LOWEST_RATING
+        # Rated first (na last); then shortest text; then stable keys.
+        work = work.sort_values(
+            by=["_rating", "_len", "Name", "Year", "Date"],
+            ascending=[rating_asc, True, True, True, True],
+            na_position="last",
+            kind="mergesort",
+        )
+    else:
+        # Shortest text; stable tie-break by title then date then row order.
+        work = work.sort_values(
+            by=["_len", "Name", "Year", "Date"],
+            ascending=[True, True, True, True],
+            kind="mergesort",
+        )
     row = work.iloc[0]
     title = film_key_display_label(str(row["_film_key"]))
     date_val = row.get("Date")
@@ -369,6 +446,49 @@ def pick_shortest_review(
         "text": truncate_top_review_text(str(row["_text"]), max_chars=max_chars),
         "date": date_str,
     }
+
+
+def pick_shortest_review(
+    reviewed_films: pd.DataFrame | None,
+    film_keys,
+    *,
+    max_chars: int = TOP_REVIEW_MAX_CHARS,
+) -> dict | None:
+    """Among reviews for ``film_keys``, pick the shortest non-empty Review text."""
+    return pick_review_among_keys(
+        reviewed_films,
+        film_keys,
+        max_chars=max_chars,
+        prefer=TOP_REVIEW_PREFER_SHORTEST,
+    )
+
+
+def pick_top_review_walking_ranks(
+    reviewed_films: pd.DataFrame | None,
+    ranked_film_key_sets,
+    *,
+    max_chars: int = TOP_REVIEW_MAX_CHARS,
+    prefer: str = TOP_REVIEW_PREFER_SHORTEST,
+    film_ratings: pd.DataFrame | dict | None = None,
+) -> dict | None:
+    """Walk drawn ranks (highest first); use the first set with a qualifying review.
+
+    Each entry in ``ranked_film_key_sets`` is the film keys for one visual row
+    (rank 1, then 2, …). Among that row's reviews, ``prefer`` chooses:
+    shortest (count tops), highest_rating / lowest_rating (rating charts).
+    Returns None only when no row in the drawn top has a review.
+    """
+    for film_keys in ranked_film_key_sets or ():
+        picked = pick_review_among_keys(
+            reviewed_films,
+            film_keys,
+            max_chars=max_chars,
+            prefer=prefer,
+            film_ratings=film_ratings,
+        )
+        if picked is not None:
+            return picked
+    return None
 
 
 def reviewed_film_keys(reviewed_films: pd.DataFrame | None) -> set[str]:

@@ -21,8 +21,9 @@ Most liked / Most reviewed panels, search-keyword lines, and inside-bar marks.
 When False, that mark is omitted (same as having no likes / reviews).
 
 show_top_review (default False) draws a bottom-right in-plot panel on listed
-ranking charts (title, truncated review text, date). When True it also lifts
-the full-slate gate so lower-rating charts still emit.
+ranking charts (title, truncated review text, date). Walks drawn ranks until
+a row has a qualifying review (shortest text in that row). When True it also
+lifts the full-slate gate so lower-rating charts still emit.
 
 Optional search keywords are separate: after all chart PNGs, each keyword
 gets a Telegram film list where the substring matches film metadata

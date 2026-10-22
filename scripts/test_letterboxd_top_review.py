@@ -1,4 +1,4 @@
-"""Top review: default off, shortest text, exclude suppresses, force worst."""
+"""Top review: walk-down ranks, rating prefer, exclude suppress, force worst."""
 
 from __future__ import annotations
 
@@ -13,7 +13,12 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 from letterboxd_export import (  # noqa: E402
     TOP_REVIEW_MAX_CHARS,
+    TOP_REVIEW_PREFER_HIGHEST_RATING,
+    TOP_REVIEW_PREFER_LOWEST_RATING,
+    TOP_REVIEW_PREFER_SHORTEST,
+    pick_review_among_keys,
     pick_shortest_review,
+    pick_top_review_walking_ranks,
     truncate_top_review_text,
 )
 from letterboxd_genre_charts import _paired_ranks  # noqa: E402
@@ -50,18 +55,21 @@ def test_pick_shortest_review_wins() -> None:
                 "Year": 2000,
                 "Date": pd.Timestamp("2024-01-02"),
                 "Review": "long review text here",
+                "Rating": 5.0,
             },
             {
                 "Name": "Alpha",
                 "Year": 2000,
                 "Date": pd.Timestamp("2024-01-01"),
                 "Review": "short",
+                "Rating": 2.0,
             },
             {
                 "Name": "Beta",
                 "Year": 2001,
                 "Date": pd.Timestamp("2024-02-01"),
                 "Review": "x",
+                "Rating": 4.0,
             },
         ]
     )
@@ -71,6 +79,118 @@ def test_pick_shortest_review_wins() -> None:
     assert picked["text"] == "short"
     assert picked["date"] == "2024-01-01"
     assert pick_shortest_review(reviews, {"Missing|||1999"}) is None
+
+
+def test_pick_walks_to_first_reviewed_rank() -> None:
+    """Rank 1 has no review → use rank 2's shortest; omit only if none qualify."""
+    reviews = pd.DataFrame(
+        [
+            {
+                "Name": "Second",
+                "Year": 1959,
+                "Date": pd.Timestamp("2024-01-01"),
+                "Review": "from rank two",
+                "Rating": 4.0,
+            },
+            {
+                "Name": "Third",
+                "Year": 1960,
+                "Date": pd.Timestamp("2024-01-02"),
+                "Review": "x",
+                "Rating": 3.0,
+            },
+        ]
+    )
+    ranked = [
+        {"First|||1958"},  # drawn #1 — no reviews
+        {"Second|||1959"},
+        {"Third|||1960"},
+    ]
+    picked = pick_top_review_walking_ranks(reviews, ranked)
+    assert picked is not None
+    assert picked["title"] == "Second (1959)"
+    assert picked["text"] == "from rank two"
+    assert pick_top_review_walking_ranks(reviews, [{"None|||1900"}]) is None
+
+
+def test_higher_rating_prefers_highest_then_shortest() -> None:
+    reviews = pd.DataFrame(
+        [
+            {
+                "Name": "Hi",
+                "Year": 2000,
+                "Date": pd.Timestamp("2024-01-01"),
+                "Review": "long high rating text",
+                "Rating": 5.0,
+            },
+            {
+                "Name": "AlsoHi",
+                "Year": 2001,
+                "Date": pd.Timestamp("2024-01-02"),
+                "Review": "short",
+                "Rating": 5.0,
+            },
+            {
+                "Name": "Low",
+                "Year": 2002,
+                "Date": pd.Timestamp("2024-01-03"),
+                "Review": "y",
+                "Rating": 2.0,
+            },
+        ]
+    )
+    keys = {"Hi|||2000", "AlsoHi|||2001", "Low|||2002"}
+    high = pick_review_among_keys(
+        reviews, keys, prefer=TOP_REVIEW_PREFER_HIGHEST_RATING
+    )
+    assert high is not None
+    # Both at 5.0 → shortest text wins.
+    assert high["title"] == "AlsoHi (2001)"
+    assert high["text"] == "short"
+
+    low = pick_review_among_keys(
+        reviews, keys, prefer=TOP_REVIEW_PREFER_LOWEST_RATING
+    )
+    assert low is not None
+    assert low["title"] == "Low (2002)"
+    assert low["text"] == "y"
+
+    # Count tops keep shortest regardless of rating.
+    short = pick_review_among_keys(
+        reviews, keys, prefer=TOP_REVIEW_PREFER_SHORTEST
+    )
+    assert short is not None
+    assert short["text"] == "y"
+
+
+def test_rating_prefer_uses_film_ratings_fallback() -> None:
+    reviews = pd.DataFrame(
+        [
+            {
+                "Name": "A",
+                "Year": 2000,
+                "Date": pd.Timestamp("2024-01-01"),
+                "Review": "aaa",
+                "Rating": float("nan"),
+            },
+            {
+                "Name": "B",
+                "Year": 2001,
+                "Date": pd.Timestamp("2024-01-02"),
+                "Review": "bb",
+                "Rating": float("nan"),
+            },
+        ]
+    )
+    film_ratings = {"A|||2000": 4.5, "B|||2001": 3.0}
+    picked = pick_review_among_keys(
+        reviews,
+        {"A|||2000", "B|||2001"},
+        prefer=TOP_REVIEW_PREFER_HIGHEST_RATING,
+        film_ratings=film_ratings,
+    )
+    assert picked is not None
+    assert picked["title"] == "A (2000)"
 
 
 def test_exclude_keyword_suppresses_top_review_panel(tmp_path: Path) -> None:
@@ -104,12 +224,14 @@ def test_exclude_keyword_suppresses_top_review_panel(tmp_path: Path) -> None:
                 "Year": 2020,
                 "Date": pd.Timestamp("2024-01-01"),
                 "Review": "drama note",
+                "Rating": 4.0,
             },
             {
                 "Name": "Comedy One",
                 "Year": 2021,
                 "Date": pd.Timestamp("2024-01-03"),
                 "Review": "comedy note",
+                "Rating": 3.0,
             },
         ]
     )
@@ -118,8 +240,6 @@ def test_exclude_keyword_suppresses_top_review_panel(tmp_path: Path) -> None:
     def names_for_row(row):
         return list(row.get("Genre list") or [])
 
-    # Without exclude → panel would pick Drama's review (topmost).
-    # With exclude "Drama" → true top hidden → no panel (chart still draws Comedy).
     ok = chart_diary_entity_stacked(
         diary,
         path,
@@ -134,8 +254,6 @@ def test_exclude_keyword_suppresses_top_review_panel(tmp_path: Path) -> None:
     )
     assert ok is True
     assert path.is_file() and path.stat().st_size > 0
-    # Drawn chart should not contain the review body when exclude hid the top.
-    # Matplotlib PNG is binary — probe via a second draw without exclude for contrast.
     path2 = tmp_path / "genres_count_no_excl.png"
     ok2 = chart_diary_entity_stacked(
         diary,
@@ -149,11 +267,6 @@ def test_exclude_keyword_suppresses_top_review_panel(tmp_path: Path) -> None:
         show_top_review=True,
     )
     assert ok2 is True
-    # With exclude suppressing the panel, file is typically smaller / different;
-    # assert behavioral contract via pick helper + exclude_hid path: raw top Drama
-    # matches keyword, so panel review is None. Re-check by calling pick on Comedy
-    # (visual top after exclude) would yield text — but chart must omit it.
-    # Smoke: both PNGs exist; exclude path does not crash.
     assert path2.stat().st_size > 0
 
 
@@ -189,6 +302,9 @@ def main() -> int:
     test_show_top_review_default_off()
     test_truncate_top_review_text_280()
     test_pick_shortest_review_wins()
+    test_pick_walks_to_first_reviewed_rank()
+    test_higher_rating_prefers_highest_then_shortest()
+    test_rating_prefer_uses_film_ratings_fallback()
     with TemporaryDirectory() as tmp:
         test_exclude_keyword_suppresses_top_review_panel(Path(tmp))
     test_force_worst_emits_lower_rating_when_short()

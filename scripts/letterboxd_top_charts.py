@@ -17,7 +17,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from letterboxd_export import film_name_year_key, pick_shortest_review
+from letterboxd_export import (
+    TOP_REVIEW_PREFER_HIGHEST_RATING,
+    TOP_REVIEW_PREFER_LOWEST_RATING,
+    film_name_year_key,
+    pick_top_review_walking_ranks,
+)
 from letterboxd_options import (
     TOP_N_DEFAULT,
     format_count_avg_label,
@@ -1078,7 +1083,7 @@ def draw_top_review_panel(
 ) -> bool:
     """Bottom-right in-plot panel: film title, truncated review text, date.
 
-    ``review`` is ``{"title", "text", "date"}`` from ``pick_shortest_review``.
+    ``review`` is ``{"title", "text", "date"}`` from the Top review picker.
     Body text is already capped (``TOP_REVIEW_MAX_CHARS``); layout may wrap and
     ellipsize further if the panel height is tight. Returns True when drawn.
     """
@@ -2038,6 +2043,7 @@ def chart_rating_hbar(
     reviewed_films: pd.DataFrame | None = None,
     show_top_review: bool = False,
     top_review: dict | None = None,
+    film_ratings: pd.DataFrame | dict | None = None,
 ) -> bool:
     """Horizontal bars for TMDB avg tops.
 
@@ -2055,8 +2061,11 @@ def chart_rating_hbar(
 
     Category rows may set ``liked_count`` / ``reviewed_count``. Film-title rows
     may set ``liked`` / ``reviewed`` True (bare marks after the visible title).
-    When ``show_top_review``, the topmost visual row's shortest review is drawn
-    bottom-right (or ``top_review`` when precomputed).
+    When ``show_top_review``, walk drawn ranks (highest first) and draw a
+    review from the first row that has one (or ``top_review`` when precomputed).
+    Higher-rating charts prefer the highest review/film Rating; lower-rating
+    charts prefer the lowest; then shortest text. Omit the panel only when no
+    drawn row has a review.
     """
     import matplotlib.patheffects as path_effects
 
@@ -2073,10 +2082,21 @@ def chart_rating_hbar(
     if not usable:
         return False
 
-    # Topmost visual position = rank 1 = first in usable (before reverse for barh).
+    # Drawn rank order = usable order (before reverse for barh): walk until a
+    # row has a qualifying review. Prefer high/low Rating to match the chart.
     panel_review = top_review
     if panel_review is None and show_top_review:
-        panel_review = pick_shortest_review(reviewed_films, usable[0][7])
+        prefer = (
+            TOP_REVIEW_PREFER_LOWEST_RATING
+            if ascending
+            else TOP_REVIEW_PREFER_HIGHEST_RATING
+        )
+        panel_review = pick_top_review_walking_ranks(
+            reviewed_films,
+            (row[7] for row in usable),
+            prefer=prefer,
+            film_ratings=film_ratings,
+        )
 
     # barh draws first row at bottom — reverse so rank 1 sits at top.
     display = list(reversed(list(enumerate(usable, start=1))))
@@ -2443,9 +2463,10 @@ def chart_diary_entity_stacked(
     if not candidates:
         return False
     top = [n for n, _ in candidates[:top_n]]
+    # Drawn rank order (highest count first) before reverse for barh stacking.
+    rank_order_names = list(top)
     # Bottom-to-top: least among top-N at bottom. Topmost visual = last in list
     # = candidates[0] (highest count among kept rows).
-    visual_top_name = top[0]
     top = list(reversed(top))
     dated_years = sorted({y for y, _ in pairs if y != UNDATED_WATCH_YEAR})
     has_undated = any(y == UNDATED_WATCH_YEAR for y, _ in pairs)
@@ -2487,8 +2508,9 @@ def chart_diary_entity_stacked(
     most_reviewed = rank_most_reviewed(reviewed_by_display, top_n)
     panel_review = None
     if show_top_review and not exclude_hid_top:
-        panel_review = pick_shortest_review(
-            reviewed_films, entity_keys.get(visual_top_name) or ()
+        panel_review = pick_top_review_walking_ranks(
+            reviewed_films,
+            (entity_keys.get(n) or () for n in rank_order_names),
         )
     return chart_stacked_count_hbar(
         labels,
@@ -2561,6 +2583,7 @@ def chart_release_years_by_rating(
     allow_short_worst: bool = False,
     reviewed_films: pd.DataFrame | None = None,
     show_top_review: bool = False,
+    film_ratings: pd.DataFrame | dict | None = None,
 ) -> bool:
     """«Годы выхода — выше/ниже оценка» as TMDB-style horizontal avg bars.
 
@@ -2611,6 +2634,7 @@ def chart_release_years_by_rating(
         allow_short_worst=allow_short_worst,
         reviewed_films=reviewed_films,
         show_top_review=show_top_review,
+        film_ratings=film_ratings,
     )
 
 

@@ -179,13 +179,20 @@ export function normalizeLetterboxdOptions(options) {
   const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(src.dateFrom || "")) ? String(src.dateFrom) : "";
   const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(String(src.dateTo || "")) ? String(src.dateTo) : "";
   const windowOk = Boolean(dateFrom && dateTo && dateTo >= dateFrom);
+  const showReviews = src.showReviews == null ? true : Boolean(src.showReviews);
+  // Top review requires reviews on; clearing reviews also clears top review.
+  const showTopReview = showReviews
+    ? src.showTopReview == null
+      ? false
+      : Boolean(src.showTopReview)
+    : false;
   return {
     topN: clampInt(src.topN, LETTERBOXD_TOP_N_MIN, LETTERBOXD_TOP_N_MAX, LETTERBOXD_TOP_N_DEFAULT),
     minRated: clampInt(src.minRated, LETTERBOXD_MIN_RATED_MIN, LETTERBOXD_MIN_RATED_MAX, LETTERBOXD_MIN_RATED_DEFAULT),
     includeRewatchInAverages: src.includeRewatchInAverages == null ? false : Boolean(src.includeRewatchInAverages),
     showLikes: src.showLikes == null ? true : Boolean(src.showLikes),
-    showReviews: src.showReviews == null ? true : Boolean(src.showReviews),
-    showTopReview: src.showTopReview == null ? false : Boolean(src.showTopReview),
+    showReviews,
+    showTopReview,
     includeUSA: src.includeUSA == null ? true : Boolean(src.includeUSA),
     includeEnglish: src.includeEnglish == null ? true : Boolean(src.includeEnglish),
     includeDrama: src.includeDrama == null ? true : Boolean(src.includeDrama),
@@ -363,12 +370,16 @@ export function formatLetterboxdSettingsSummary(options) {
   const undated = opts.dateFrom
     ? `\nNo diary date: ${opts.includeUndated ? "yes" : "no"}.`
     : "";
+  // Top review on → only `Top review: yes.` (implies reviews on).
+  // Top review off → only `Reviews: yes/no.` (never both lines).
+  const reviewsOrTop = opts.showTopReview
+    ? "Top review: yes. "
+    : `Reviews: ${opts.showReviews ? "yes" : "no"}. `;
   return (
     `Tops: ${opts.topN}. Threshold: ${opts.minRated}. ` +
     `Rewatches in averages: ${opts.includeRewatchInAverages ? "yes" : "no"}. ` +
     `Likes: ${opts.showLikes ? "yes" : "no"}. ` +
-    `Reviews: ${opts.showReviews ? "yes" : "no"}. ` +
-    `Top review: ${opts.showTopReview ? "yes" : "no"}. ` +
+    reviewsOrTop +
     `Exclude: ${formatExcludeSummaryList(opts)}. ` +
     `Search: ${formatKeywordSummaryList(opts.searchKeywords)}. ` +
     `Period: ${period}.` +
@@ -377,13 +388,17 @@ export function formatLetterboxdSettingsSummary(options) {
   );
 }
 
-// Current shape: Likes/Reviews/Top review after Rewatches; flags + keywords under Exclude.
-const SETTINGS_SUMMARY_RE =
-  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*Top review:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
+// Current when Top review is on: Likes + Top review: yes (Reviews omitted; implies on).
+const SETTINGS_SUMMARY_TOP_REVIEW_ON_RE =
+  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
 
-// Pre-Top-review: Likes/Reviews present, no Top review: field (default off).
-const SETTINGS_SUMMARY_PRE_TOP_REVIEW_RE =
+// Current when Top review is off: Likes + Reviews only (no Top review line).
+const SETTINGS_SUMMARY_RE =
   /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
+
+// Legacy dual lines: Reviews + Top review both present (PR #49 emit shape).
+const SETTINGS_SUMMARY_LEGACY_BOTH_RE =
+  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*Top review:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
 
 // Pre-Likes/Reviews: same Exclude shape, no Likes:/Reviews: fields (default both yes; Top review off).
 const SETTINGS_SUMMARY_PRE_LIKES_RE =
@@ -468,6 +483,67 @@ export function parseLetterboxdSettingsSummary(text) {
   const src = String(text || "");
   const yesNo = (value) => String(value).toLowerCase() === "yes";
 
+  // Legacy dual lines (Reviews + Top review) before single-field shapes.
+  const legacyBoth = src.match(SETTINGS_SUMMARY_LEGACY_BOTH_RE);
+  if (legacyBoth) {
+    const topN = Number(legacyBoth[1]);
+    const minRated = Number(legacyBoth[2]);
+    if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
+    if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
+    if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
+    const period = parsePeriodAndUndated(src, legacyBoth, 9, yesNo);
+    if (!period) return null;
+    const exclude = parseExcludeSummaryList(legacyBoth[7]);
+    const reviewsOn = yesNo(legacyBoth[5]);
+    // Reviews: no ⇒ both off; Top review: yes ⇒ reviews on + top review on.
+    const topOn = reviewsOn && yesNo(legacyBoth[6]);
+    return normalizeLetterboxdOptions({
+      topN,
+      minRated,
+      includeRewatchInAverages: yesNo(legacyBoth[3]),
+      showLikes: yesNo(legacyBoth[4]),
+      showReviews: reviewsOn || topOn,
+      showTopReview: topOn,
+      includeUSA: exclude.includeUSA,
+      includeEnglish: exclude.includeEnglish,
+      includeDrama: exclude.includeDrama,
+      includeComedy: exclude.includeComedy,
+      excludeKeywords: exclude.excludeKeywords,
+      searchKeywords: parseQuotedKeywordList(legacyBoth[8]),
+      ...period,
+    });
+  }
+
+  // Top review: yes alone ⇒ show_reviews=true and top_review=true.
+  // Groups: 1 topN 2 minRated 3 rewatch 4 likes 5 exclude 6 search 7 period
+  const topReviewOn = src.match(SETTINGS_SUMMARY_TOP_REVIEW_ON_RE);
+  if (topReviewOn) {
+    const topN = Number(topReviewOn[1]);
+    const minRated = Number(topReviewOn[2]);
+    if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
+    if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
+    if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
+    const period = parsePeriodAndUndated(src, topReviewOn, 7, yesNo);
+    if (!period) return null;
+    const exclude = parseExcludeSummaryList(topReviewOn[5]);
+    return normalizeLetterboxdOptions({
+      topN,
+      minRated,
+      includeRewatchInAverages: yesNo(topReviewOn[3]),
+      showLikes: yesNo(topReviewOn[4]),
+      showReviews: true,
+      showTopReview: true,
+      includeUSA: exclude.includeUSA,
+      includeEnglish: exclude.includeEnglish,
+      includeDrama: exclude.includeDrama,
+      includeComedy: exclude.includeComedy,
+      excludeKeywords: exclude.excludeKeywords,
+      searchKeywords: parseQuotedKeywordList(topReviewOn[6]),
+      ...period,
+    });
+  }
+
+  // Reviews: yes/no only (Top review off). Reviews: no ⇒ top review stays off.
   const current = src.match(SETTINGS_SUMMARY_RE);
   if (current) {
     const topN = Number(current[1]);
@@ -475,49 +551,23 @@ export function parseLetterboxdSettingsSummary(text) {
     if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
     if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
     if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
-    const period = parsePeriodAndUndated(src, current, 9, yesNo);
+    const period = parsePeriodAndUndated(src, current, 8, yesNo);
     if (!period) return null;
-    const exclude = parseExcludeSummaryList(current[7]);
+    const exclude = parseExcludeSummaryList(current[6]);
+    const reviewsOn = yesNo(current[5]);
     return normalizeLetterboxdOptions({
       topN,
       minRated,
       includeRewatchInAverages: yesNo(current[3]),
       showLikes: yesNo(current[4]),
-      showReviews: yesNo(current[5]),
-      showTopReview: yesNo(current[6]),
-      includeUSA: exclude.includeUSA,
-      includeEnglish: exclude.includeEnglish,
-      includeDrama: exclude.includeDrama,
-      includeComedy: exclude.includeComedy,
-      excludeKeywords: exclude.excludeKeywords,
-      searchKeywords: parseQuotedKeywordList(current[8]),
-      ...period,
-    });
-  }
-
-  const preTopReview = src.match(SETTINGS_SUMMARY_PRE_TOP_REVIEW_RE);
-  if (preTopReview) {
-    const topN = Number(preTopReview[1]);
-    const minRated = Number(preTopReview[2]);
-    if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
-    if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
-    if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
-    const period = parsePeriodAndUndated(src, preTopReview, 8, yesNo);
-    if (!period) return null;
-    const exclude = parseExcludeSummaryList(preTopReview[6]);
-    return normalizeLetterboxdOptions({
-      topN,
-      minRated,
-      includeRewatchInAverages: yesNo(preTopReview[3]),
-      showLikes: yesNo(preTopReview[4]),
-      showReviews: yesNo(preTopReview[5]),
+      showReviews: reviewsOn,
       showTopReview: false,
       includeUSA: exclude.includeUSA,
       includeEnglish: exclude.includeEnglish,
       includeDrama: exclude.includeDrama,
       includeComedy: exclude.includeComedy,
       excludeKeywords: exclude.excludeKeywords,
-      searchKeywords: parseQuotedKeywordList(preTopReview[7]),
+      searchKeywords: parseQuotedKeywordList(current[7]),
       ...period,
     });
   }
@@ -1015,7 +1065,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Show top review?",
-        "When yes, ranking charts get a bottom-right panel with the shortest review for the topmost row (title, text up to 280 characters, date). Also unlocks lower-rating charts even when there are fewer qualifying rows than the top size. Default is no.",
+        "When yes, ranking charts get a bottom-right panel from the highest-ranked row that has a review (title, text up to 280 characters, date). Count tops use the shortest review; higher/lower rating charts prefer the highest/lowest rated review, then shortest. Also unlocks lower-rating charts even when there are fewer qualifying rows than the top size. Default is no.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:toprev", "no"),
     };
@@ -1304,11 +1354,19 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
   if (step === "show_reviews") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
     if (value == null) return retry(state, "Need yes or no. The report has not started.");
-    return go({ ...state, showReviews: value }, "show_top_review", now);
+    // Top review only when Reviews is on; otherwise force off and skip the question.
+    if (!value) {
+      return go({ ...state, showReviews: false, showTopReview: false }, "exclusions", now);
+    }
+    return go({ ...state, showReviews: true }, "show_top_review", now);
   }
   if (step === "show_top_review") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
     if (value == null) return retry(state, "Need yes or no. The report has not started.");
+    // Reviews must stay on for Top review; a stray answer with reviews off clears it.
+    if (state.showReviews === false) {
+      return go({ ...state, showTopReview: false }, "exclusions", now);
+    }
     return go({ ...state, showTopReview: value }, "exclusions", now);
   }
   if (step === "exclusions") {

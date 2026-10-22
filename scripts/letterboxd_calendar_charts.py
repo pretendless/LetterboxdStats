@@ -42,7 +42,7 @@ from letterboxd_export import (  # noqa: E402
     load_liked_films,
     load_reviewed_films,
     most_reviewed_by_row_count,
-    pick_shortest_review,
+    pick_top_review_walking_ranks,
     ratings_for_catalog,
     review_counts_by_date_grain,
     reviewed_film_keys,
@@ -1866,8 +1866,8 @@ def chart_top_rewatches(
     kept_rows = eligible[:limit]
     if not kept_rows:
         return False
-    # Topmost visual = first eligible (highest diary count).
-    visual_top_key = kept_rows[0][0]
+    # Drawn rank order (highest diary count first) before reverse for barh.
+    rank_order_keys = [str(key_id) for key_id, _, _ in kept_rows]
     # No Most liked on this chart. Most reviewed = library-wide, count > 1 only.
     most_reviewed = most_reviewed_by_row_count(
         reviewed_films, limit, min_reviews=2
@@ -1978,10 +1978,10 @@ def chart_top_rewatches(
             clip_on=False,
         )
     panel_review = None
-    if show_top_review and not exclude_hid_top and visual_top_key is not None:
-        panel_review = pick_shortest_review(
+    if show_top_review and not exclude_hid_top:
+        panel_review = pick_top_review_walking_ranks(
             top_review_films if top_review_films is not None else reviewed_films,
-            {str(visual_top_key)},
+            ({key} for key in rank_order_keys),
         )
     if panel_review:
         draw_top_review_panel(fig, ax, panel_review)
