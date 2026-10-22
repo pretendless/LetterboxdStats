@@ -290,6 +290,44 @@ def test_genre_spectrum_color_map_stable_across_subsets():
     assert genre_spectrum_color_map([]) == {}
 
 
+def test_inset_panel_uses_undated_charcoal_gradient():
+    """Inset panels: same No date charcoal map, logo-native top→bottom + border."""
+    from letterboxd_palette import (
+        UNDATED_LOGO_BOTTOM_HEX,
+        UNDATED_LOGO_TOP_HEX,
+        paint_inset_panel_logo_background,
+        undated_charcoal_colormap,
+    )
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+
+    cmap = undated_charcoal_colormap()
+    assert mcolors.to_hex(cmap(0.0)).lower() == UNDATED_LOGO_TOP_HEX.lower()
+    assert mcolors.to_hex(cmap(1.0)).lower() == UNDATED_LOGO_BOTTOM_HEX.lower()
+
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.bar([0, 1], [1, 2])
+    before_images = len(ax.images)
+    before_fancy = sum(
+        1 for p in ax.patches if p.__class__.__name__ == "FancyBboxPatch"
+    )
+    border = paint_inset_panel_logo_background(
+        ax, 0.1, 0.4, 0.4, 0.4, transform=ax.transAxes, zorder=20
+    )
+    assert border is not None
+    assert border.get_facecolor()[3] == 0.0  # edge-only chrome
+    assert len(ax.images) == before_images + 1
+    # Panel image samples the undated charcoal map.
+    assert ax.images[-1].cmap is cmap
+    assert (
+        sum(1 for p in ax.patches if p.__class__.__name__ == "FancyBboxPatch")
+        == before_fancy + 2
+    )  # clip + border
+    # Gradient uses imshow, not Rectangle strips (bar-height tests count Rectangles).
+    assert sum(1 for p in ax.patches if p.__class__.__name__ == "Rectangle") == 2
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     test_logo_anchor_constants_are_the_measured_bytes()
     test_oklab_segments_hit_anchors_and_deep_ends()
@@ -297,4 +335,5 @@ if __name__ == "__main__":
     test_discrete_ranks_use_logo_knots_then_even_midpoints()
     test_rating_scale_uses_full_range_and_same_anchors()
     test_genre_spectrum_color_map_stable_across_subsets()
+    test_inset_panel_uses_undated_charcoal_gradient()
     print("ok")

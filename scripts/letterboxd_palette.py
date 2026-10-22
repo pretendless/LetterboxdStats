@@ -22,6 +22,11 @@ logo. See ``categorical_positions``. Watch-year stacks paint **No date**
 that ordered series. Vertical columns keep the logo axis (top→bottom);
 horizontal bars rotate it 90° (left→right). Legend swatches use the
 logo-native vertical gradient.
+
+In-plot inset panels (Top review, Most reviewed years, genre swatch legends)
+fill with the same logo-background charcoal gradient as **No date** bars
+(``undated_charcoal_colormap``: ``#2C3440`` → ``#14181C``, logo-native
+top→bottom); border chrome matches the previous flat panels.
 """
 
 from __future__ import annotations
@@ -358,6 +363,104 @@ def undated_charcoal_colormap():
         N=256,
     )
     return _UNDATED_CMAP
+
+
+# In-plot inset panels (Top review / Most reviewed years / genre legends).
+# Same charcoal map as No date bars; logo-native top→bottom orientation.
+INSET_PANEL_BOXSTYLE = "round,pad=0.004,rounding_size=0.01"
+INSET_PANEL_EDGE_ALPHA = 0.92
+INSET_PANEL_LINEWIDTH = 0.8
+
+
+def paint_inset_panel_logo_background(
+    ax,
+    x0: float,
+    y0: float,
+    width: float,
+    height: float,
+    *,
+    transform=None,
+    zorder: float = 20,
+    edgecolor: str | None = None,
+    linewidth: float = INSET_PANEL_LINEWIDTH,
+):
+    """Rounded inset panel: logo charcoal gradient (No date map) + border.
+
+    Fill uses ``undated_charcoal_colormap`` (``UNDATED_LOGO_TOP_HEX`` →
+    ``UNDATED_LOGO_BOTTOM_HEX``), logo-native top→bottom — same family as
+    undated bar / legend swatches. Used by Top review, Most reviewed years,
+    and genre swatch legend panels. Coordinates are in ``transform`` space
+    (typically ``ax.transAxes``). Returns the border ``FancyBboxPatch``.
+    """
+    import numpy as np
+    from matplotlib.patches import FancyBboxPatch
+
+    if transform is None:
+        transform = ax.transAxes
+    if edgecolor is None:
+        edgecolor = FG
+    w = float(width)
+    h = float(height)
+    if w <= 0 or h <= 0:
+        return None
+
+    boxstyle = INSET_PANEL_BOXSTYLE
+    # Invisible clip path so the gradient respects rounded corners.
+    clip = FancyBboxPatch(
+        (float(x0), float(y0)),
+        w,
+        h,
+        boxstyle=boxstyle,
+        transform=transform,
+        facecolor="none",
+        edgecolor="none",
+        linewidth=0,
+        zorder=zorder,
+        clip_on=False,
+    )
+    ax.add_patch(clip)
+
+    # imshow updates dataLim / viewLim even when drawn in axes coords —
+    # snapshot and restore so bars and ylim stay put.
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    aspect = ax.get_aspect()
+    adjustable = ax.get_adjustable()
+
+    cmap = undated_charcoal_colormap()
+    # Column vector: origin upper → row 0 at top = logo top charcoal.
+    grad = np.linspace(0.0, 1.0, 256).reshape(-1, 1)
+    im = ax.imshow(
+        grad,
+        extent=(float(x0), float(x0) + w, float(y0), float(y0) + h),
+        origin="upper",
+        aspect="auto",
+        cmap=cmap,
+        interpolation="bilinear",
+        zorder=zorder,
+        clip_on=False,
+    )
+    im.set_transform(transform)
+    im.set_clip_path(clip.get_path(), clip.get_transform())
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.set_aspect(aspect, adjustable=adjustable)
+
+    border = FancyBboxPatch(
+        (float(x0), float(y0)),
+        w,
+        h,
+        boxstyle=boxstyle,
+        transform=transform,
+        facecolor="none",
+        edgecolor=edgecolor,
+        linewidth=linewidth,
+        alpha=INSET_PANEL_EDGE_ALPHA,
+        zorder=zorder + 1,
+        clip_on=True,
+    )
+    ax.add_patch(border)
+    return border
 
 
 def undated_horizontal_colormap():

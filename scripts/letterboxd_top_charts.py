@@ -21,6 +21,7 @@ from letterboxd_export import (
     TOP_REVIEW_PREFER_HIGHEST_RATING,
     TOP_REVIEW_PREFER_LOWEST_RATING,
     film_name_year_key,
+    format_top_review_rating_stars,
     pick_top_review_walking_ranks,
 )
 from letterboxd_options import (
@@ -38,6 +39,7 @@ from letterboxd_palette import (
     UNDATED_WATCH_YEAR,
     categorical_colors,
     is_undated_watch_year,
+    paint_inset_panel_logo_background,
     paint_undated_hbar_segments,
     rating_color,
     rating_colormap,
@@ -993,6 +995,50 @@ def seat_inset_panel_top_left(
     return x0, y0, x1, y1
 
 
+def seat_inset_panel_top_right(
+    fig,
+    ax,
+    *,
+    panel_w_px: float,
+    panel_h_px: float,
+    fontsize: float = 7,
+    max_bumps: int = 4,
+) -> tuple[float, float, float, float]:
+    """Top-right inset seat aligned with the tallest bar top; raise if needed.
+
+    Same raise-on-overlap path as ``seat_inset_panel_top_left``, but on the
+    right edge (lower-rating Top review panels).
+    """
+    x0 = y0 = x1 = y1 = 0.0
+    for attempt in range(max(0, int(max_bumps)) + 1):
+        x0, y0, x1, y1, clear = seat_inset_panel_in_axes(
+            fig,
+            ax,
+            panel_w_px=panel_w_px,
+            panel_h_px=panel_h_px,
+            fontsize=fontsize,
+            prefer_left=False,
+            vertical="tallest_bar_top",
+        )
+        if clear:
+            return x0, y0, x1, y1
+        if attempt >= max_bumps:
+            break
+        y_lo, y_hi = ax.get_ylim()
+        span = float(y_hi) - float(y_lo)
+        if span <= 0:
+            break
+        ax.set_ylim(y_lo, float(y_hi) + span * 0.04)
+        try:
+            fig.subplots_adjust(
+                top=min(0.98, float(fig.subplotpars.top) + 0.012)
+            )
+        except Exception:
+            pass
+        fig.canvas.draw()
+    return x0, y0, x1, y1
+
+
 def seat_inset_panel_bottom_right(
     fig,
     ax,
@@ -1076,30 +1122,39 @@ def draw_top_review_panel(
     ax,
     review: dict | None,
     *,
+    corner: str = "bottom_right",
     fontsize: float = 7,
     title_fontsize: float = 8,
     date_fontsize: float = 6.5,
     max_body_lines: int = 6,
 ) -> bool:
-    """Bottom-right in-plot panel: film title, truncated review text, date.
+    """In-plot Top review panel: title (+♥ + stars), truncated text, date.
 
-    ``review`` is ``{"title", "text", "date", "liked"?}`` from the Top review
-    picker. When ``liked`` is True, append ♥ after the title (same mark as
-    charts). Body text is already capped (``TOP_REVIEW_MAX_CHARS``); layout may
-    wrap and ellipsize further if the panel height is tight. Returns True when
-    drawn.
+    ``review`` is ``{"title", "text", "date", "liked"?, "rating"?}`` from the
+    Top review picker. When ``liked`` is True, append ♥ after the title (same
+    mark as charts). When ``rating`` is set, append ``★…½`` after the title
+    (and ♥). ``corner`` is ``bottom_right`` (watches / higher / count) or
+    ``top_right`` (lower-rating charts). Body text is already capped
+    (``TOP_REVIEW_MAX_CHARS``); layout may wrap and ellipsize further if the
+    panel height is tight. Returns True when drawn. Panel fill is the logo
+    charcoal gradient (same as No date bars), top→bottom.
     """
-    from matplotlib.patches import FancyBboxPatch
-
     if not review or not isinstance(review, dict):
         return False
-    title = film_title_with_liked_heart(
-        str(review.get("title") or "").strip(),
-        liked=bool(review.get("liked")),
-    )
+    base_title = str(review.get("title") or "").strip()
+    liked = bool(review.get("liked"))
+    stars = format_top_review_rating_stars(review.get("rating"))
+
+    def _compose_title(name: str) -> str:
+        text = film_title_with_liked_heart(name, liked=liked)
+        if stars:
+            text = f"{text} {stars}"
+        return text
+
+    title = _compose_title(base_title)
     body = str(review.get("text") or "").strip()
     date_s = str(review.get("date") or "").strip()
-    if not title or not body:
+    if not base_title or not body:
         return False
 
     fig.canvas.draw()
@@ -1150,11 +1205,12 @@ def draw_top_review_panel(
     title_w, title_h = _measure(title, fs=title_fontsize, weight="bold")
     shown_title = title
     if title_w > inner_w:
-        lo, hi = 1, len(title)
-        best = title[:1] + "…"
+        # Truncate the film name only; keep ♥ and star suffix intact.
+        lo, hi = 1, len(base_title)
+        best = _compose_title(base_title[:1] + "…")
         while lo <= hi:
             mid = (lo + hi) // 2
-            candidate = title[:mid].rstrip() + "…"
+            candidate = _compose_title(base_title[:mid].rstrip() + "…")
             w, _ = _measure(candidate, fs=title_fontsize, weight="bold")
             if w <= inner_w:
                 best = candidate
@@ -1189,30 +1245,35 @@ def draw_top_review_panel(
         + (date_gap_px + date_h if date_s else 0.0)
     )
 
-    x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_bottom_right(
-        fig,
-        ax,
-        panel_w_px=panel_w_px,
-        panel_h_px=panel_h_px,
-        fontsize=fontsize,
-    )
+    seat_corner = str(corner or "bottom_right").strip().lower()
+    if seat_corner == "top_right":
+        x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_top_right(
+            fig,
+            ax,
+            panel_w_px=panel_w_px,
+            panel_h_px=panel_h_px,
+            fontsize=fontsize,
+        )
+    else:
+        x0_disp, y0_disp, x1_disp, y1_disp = seat_inset_panel_bottom_right(
+            fig,
+            ax,
+            panel_w_px=panel_w_px,
+            panel_h_px=panel_h_px,
+            fontsize=fontsize,
+        )
 
     x0, y0 = inv.transform((x0_disp, y0_disp))
     x1, y1 = inv.transform((x1_disp, y1_disp))
-    box = FancyBboxPatch(
-        (float(x0), float(y0)),
+    paint_inset_panel_logo_background(
+        ax,
+        float(x0),
+        float(y0),
         float(x1 - x0),
         float(y1 - y0),
-        boxstyle="round,pad=0.004,rounding_size=0.01",
         transform=ax.transAxes,
-        facecolor="#14181C",
-        edgecolor=FG,
-        linewidth=0.8,
-        alpha=0.92,
         zorder=20,
-        clip_on=True,
     )
-    ax.add_patch(box)
 
     cursor_y = y1_disp - pad_y_px
     tx, ty = inv.transform((x0_disp + pad_x_px, cursor_y))
@@ -1282,10 +1343,9 @@ def draw_most_reviewed_years_panel(
     Five numbered rows per column, then wrap right; a short final remainder
     (1–3) rebalances the last two columns (see
     ``most_reviewed_years_column_sizes``). Lines use ``≡ N`` (symbol then
-    count). Returns True when drawn; False when omitted.
+    count). Panel fill is the logo charcoal gradient (same as No date bars).
+    Returns True when drawn; False when omitted.
     """
-    from matplotlib.patches import FancyBboxPatch
-
     rows = _positive_rank_rows(ranked)
     if not rows or not REVIEW_NOTE:
         return False
@@ -1387,20 +1447,15 @@ def draw_most_reviewed_years_panel(
 
     x0, y0 = inv.transform((x0_disp, y0_disp))
     x1, y1 = inv.transform((x1_disp, y1_disp))
-    box = FancyBboxPatch(
-        (float(x0), float(y0)),
+    paint_inset_panel_logo_background(
+        ax,
+        float(x0),
+        float(y0),
         float(x1 - x0),
         float(y1 - y0),
-        boxstyle="round,pad=0.004,rounding_size=0.01",
         transform=ax.transAxes,
-        facecolor="#14181C",
-        edgecolor=FG,
-        linewidth=0.8,
-        alpha=0.92,
         zorder=20,
-        clip_on=True,
     )
-    ax.add_patch(box)
 
     title_x, title_y = inv.transform((x0_disp + pad_x_px, y1_disp - pad_y_px))
     ax.text(
@@ -1460,9 +1515,10 @@ def draw_swatch_legend_panel(
     column, wrap right, rebalance a short final remainder, seat **top-left**
     with the panel bottom at the tallest bar top and raise only to clear
     bars/tips. ``entries`` is ``[(label, color), ...]`` in legend order
-    (red→violet for genre stacks).
+    (red→violet for genre stacks). Panel fill is the logo charcoal gradient
+    (same as No date bars).
     """
-    from matplotlib.patches import FancyBboxPatch, Rectangle
+    from matplotlib.patches import Rectangle
 
     items = [(str(name), color) for name, color in (entries or []) if str(name or "")]
     if not items:
@@ -1561,20 +1617,15 @@ def draw_swatch_legend_panel(
 
     x0, y0 = inv.transform((x0_disp, y0_disp))
     x1, y1 = inv.transform((x1_disp, y1_disp))
-    box = FancyBboxPatch(
-        (float(x0), float(y0)),
+    paint_inset_panel_logo_background(
+        ax,
+        float(x0),
+        float(y0),
         float(x1 - x0),
         float(y1 - y0),
-        boxstyle="round,pad=0.004,rounding_size=0.01",
         transform=ax.transAxes,
-        facecolor="#14181C",
-        edgecolor=FG,
-        linewidth=0.8,
-        alpha=0.92,
         zorder=20,
-        clip_on=True,
     )
-    ax.add_patch(box)
 
     title_x, title_y = inv.transform((x0_disp + pad_x_px, y1_disp - pad_y_px))
     ax.text(
@@ -2366,7 +2417,13 @@ def chart_rating_hbar(
             clip_on=False,
         )
     if panel_review:
-        draw_top_review_panel(fig, ax, panel_review)
+        # Lower-rating (ascending) → top-right; higher/other → bottom-right.
+        draw_top_review_panel(
+            fig,
+            ax,
+            panel_review,
+            corner="top_right" if ascending else "bottom_right",
+        )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
     return True

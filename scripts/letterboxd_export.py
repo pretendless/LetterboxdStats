@@ -247,6 +247,8 @@ def liked_film_keys(liked_films: pd.DataFrame | None) -> set[str]:
 # X/Twitter post limit — Top review panel body (review text only).
 TOP_REVIEW_MAX_CHARS = 280
 TOP_REVIEW_ELLIPSIS = "..."
+TOP_REVIEW_STAR = "★"
+TOP_REVIEW_HALF_STAR = "½"  # U+00BD
 
 
 def truncate_top_review_text(
@@ -261,6 +263,34 @@ def truncate_top_review_text(
         return raw
     cut = raw[:limit].rstrip()
     return f"{cut}{TOP_REVIEW_ELLIPSIS}"
+
+
+def format_top_review_rating_stars(rating) -> str:
+    """Render a Letterboxd-scale rating as ★ / ½ for the Top review panel.
+
+    Integer part → that many ``★``; any fractional part → trailing ``½``
+    (e.g. 3.5 → ``★★★½``, 4 → ``★★★★``, 2.5 → ``★★½``). Unrated / non-positive
+    / non-finite values return ``""`` (omit the star string entirely).
+    """
+    if rating is None:
+        return ""
+    try:
+        if isinstance(rating, (float, int)) and pd.isna(rating):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    try:
+        value = float(rating)
+    except (TypeError, ValueError):
+        return ""
+    if not np.isfinite(value) or value <= 0:
+        return ""
+    whole = int(value)
+    frac = value - whole
+    stars = TOP_REVIEW_STAR * max(0, whole)
+    if frac > 1e-9:
+        stars += TOP_REVIEW_HALF_STAR
+    return stars
 
 
 # Top-review among-row preference after walk-down finds a reviewed rank.
@@ -390,10 +420,11 @@ def pick_review_among_keys(
     When every candidate is unrated, liked films (``liked_keys``) sort before
     unliked ones, then latest Date, then Name/Year.
 
-    Returns ``{"title", "text", "date", "liked"}`` or None. ``text`` is truncated
-    to ``max_chars`` with ellipsis; ``title`` is ``Name (Year)``; ``date`` is the
-    review Date as YYYY-MM-DD when available; ``liked`` is True when the picked
-    film key is in ``liked_keys`` (likes/films.csv).
+    Returns ``{"title", "text", "date", "liked", "rating"}`` or None. ``text`` is
+    truncated to ``max_chars`` with ellipsis; ``title`` is ``Name (Year)``; ``date``
+    is the review Date as YYYY-MM-DD when available; ``liked`` is True when the
+    picked film key is in ``liked_keys`` (likes/films.csv); ``rating`` is the
+    effective pick rating (float) or ``None`` when unrated (panel omits stars).
     """
     if reviewed_films is None or getattr(reviewed_films, "empty", True):
         return None
@@ -414,16 +445,18 @@ def pick_review_among_keys(
     work["_len"] = work["_text"].str.len()
     liked = set(str(k) for k in (liked_keys or ()) if k is not None and str(k))
 
+    # Effective rating for sort + panel stars (review row, else film lookup).
+    lookup = _film_rating_lookup(film_ratings)
+    if "Rating" in work.columns:
+        row_rating = pd.to_numeric(work["Rating"], errors="coerce")
+    else:
+        row_rating = pd.Series(np.nan, index=work.index)
+    fallback = work["_film_key"].map(lambda k: lookup.get(str(k), np.nan))
+    work["_rating"] = row_rating.where(row_rating.notna() & (row_rating > 0), fallback)
+    work["_rating"] = pd.to_numeric(work["_rating"], errors="coerce")
+
     mode = str(prefer or TOP_REVIEW_PREFER_SHORTEST).strip().lower()
     if mode in (TOP_REVIEW_PREFER_HIGHEST_RATING, TOP_REVIEW_PREFER_LOWEST_RATING):
-        lookup = _film_rating_lookup(film_ratings)
-        if "Rating" in work.columns:
-            row_rating = pd.to_numeric(work["Rating"], errors="coerce")
-        else:
-            row_rating = pd.Series(np.nan, index=work.index)
-        fallback = work["_film_key"].map(lambda k: lookup.get(str(k), np.nan))
-        work["_rating"] = row_rating.where(row_rating.notna() & (row_rating > 0), fallback)
-        work["_rating"] = pd.to_numeric(work["_rating"], errors="coerce")
         rating_asc = mode == TOP_REVIEW_PREFER_LOWEST_RATING
         # Rated first (na last). When all unrated, liked films before unliked.
         # Then latest Date; then stable Name/Year.
@@ -456,11 +489,21 @@ def pick_review_among_keys(
             date_str = pd.Timestamp(date_val).strftime("%Y-%m-%d")
         except (TypeError, ValueError):
             date_str = ""
+    rating_out = None
+    rating_val = row.get("_rating")
+    if pd.notna(rating_val):
+        try:
+            rating_f = float(rating_val)
+        except (TypeError, ValueError):
+            rating_f = None
+        if rating_f is not None and rating_f > 0 and np.isfinite(rating_f):
+            rating_out = rating_f
     return {
         "title": title,
         "text": truncate_top_review_text(str(row["_text"]), max_chars=max_chars),
         "date": date_str,
         "liked": film_key in liked,
+        "rating": rating_out,
     }
 
 

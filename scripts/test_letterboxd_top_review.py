@@ -16,6 +16,7 @@ from letterboxd_export import (  # noqa: E402
     TOP_REVIEW_PREFER_HIGHEST_RATING,
     TOP_REVIEW_PREFER_LOWEST_RATING,
     TOP_REVIEW_PREFER_SHORTEST,
+    format_top_review_rating_stars,
     pick_review_among_keys,
     pick_shortest_review,
     pick_top_review_walking_ranks,
@@ -27,6 +28,7 @@ from letterboxd_ratings import MIN_RATED_FOR_TOP  # noqa: E402
 from letterboxd_top_charts import (  # noqa: E402
     _prepare_rating_rows,
     chart_diary_entity_stacked,
+    chart_rating_hbar,
 )
 
 
@@ -45,6 +47,49 @@ def test_truncate_top_review_text_280() -> None:
     out = truncate_top_review_text(long)
     assert out.endswith("...")
     assert len(out) == 280 + 3
+
+
+def test_format_top_review_rating_stars() -> None:
+    assert format_top_review_rating_stars(3.5) == "★★★½"
+    assert format_top_review_rating_stars(4) == "★★★★"
+    assert format_top_review_rating_stars(4.0) == "★★★★"
+    assert format_top_review_rating_stars(2.5) == "★★½"
+    assert format_top_review_rating_stars(0.5) == "½"
+    assert format_top_review_rating_stars(5) == "★★★★★"
+    assert format_top_review_rating_stars(None) == ""
+    assert format_top_review_rating_stars(float("nan")) == ""
+    assert format_top_review_rating_stars(0) == ""
+    assert format_top_review_rating_stars(-1) == ""
+
+
+def test_pick_includes_rating_for_stars() -> None:
+    reviews = pd.DataFrame(
+        [
+            {
+                "Name": "Starry",
+                "Year": 2000,
+                "Date": pd.Timestamp("2024-01-01"),
+                "Review": "note",
+                "Rating": 3.5,
+            },
+            {
+                "Name": "Blank",
+                "Year": 2001,
+                "Date": pd.Timestamp("2024-01-02"),
+                "Review": "unrated note",
+                "Rating": float("nan"),
+            },
+        ]
+    )
+    rated = pick_review_among_keys(reviews, {"Starry|||2000"})
+    assert rated is not None
+    assert rated["rating"] == 3.5
+    assert format_top_review_rating_stars(rated["rating"]) == "★★★½"
+
+    unrated = pick_review_among_keys(reviews, {"Blank|||2001"})
+    assert unrated is not None
+    assert unrated["rating"] is None
+    assert format_top_review_rating_stars(unrated["rating"]) == ""
 
 
 def test_pick_shortest_review_wins() -> None:
@@ -427,6 +472,42 @@ def test_exclude_keyword_suppresses_top_review_panel(tmp_path: Path) -> None:
     assert path2.stat().st_size > 0
 
 
+def test_lower_rating_chart_draws_top_review_panel(tmp_path: Path) -> None:
+    """Ascending (lower) rating hbar still emits PNG with Top review on."""
+    rows = [
+        {
+            "name": f"Film{i}",
+            "avg": 1.0 + i * 0.2,
+            "rated": 4,
+            "film_keys": (f"Film{i}|||200{i}",),
+        }
+        for i in range(5)
+    ]
+    reviews = pd.DataFrame(
+        [
+            {
+                "Name": "Film0",
+                "Year": 2000,
+                "Date": pd.Timestamp("2024-01-01"),
+                "Review": "lowest note",
+                "Rating": 1.5,
+            }
+        ]
+    )
+    path = tmp_path / "lower.png"
+    ok = chart_rating_hbar(
+        rows,
+        path,
+        title="Studios — lower rating",
+        ascending=True,
+        allow_short_worst=True,
+        reviewed_films=reviews,
+        show_top_review=True,
+    )
+    assert ok is True
+    assert path.is_file() and path.stat().st_size > 0
+
+
 def test_force_worst_emits_lower_rating_when_short() -> None:
     stats = {
         f"E{i}": {"count": 10, "rating_sum": float(10 + i), "rated": 4 + (i % 2)}
@@ -458,6 +539,8 @@ def main() -> int:
 
     test_show_top_review_default_on()
     test_truncate_top_review_text_280()
+    test_format_top_review_rating_stars()
+    test_pick_includes_rating_for_stars()
     test_pick_shortest_review_wins()
     test_pick_walks_to_first_reviewed_rank()
     test_count_tops_prefer_highest_rating_not_shortest()
@@ -468,6 +551,7 @@ def main() -> int:
     test_rating_prefer_uses_film_ratings_fallback()
     with TemporaryDirectory() as tmp:
         test_exclude_keyword_suppresses_top_review_panel(Path(tmp))
+        test_lower_rating_chart_draws_top_review_panel(Path(tmp))
     test_force_worst_emits_lower_rating_when_short()
     print("test_letterboxd_top_review: ok")
     return 0
