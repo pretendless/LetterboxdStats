@@ -30,11 +30,11 @@ from letterboxd_top_charts import (  # noqa: E402
 )
 
 
-def test_show_top_review_default_off() -> None:
+def test_show_top_review_default_on() -> None:
     opts = read_chart_options({})
-    assert opts.show_top_review is False
-    on = read_chart_options({"LETTERBOXD_SHOW_TOP_REVIEW": "true"})
-    assert on.show_top_review is True
+    assert opts.show_top_review is True
+    off = read_chart_options({"LETTERBOXD_SHOW_TOP_REVIEW": "false"})
+    assert off.show_top_review is False
     assert TOP_REVIEW_MAX_CHARS == 280
 
 
@@ -456,7 +456,7 @@ def test_force_worst_emits_lower_rating_when_short() -> None:
 def main() -> int:
     from tempfile import TemporaryDirectory
 
-    test_show_top_review_default_off()
+    test_show_top_review_default_on()
     test_truncate_top_review_text_280()
     test_pick_shortest_review_wins()
     test_pick_walks_to_first_reviewed_rank()

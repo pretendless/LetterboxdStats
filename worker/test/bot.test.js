@@ -242,7 +242,7 @@ test("custom range 2021-06.2022 dispatches 2021-01-01 through 2022-06-30", async
   await say("нет"); // rewatches in averages (default)
   await say("да"); // show likes (default)
   await say("да"); // show reviews (default)
-  await say("нет"); // top review (default off)
+  await say("нет"); // top review (default on; turn off)
   await say("да"); // exclusions gate
   await say("да"); // USA
   await say("нет"); // English
