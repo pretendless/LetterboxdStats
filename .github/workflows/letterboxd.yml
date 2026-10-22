@@ -33,6 +33,16 @@ on:
         required: false
         default: "false"
         type: string
+      show_likes:
+        description: Show liked hearts (♥) on charts and search lists (true/false; default true)
+        required: false
+        default: "true"
+        type: string
+      show_reviews:
+        description: Show review marks (≡) on charts and search lists (true/false; default true)
+        required: false
+        default: "true"
+        type: string
       include_usa:
         description: Include USA in country tops (true/false)
         required: false
@@ -103,6 +113,8 @@ jobs:
           LETTERBOXD_TOP_N: ${{ inputs.top_n }}
           LETTERBOXD_MIN_RATED: ${{ inputs.min_rated }}
           LETTERBOXD_INCLUDE_REWATCH_IN_AVERAGES: ${{ inputs.include_rewatch_in_averages }}
+          LETTERBOXD_SHOW_LIKES: ${{ inputs.show_likes }}
+          LETTERBOXD_SHOW_REVIEWS: ${{ inputs.show_reviews }}
           LETTERBOXD_INCLUDE_USA: ${{ inputs.include_usa }}
           LETTERBOXD_INCLUDE_ENGLISH: ${{ inputs.include_english }}
           LETTERBOXD_INCLUDE_DRAMA: ${{ inputs.include_drama }}

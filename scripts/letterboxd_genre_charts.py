@@ -1568,9 +1568,10 @@ def main():
 
     # Rating tops: catalog counts + ratings.csv ∪ diary (best + worst).
     # (genre_share_by_viewing_year.png removed — not sent to Telegram.)
-    liked_films = load_liked_films(sys.argv[1])
+    # show_likes / show_reviews off → empty sets (omit ♥ / ≡ everywhere).
+    liked_films = load_liked_films(sys.argv[1]) if opts.show_likes else None
     liked_keys = liked_film_keys(liked_films)
-    reviewed_films = load_reviewed_films(sys.argv[1])
+    reviewed_films = load_reviewed_films(sys.argv[1]) if opts.show_reviews else None
     reviewed_keys = reviewed_film_keys(reviewed_films)
     top_for_report, genres_by_rating, genres_by_rating_worst, genre_avgs = rank_genres(
         catalog,
@@ -1686,6 +1687,8 @@ def main():
         "min_rated_for_top": int(opts.min_rated),
         "top_n": int(opts.top_n),
         "include_rewatch_in_averages": bool(opts.include_rewatch_in_averages),
+        "show_likes": bool(opts.show_likes),
+        "show_reviews": bool(opts.show_reviews),
         "include_usa": bool(opts.include_usa),
         "include_english": bool(opts.include_english),
         "include_drama": bool(opts.include_drama),

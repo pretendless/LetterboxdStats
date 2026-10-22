@@ -56,7 +56,7 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 | Command | What it does |
 | --- | --- |
-| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, whether rewatches count in averages, optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. Paste settings reuses a previous `Tops: … Period:` summary from an earlier run. |
+| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, whether rewatches count in averages, whether to show likes (♥) and reviews (≡), optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. Paste settings reuses a previous `Tops: … Period:` summary from an earlier run. |
 | `/start letterboxd` | The same wizard. This is what `https://t.me/lebxdbot?start=letterboxd` opens. |
 | `/stop` | Clears the wizard. If a chart run is already in GitHub Actions, it stops that run. |
 
@@ -76,6 +76,8 @@ On **Customize**, after top size and the rating-count threshold, the wizard asks
 The rating-count **threshold** still needs that many **unique rated films** (Name+Year), not rated diary rows. On count / watch bars whose category is **not** a watch date (release decade or year, genre, director, actor, studio, country, language), bar **lengths** are **catalog hits**: every diary row plus one for each watched-only film in the period-scoped catalog. Undated catalog rows stack under **No date**. The extra-stats rating distribution includes undated rated catalog entries under **No date** as well. Charts that need a watch date (watch year, weekday, month, viewing pace, most often in the diary / rewatches) stay diary-dated only. Only how the **mean** is computed changes when Yes.
 
 **Most often in the diary** always uses all rated diary rows for its tip mean — this setting does not change that. **Search-keyword** film lists always list every view’s rating slot; the toggle does not change those lists. Watch-time average charts that already mean over each rated diary row in its watch bucket stay as they are.
+
+Next, two yes/no questions: **Show likes (♥)?** and **Show reviews (≡)?** Both default to **yes** (same as Default mode and when unset). **No** on likes omits ♥ everywhere — tips, titles, Most liked panels, search hearts, and inside-bar ♥. **No** on reviews omits ≡ everywhere — tips, Most reviewed, search ≡, and inside-bar ≡. The settings summary records `Likes: yes/no.` and `Reviews: yes/no.`; Paste settings accepts those fields (older summaries without them keep both on).
 
 Next, the wizard asks whether to remove some rows from the **watch-count** tops.
 

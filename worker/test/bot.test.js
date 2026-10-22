@@ -233,6 +233,8 @@ test("custom range 2021-06.2022 dispatches 2021-01-01 through 2022-06-30", async
   await say("20");
   await say("3");
   await say("нет"); // rewatches in averages (default)
+  await say("да"); // show likes (default)
+  await say("да"); // show reviews (default)
   await say("да"); // exclusions gate
   await say("да"); // USA
   await say("нет"); // English
@@ -251,6 +253,8 @@ test("custom range 2021-06.2022 dispatches 2021-01-01 through 2022-06-30", async
   assert.equal(dispatch.body.inputs.top_n, "20");
   assert.equal(dispatch.body.inputs.min_rated, "3");
   assert.equal(dispatch.body.inputs.include_rewatch_in_averages, "false");
+  assert.equal(dispatch.body.inputs.show_likes, "true");
+  assert.equal(dispatch.body.inputs.show_reviews, "true");
   assert.equal(dispatch.body.inputs.include_usa, "true");
   assert.equal(dispatch.body.inputs.include_english, "false");
   assert.equal(dispatch.body.inputs.include_drama, "true");
