@@ -5,6 +5,7 @@ Wizard defaults (also the GitHub Actions defaults):
   include_rewatch_in_averages=False (unique-film means),
   show_likes=True, show_reviews=True (♥ / ≡ on charts and search),
   show_top_review=True (in-plot review panel; Customize can disable),
+  ten_point_display=False (show rating/average numbers ×2; internal 0.5–5),
   include USA, include English, include Drama, include Comedy,
   no custom keyword exclusions, no search keywords,
   full diary span, undated films only on the full span.
@@ -29,6 +30,12 @@ higher-rating) or lowest (lower-rating); when every candidate is unrated, liked
 films first; then latest Date; then Name/Year. Liked films get ♥ after the
 panel title. When True it also lifts the full-slate gate so lower-rating
 charts still emit. Customize can turn it off.
+
+ten_point_display (default False) multiplies **displayed** rating / average
+numbers by 2 (tips, axes, colorbar ticks, HTML, search slots). Internal
+Letterboxd 0.5–5 values stay unchanged for color, ranking, thresholds, and
+fractional steps. Top review ★/½ glyphs still use the 5-point value. Counts,
+♥/≡ totals, percentages, ranks, and years are not multiplied.
 
 Optional search keywords are separate: after all chart PNGs, each keyword
 gets a Telegram film list where the substring matches film metadata
@@ -147,7 +154,33 @@ def is_comedy_genre(name) -> bool:
     return _norm_name(name) in _COMEDY_NAMES
 
 
-def format_count_avg_label(avg, rated, min_rated: int) -> str:
+def display_rating_value(value, *, ten_point: bool = False) -> float:
+    """Map an internal Letterboxd rating (0.5–5) to the displayed number."""
+    num = float(value)
+    return num * 2.0 if ten_point else num
+
+
+def format_rating_number(value, *, ten_point: bool = False, decimals: int = 2) -> str:
+    """Fixed-decimal rating/average for chart tips (internal value ×2 when on)."""
+    shown = display_rating_value(value, ten_point=ten_point)
+    return f"{shown:.{int(decimals)}f}"
+
+
+def format_rating_compact(value, *, ten_point: bool = False) -> str:
+    """Compact rating for search slots: strip trailing zeros (3.5 → 7 when on)."""
+    shown = display_rating_value(value, ten_point=ten_point)
+    if float(shown).is_integer():
+        return str(int(shown))
+    text = f"{shown:.2f}".rstrip("0").rstrip(".")
+    return text or "—"
+
+
+def average_rating_axis_label(*, ten_point: bool = False) -> str:
+    """X/Y label for average-rating charts."""
+    return f"Average rating (out of {10 if ten_point else 5})"
+
+
+def format_count_avg_label(avg, rated, min_rated: int, *, ten_point: bool = False) -> str:
     """Avg annotation for a quantitative bar: the mean only.
 
     Same gate as avg charts (unique rated films ≥ min_rated). Below the gate,
@@ -166,10 +199,10 @@ def format_count_avg_label(avg, rated, min_rated: int) -> str:
         return "—"
     if not (avg_f > 0):
         return "—"
-    return f"{avg_f:.2f}"
+    return format_rating_number(avg_f, ten_point=ten_point)
 
 
-def format_single_rating_label(avg) -> str:
+def format_single_rating_label(avg, *, ten_point: bool = False) -> str:
     """Avg for a single-film bar (Most often in the diary): no rated-count gate."""
     try:
         avg_f = float(avg)
@@ -177,7 +210,7 @@ def format_single_rating_label(avg) -> str:
         return "—"
     if not (avg_f > 0):
         return "—"
-    return f"{avg_f:.2f}"
+    return format_rating_number(avg_f, ten_point=ten_point)
 
 
 def _parse_keyword_list(value, *, max_words: int, max_len: int) -> tuple[str, ...]:
@@ -269,6 +302,7 @@ class ChartOptions:
     show_likes: bool = True
     show_reviews: bool = True
     show_top_review: bool = True
+    ten_point_display: bool = False
     include_usa: bool = True
     include_english: bool = True
     include_drama: bool = True
@@ -322,6 +356,9 @@ def read_chart_options(env: dict | None = None) -> ChartOptions:
         show_likes=show_likes,
         show_reviews=show_reviews,
         show_top_review=show_top_review,
+        ten_point_display=parse_bool_flag(
+            src.get("LETTERBOXD_TEN_POINT_DISPLAY"), False
+        ),
         include_usa=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_USA"), True),
         include_english=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_ENGLISH"), True),
         include_drama=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_DRAMA"), True),

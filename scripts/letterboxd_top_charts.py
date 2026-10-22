@@ -26,7 +26,10 @@ from letterboxd_export import (
 )
 from letterboxd_options import (
     TOP_N_DEFAULT,
+    average_rating_axis_label,
+    display_rating_value,
     format_count_avg_label,
+    format_rating_number,
     label_matches_exclude_keywords,
     rated_gate_phrase,
 )
@@ -1287,11 +1290,13 @@ def _count_avg_stroke():
     ]
 
 
-def count_avg_text_style(label: str) -> dict:
+def count_avg_text_style(label: str, *, ten_point: bool = False) -> dict:
     """Style for the mean beside a count bar.
 
     A numeric mean is bold and colored with the shared palette
     (full 0–1 range on the fixed 0.5–5 scale). «—» stays regular white.
+    When ``ten_point`` is on, the label is a ×2 display value — divide back
+    before coloring so the palette stays on the internal Letterboxd scale.
     """
     text = str(label or "").strip()
     try:
@@ -1300,11 +1305,35 @@ def count_avg_text_style(label: str) -> dict:
         avg = None
     if avg is None or not (avg > 0):
         return {"color": FG, "fontweight": "normal", "path_effects": None}
+    if ten_point:
+        avg = avg / 2.0
     return {
         "color": rating_color(avg),
         "fontweight": "bold",
         "path_effects": _count_avg_stroke(),
     }
+
+
+def rating_tick_formatter(*, ten_point: bool = False):
+    """Axis/colorbar tick labels; ×2 when ten-point display is on."""
+    from matplotlib.ticker import FuncFormatter
+
+    def _fmt(x, _pos):
+        shown = display_rating_value(x, ten_point=ten_point)
+        if abs(shown - round(shown)) < 1e-9:
+            return str(int(round(shown)))
+        return f"{shown:g}"
+
+    return FuncFormatter(_fmt)
+
+
+def apply_rating_axis_formatter(ax, *, axis: str = "x", ten_point: bool = False) -> None:
+    """Format rating-scale ticks on an axis (data stays 0.5–5 internally)."""
+    formatter = rating_tick_formatter(ten_point=ten_point)
+    if str(axis).lower() == "y":
+        ax.yaxis.set_major_formatter(formatter)
+    else:
+        ax.xaxis.set_major_formatter(formatter)
 
 
 def sort_labels_by_name_length(names: list[str] | tuple[str, ...]) -> list[str]:
@@ -2493,6 +2522,7 @@ def chart_stacked_count_hbar(
     reviewed_counts: list[int] | None = None,
     most_reviewed: list[tuple[str, int]] | None = None,
     top_review: dict | None = None,
+    ten_point_display: bool = False,
 ) -> bool:
     """matrix shape (len(years), len(labels)); labels ordered bottom→top.
 
@@ -2602,7 +2632,7 @@ def chart_stacked_count_hbar(
             continue
         bbox = artist.get_window_extent(renderer=renderer)
         x_data, _y = ax.transData.inverted().transform((bbox.x1 + 10, bbox.y1))
-        style = count_avg_text_style(label)
+        style = count_avg_text_style(label, ten_point=ten_point_display)
         mean_artist = ax.text(
             x_data,
             artist.get_position()[1],
@@ -2699,11 +2729,14 @@ def _prepare_rating_rows(
     return usable
 
 
-def _rating_colorbar(fig, ax, *, location: str = "right", size: str = "compact") -> None:
+def _rating_colorbar(
+    fig, ax, *, location: str = "right", size: str = "compact", ten_point: bool = False
+) -> None:
     """Rating colorbar; «оценка» title sits above (not a sideways label).
 
     size='compact' — calendar line charts (year/decade).
     size='large' — TMDB horizontal avg tops (roomier, pre-compact scale).
+    Tick numbers follow ``ten_point`` (×2) while the norm stays 0.5–5.
     """
     sm = plt.cm.ScalarMappable(cmap=rating_colormap(), norm=rating_norm())
     sm.set_array([])
@@ -2735,6 +2768,7 @@ def _rating_colorbar(fig, ax, *, location: str = "right", size: str = "compact")
     cbar.set_label("")
     cbar.ax.set_title(RATING_COLORBAR_LABEL, color=FG, fontsize=title_size, pad=6)
     cbar.ax.tick_params(labelsize=tick_size, colors=FG, length=2.5, width=0.6)
+    cbar.ax.yaxis.set_major_formatter(rating_tick_formatter(ten_point=ten_point))
     plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color=FG)
     return cbar
 
@@ -2749,14 +2783,17 @@ def chart_rating_vbar(
     rated_key: str = "rated",
     label_fn: Callable[[object], str] | None = None,
     footer: str | None = None,
-    ylabel: str = "Average rating (out of 5)",
+    ylabel: str | None = None,
     limit: int = TOP_N_DEFAULT,
     ascending: bool = False,
+    ten_point_display: bool = False,
 ) -> bool:
     """Vertical bars: X = category, Y = mean rating; color blue→green→red.
 
     Used for calendar release-year avg tops. ascending=True → worst first.
     """
+    if ylabel is None:
+        ylabel = average_rating_axis_label(ten_point=ten_point_display)
     usable = _prepare_rating_rows(
         rows,
         label_key=label_key,
@@ -2790,14 +2827,15 @@ def chart_rating_vbar(
     ax.set_xticklabels(labels, rotation=45, ha="right")
     ax.set_ylim(0, 5.55)
     ax.set_ylabel(ylabel)
+    apply_rating_axis_formatter(ax, axis="y", ten_point=ten_point_display)
     ax.set_title(title)
     ax.yaxis.grid(True, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     style_axes(ax)
     for bar, avg, rated in zip(bars, avgs, [n for _, _, n, _, _, _, _, _ in usable]):
         x = bar.get_x() + bar.get_width() / 2
-        label = f"{avg:.2f}"
-        style = count_avg_text_style(label)
+        label = format_rating_number(avg, ten_point=ten_point_display)
+        style = count_avg_text_style(label, ten_point=ten_point_display)
         rated_n = int(rated) if rated is not None else 0
         ax.text(
             x,
@@ -2820,7 +2858,7 @@ def chart_rating_vbar(
             color=FG,
             fontweight="normal",
         )
-    _rating_colorbar(fig, ax)
+    _rating_colorbar(fig, ax, ten_point=ten_point_display)
     if footer:
         fig.text(0.01, 0.01, footer, fontsize=7, color=FG)
         fig.tight_layout(rect=[0, 0.03, 1, 1])
@@ -2843,7 +2881,7 @@ def chart_rating_hbar(
     rated_key: str = "rated",
     label_fn: Callable[[object], str] | None = None,
     footer: str | None = None,
-    xlabel: str = "Average rating (out of 5)",
+    xlabel: str | None = None,
     limit: int = TOP_N_DEFAULT,
     ascending: bool = False,
     allow_short_worst: bool = False,
@@ -2852,6 +2890,7 @@ def chart_rating_hbar(
     top_review: dict | None = None,
     film_ratings: pd.DataFrame | dict | None = None,
     liked_keys: set[str] | frozenset | None = None,
+    ten_point_display: bool = False,
 ) -> bool:
     """Horizontal bars for TMDB avg tops.
 
@@ -2880,6 +2919,8 @@ def chart_rating_hbar(
     """
     import matplotlib.patheffects as path_effects
 
+    if xlabel is None:
+        xlabel = average_rating_axis_label(ten_point=ten_point_display)
     usable = _prepare_rating_rows(
         rows,
         label_key=label_key,
@@ -2930,13 +2971,14 @@ def chart_rating_hbar(
     # Extra room on the right for the colored mean and the light ``(k)``.
     ax.set_xlim(0, 6.15)
     ax.set_xlabel(xlabel)
+    apply_rating_axis_formatter(ax, axis="x", ten_point=ten_point_display)
     ax.set_title(title)
     ax.xaxis.grid(True, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     style_axes(ax)
 
     # Layout must be finalized before measuring text against data coordinates.
-    _rating_colorbar(fig, ax, location="left", size="large")
+    _rating_colorbar(fig, ax, location="left", size="large", ten_point=ten_point_display)
     if footer:
         fig.text(0.01, 0.01, footer, fontsize=7, color=FG)
         fig.tight_layout(rect=[0.02, 0.03, 1, 1])
@@ -3139,8 +3181,8 @@ def chart_rating_hbar(
                 float(ax.transData.inverted().transform((label_end, 0))[0]),
             )
         # Mean is bold and rating-colored; ``(k)`` stays regular light text beside it.
-        mean_label = f"{avg:.2f}"
-        style = count_avg_text_style(mean_label)
+        mean_label = format_rating_number(avg, ten_point=ten_point_display)
+        style = count_avg_text_style(mean_label, ten_point=ten_point_display)
         mean_artist = ax.text(
             mean_x,
             yi,
@@ -3203,6 +3245,7 @@ def chart_diary_entity_stacked(
     names_for_row_unfiltered: Callable[[pd.Series], list[str]] | None = None,
     reviewed_films: pd.DataFrame | None = None,
     show_top_review: bool = False,
+    ten_point_display: bool = False,
 ) -> bool:
     """Top entities by catalog hits; stack segments by watch year.
 
@@ -3320,9 +3363,15 @@ def chart_diary_entity_stacked(
         labels.append(_short_label(raw, limit=40))
         pair = (avg_by_name or {}).get(n)
         if pair is None:
-            avg_labels.append(format_count_avg_label(None, 0, min_rated))
+            avg_labels.append(
+                format_count_avg_label(None, 0, min_rated, ten_point=ten_point_display)
+            )
         else:
-            avg_labels.append(format_count_avg_label(pair[0], pair[1], min_rated))
+            avg_labels.append(
+                format_count_avg_label(
+                    pair[0], pair[1], min_rated, ten_point=ten_point_display
+                )
+            )
         liked_counts.append(liked_by_display.get(str(raw), 0))
         reviewed_counts.append(reviewed_by_display.get(str(raw), 0))
     most_liked = rank_most_liked(liked_by_display, top_n)
@@ -3351,6 +3400,7 @@ def chart_diary_entity_stacked(
         reviewed_counts=reviewed_counts,
         most_reviewed=most_reviewed,
         top_review=panel_review,
+        ten_point_display=ten_point_display,
     )
 
 
@@ -3367,6 +3417,7 @@ def chart_release_years_by_count(
     reviewed_keys: set[str] | frozenset | None = None,
     reviewed_films: pd.DataFrame | None = None,
     show_top_review: bool = False,
+    ten_point_display: bool = False,
 ) -> bool:
     """Release-year count top stacked by watch year (catalog hits)."""
 
@@ -3394,6 +3445,7 @@ def chart_release_years_by_count(
         catalog=catalog,
         reviewed_films=reviewed_films,
         show_top_review=show_top_review,
+        ten_point_display=ten_point_display,
     )
 
 
@@ -3410,6 +3462,7 @@ def chart_release_years_by_rating(
     show_top_review: bool = False,
     film_ratings: pd.DataFrame | dict | None = None,
     liked_keys: set[str] | frozenset | None = None,
+    ten_point_display: bool = False,
 ) -> bool:
     """«Годы выхода — выше/ниже оценка» as TMDB-style horizontal avg bars.
 
@@ -3462,6 +3515,7 @@ def chart_release_years_by_rating(
         show_top_review=show_top_review,
         film_ratings=film_ratings,
         liked_keys=liked_keys,
+        ten_point_display=ten_point_display,
     )
 
 
@@ -3474,9 +3528,12 @@ def single_rating_bar_color(avg: float) -> tuple:
     return rating_color(avg)
 
 
-def add_rating_colorbar(fig, ax, *, location: str = "right", size: str = "compact") -> None:
+def add_rating_colorbar(
+    fig, ax, *, location: str = "right", size: str = "compact", ten_point: bool = False
+) -> None:
     """Shared colorbar for avg-rating charts (logo palette, 0.5–5).
 
     Calendar year/decade line charts use size='compact' (default).
+    Tick labels follow ``ten_point`` (×2) while the norm stays internal.
     """
-    _rating_colorbar(fig, ax, location=location, size=size)
+    _rating_colorbar(fig, ax, location=location, size=size, ten_point=ten_point)

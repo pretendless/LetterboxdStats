@@ -21,6 +21,7 @@ import {
   letterboxdYesNoKeyboard,
   formatLetterboxdSettingsSummary,
   LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE,
+  normalizeLetterboxdOptions,
   parseLetterboxdCallback,
   parseLetterboxdCommand,
   parseLetterboxdSettingsSummary,
@@ -259,9 +260,13 @@ test("binary steps keep the default button and drop the repeated lines", () => {
     showReviews.state,
     { kind: "callback", step: "show_reviews", value: true },
   );
-  const exclusions = advanceLetterboxdWizard(
+  const tenPoint = advanceLetterboxdWizard(
     showTopReview.state,
     { kind: "callback", step: "show_top_review", value: false },
+  );
+  const exclusions = advanceLetterboxdWizard(
+    tenPoint.state,
+    { kind: "callback", step: "ten_point_display", value: false },
   );
   const usa = advanceLetterboxdWizard(
     exclusions.state,
@@ -292,6 +297,7 @@ test("binary steps keep the default button and drop the repeated lines", () => {
     showLikes,
     showReviews,
     showTopReview,
+    tenPoint,
     exclusions,
     usa,
     english,
@@ -321,16 +327,20 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.match(showTopReview.messages[0].text, /small review panel/);
   assert.match(showTopReview.messages[0].text, /Default is on/);
   assert.doesNotMatch(showTopReview.messages[0].text, /Default is yes/);
-  assert.equal(exclusions.state.showTopReview, false);
-  // Reviews off → skip Top review and force top_review=false.
+  assert.equal(tenPoint.state.showTopReview, false);
+  assert.equal(tenPoint.state.step, "ten_point_display");
+  assert.match(tenPoint.messages[0].text, /<b>Show ratings on a 10-point scale\?<\/b>/);
+  assert.match(tenPoint.messages[0].text, /Default is off/);
+  assert.equal(exclusions.state.tenPointDisplay, false);
+  // Reviews off → skip Top review and force top_review=false; still ask ten-point.
   const skipTopReview = advanceLetterboxdWizard(
     showReviews.state,
     { kind: "callback", step: "show_reviews", value: false },
   );
   assert.equal(skipTopReview.state.showReviews, false);
   assert.equal(skipTopReview.state.showTopReview, false);
-  assert.equal(skipTopReview.state.step, "exclusions");
-  assert.match(skipTopReview.messages[0].text, /<b>Exclude some rows from watch-count tops\?<\/b>/);
+  assert.equal(skipTopReview.state.step, "ten_point_display");
+  assert.match(skipTopReview.messages[0].text, /<b>Show ratings on a 10-point scale\?<\/b>/);
   assert.match(exclusions.messages[0].text, /<b>Exclude some rows from watch-count tops\?<\/b>/);
   assert.match(usa.messages[0].text, /<b>Show USA in the country top\?<\/b>/);
   assert.match(english.messages[0].text, /<b>Show English in the language top\?<\/b>/);
@@ -352,6 +362,7 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(showLikes.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
   assert.equal(showReviews.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
   assert.equal(showTopReview.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
+  assert.equal(tenPoint.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
   assert.equal(exclusions.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
   assert.equal(usa.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
   assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
@@ -371,6 +382,9 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(parseLetterboxdCallback("lb:toprev:0").step, "show_top_review");
   assert.equal(parseLetterboxdCallback("lb:toprev:0").value, false);
   assert.equal(parseLetterboxdCallback("lb:toprev:1").value, true);
+  assert.equal(parseLetterboxdCallback("lb:10pt:0").step, "ten_point_display");
+  assert.equal(parseLetterboxdCallback("lb:10pt:0").value, false);
+  assert.equal(parseLetterboxdCallback("lb:10pt:1").value, true);
   assert.equal(parseLetterboxdCallback("lb:excl:0").step, "exclusions");
   assert.equal(parseLetterboxdCallback("lb:excl:0").value, false);
   assert.equal(parseLetterboxdCallback("lb:drama:0").step, "drama");
@@ -485,6 +499,7 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
     showLikes: false,
     showReviews: true,
     showTopReview: false,
+    tenPointDisplay: false,
     includeUSA: true,
     includeEnglish: false,
     includeDrama: false,
@@ -496,6 +511,7 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
   assert.match(text, /Likes: no/);
   assert.match(text, /Reviews: yes/);
   assert.doesNotMatch(text, /Top review:/);
+  assert.match(text, /10-point ratings: no/);
   assert.match(text, /Exclude: English, Drama, "Wood", "2001"/);
   assert.match(text, /Search: "Elijah Wood"/);
   assert.doesNotMatch(text, /USA:\s*(yes|no)/);
@@ -506,6 +522,7 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
   assert.match(defaults, /Likes: yes/);
   assert.match(defaults, /Top review: yes/);
   assert.doesNotMatch(defaults, /Reviews:/);
+  assert.match(defaults, /10-point ratings: no/);
   assert.match(defaults, /Exclude: none/);
   assert.match(defaults, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
   const topOn = letterboxdAckText("lb-3", { showTopReview: true });
@@ -521,6 +538,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     showLikes: false,
     showReviews: true,
     showTopReview: true,
+    tenPointDisplay: false,
     includeUSA: false,
     includeEnglish: true,
     includeDrama: false,
@@ -552,6 +570,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     showLikes: false,
     showReviews: true,
     showTopReview: true,
+    tenPointDisplay: false,
     includeUSA: false,
     includeEnglish: true,
     includeDrama: false,
@@ -564,6 +583,19 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   });
   assert.equal(formatLetterboxdSettingsSummary(parsed), summary);
 
+  // 10-point ratings on round-trips through summary paste.
+  const tenOptions = { ...options, tenPointDisplay: true };
+  const tenSummary = formatLetterboxdSettingsSummary(tenOptions);
+  assert.match(tenSummary, /10-point ratings: yes/);
+  assert.deepEqual(parseLetterboxdSettingsSummary(tenSummary), {
+    ...normalizeLetterboxdOptions(tenOptions),
+  });
+  // Missing 10-point field in older summaries → off.
+  const legacyNoTen =
+    "Tops: 20. Threshold: 3. Rewatches in averages: no. Likes: yes. Top review: yes. " +
+    "Exclude: none. Search: none. Period: full.";
+  assert.equal(parseLetterboxdSettingsSummary(legacyNoTen).tenPointDisplay, false);
+
   // Top review off → Reviews line only (no Top review line).
   const fullLine =
     "Tops: 20. Threshold: 3. Rewatches in averages: no. Likes: yes. Reviews: yes. " +
@@ -575,6 +607,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     showLikes: true,
     showReviews: true,
     showTopReview: false,
+    tenPointDisplay: false,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -599,6 +632,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
       showLikes: true,
       showReviews: false,
       showTopReview: false,
+      tenPointDisplay: false,
       includeUSA: true,
       includeEnglish: true,
       includeDrama: true,
@@ -624,6 +658,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
       showLikes: true,
       showReviews: false,
       showTopReview: false,
+      tenPointDisplay: false,
       includeUSA: true,
       includeEnglish: true,
       includeDrama: true,
@@ -649,6 +684,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
       showLikes: true,
       showReviews: true,
       showTopReview: true,
+      tenPointDisplay: false,
       includeUSA: true,
       includeEnglish: true,
       includeDrama: true,
@@ -674,6 +710,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
       showLikes: false,
       showReviews: true,
       showTopReview: true,
+      tenPointDisplay: false,
       includeUSA: false,
       includeEnglish: false,
       includeDrama: false,
@@ -697,6 +734,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     showLikes: true,
     showReviews: true,
     showTopReview: true,
+    tenPointDisplay: false,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -718,6 +756,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     showLikes: true,
     showReviews: true,
     showTopReview: true,
+    tenPointDisplay: false,
     includeUSA: false,
     includeEnglish: false,
     includeDrama: true,
@@ -794,6 +833,7 @@ test("paste settings mode asks for summary then finishes with parsed options", (
       showLikes: false,
       showReviews: false,
       showTopReview: false,
+      tenPointDisplay: false,
       includeUSA: true,
       includeEnglish: false,
       includeDrama: true,
@@ -850,6 +890,7 @@ test("buildLetterboxdDispatch", () => {
       show_likes: "true",
       show_reviews: "true",
       show_top_review: "true",
+      ten_point_display: "false",
       include_usa: "true",
       include_english: "true",
       include_drama: "true",
@@ -1028,6 +1069,20 @@ test("buildCalendarReportHtml keeps blurb, drops charted tops", () => {
   assert.match(html, /Most watches in one day: <b>15 March 2021<\/b> \(<b>7<\/b>\)/);
   assert.match(html, /Pace: <b>4\.2<\/b> films per month on average/);
   assert.match(html, /average <b>3\.75<\/b>/);
+  const tenHtml = buildCalendarReportHtml({
+    entries: 10,
+    unique_films: 8,
+    rated_count: 5,
+    rated_share: 0.5,
+    rating_avg: 3.5,
+    rating_mode: 4,
+    films_per_month: 2.5,
+    ten_point_display: true,
+  });
+  assert.match(tenHtml, /average <b>7<\/b>/);
+  assert.match(tenHtml, /most often <b>8<\/b>/);
+  // Pace is not a star rating — stay unmultiplied.
+  assert.match(tenHtml, /Pace: <b>2\.5<\/b> films per month/);
   assert.doesNotMatch(html, /Heat/);
   assert.doesNotMatch(html, /Release years/);
   assert.doesNotMatch(html, /Most often in the diary/);

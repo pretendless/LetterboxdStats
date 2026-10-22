@@ -51,6 +51,8 @@ from letterboxd_export import (  # noqa: E402
 from letterboxd_options import (  # noqa: E402
     SEARCH_MATCH_FIELDS,
     field_values_match_keyword,
+    format_rating_compact,
+    format_rating_number,
     is_comedy_genre,
     is_drama_genre,
     is_english_language,
@@ -822,7 +824,7 @@ def film_search_match_sites(meta, release_year_values, keyword: str) -> list[str
     ]
 
 
-def format_search_rating_slot(value) -> str:
+def format_search_rating_slot(value, *, ten_point: bool = False) -> str:
     """Star value for one watch slot, or em dash when missing (same as chart tips)."""
     if value is None:
         return "—"
@@ -837,11 +839,7 @@ def format_search_rating_slot(value) -> str:
         return "—"
     if not (num > 0):
         return "—"
-    if float(num).is_integer():
-        return str(int(num))
-    # Letterboxd half-stars: keep one decimal when needed (3.5), drop junk.
-    text = f"{num:.2f}".rstrip("0").rstrip(".")
-    return text or "—"
+    return format_rating_compact(num, ten_point=ten_point)
 
 
 def ratings_csv_lookup(ratings_csv) -> dict[str, float]:
@@ -867,7 +865,9 @@ def ratings_csv_lookup(ratings_csv) -> dict[str, float]:
     return out
 
 
-def watch_rating_slots_for_film(name, year, diary, ratings_by_key) -> list[str]:
+def watch_rating_slots_for_film(
+    name, year, diary, ratings_by_key, *, ten_point: bool = False
+) -> list[str]:
     """One rating/dash per watch for this Name+Year.
 
     Diary rows (scoped to the run): oldest→newest by Watched Date (stable
@@ -902,15 +902,15 @@ def watch_rating_slots_for_film(name, year, diary, ratings_by_key) -> list[str]:
         for _, row in subset.iterrows():
             rating = row.get("Rating") if hasattr(row, "get") else row["Rating"]
             if rating is not None and pd.notna(rating):
-                slots.append(format_search_rating_slot(rating))
+                slots.append(format_search_rating_slot(rating, ten_point=ten_point))
             elif fallback is not None:
-                slots.append(format_search_rating_slot(fallback))
+                slots.append(format_search_rating_slot(fallback, ten_point=ten_point))
             else:
                 slots.append("—")
         return slots
 
     if fallback is not None:
-        return [format_search_rating_slot(fallback)]
+        return [format_search_rating_slot(fallback, ten_point=ten_point)]
     return ["—"]
 
 
@@ -923,6 +923,7 @@ def build_search_keyword_lists(
     ratings_csv=None,
     liked_films=None,
     reviewed_films=None,
+    ten_point_display: bool = False,
 ) -> list[dict]:
     """Film lists per search keyword over the same catalog the charts use.
 
@@ -966,7 +967,7 @@ def build_search_keyword_lists(
                 "year": year_int,
                 "meta": meta,
                 "year_values": year_values,
-                "ratings": watch_rating_slots_for_film(name, year_int, diary, ratings_by_key),
+                "ratings": watch_rating_slots_for_film(name, year_int, diary, ratings_by_key, ten_point=ten_point_display),
                 "liked": film_key in liked_keys,
                 "reviewed": film_key in reviewed_keys,
             }
@@ -1077,6 +1078,7 @@ def chart_deep_count_tops(
     reviewed_keys=None,
     reviewed_films=None,
     show_top_review: bool = False,
+    ten_point_display: bool = False,
 ) -> dict:
     """Watch-year stacked count charts for TMDB deep entities.
 
@@ -1225,6 +1227,7 @@ def chart_deep_count_tops(
             names_for_row_unfiltered=unfiltered_fn,
             reviewed_films=reviewed_films,
             show_top_review=show_top_review,
+            ten_point_display=ten_point_display,
         )
     return made
 
@@ -1240,6 +1243,7 @@ def chart_deep_rating_tops(
     show_top_review: bool = False,
     film_ratings=None,
     liked_keys=None,
+    ten_point_display: bool = False,
 ) -> dict:
     """Blue→green→red horizontal avg charts for TMDB «выше» + «ниже оценка» tops."""
     footer = "Source: Letterboxd diary/watched + TMDB metadata"
@@ -1333,6 +1337,7 @@ def chart_deep_rating_tops(
             show_top_review=show_top_review,
             film_ratings=film_ratings,
             liked_keys=liked_keys,
+            ten_point_display=ten_point_display,
         )
     return made
 
@@ -1503,8 +1508,8 @@ def main():
             fontweight="normal",
             clip_on=False,
         )
-        avg_text = f"{year_means[int(year)]:.2f}" if int(year) in year_means else "—"
-        style = count_avg_text_style(avg_text)
+        avg_text = format_rating_number(year_means[int(year)], ten_point=opts.ten_point_display) if int(year) in year_means else "—"
+        style = count_avg_text_style(avg_text, ten_point=opts.ten_point_display)
         avg_artist = ax.text(
             xi,
             y_lab,
@@ -1618,9 +1623,11 @@ def main():
                 clip_on=False,
             )
             avg_text = (
-                f"{decade_avgs[int(decade)]:.2f}" if int(decade) in decade_avgs else "—"
+                format_rating_number(decade_avgs[int(decade)], ten_point=opts.ten_point_display)
+                if int(decade) in decade_avgs
+                else "—"
             )
-            style = count_avg_text_style(avg_text)
+            style = count_avg_text_style(avg_text, ten_point=opts.ten_point_display)
             avg_artist = ax.text(
                 xi,
                 y_lab,
@@ -1702,6 +1709,7 @@ def main():
         show_top_review=opts.show_top_review,
         film_ratings=film_ratings,
         liked_keys=liked_keys,
+        ten_point_display=opts.ten_point_display,
     )
     made_genre_worst = chart_rating_hbar(
         genres_by_rating_worst,
@@ -1715,6 +1723,7 @@ def main():
         show_top_review=opts.show_top_review,
         film_ratings=film_ratings,
         liked_keys=liked_keys,
+        ten_point_display=opts.ten_point_display,
     )
 
     deep = aggregate_person_stats(
@@ -1759,6 +1768,7 @@ def main():
         reviewed_keys=reviewed_keys,
         reviewed_films=top_review_films,
         show_top_review=opts.show_top_review,
+        ten_point_display=opts.ten_point_display,
     )
     rating_paths = {
         "average_rating_by_country": "average_rating_by_country.png",
@@ -1782,6 +1792,7 @@ def main():
         show_top_review=opts.show_top_review,
         film_ratings=film_ratings,
         liked_keys=liked_keys,
+        ten_point_display=opts.ten_point_display,
     )
 
     genre_summary = {
@@ -1816,6 +1827,7 @@ def main():
         "show_likes": bool(opts.show_likes),
         "show_reviews": bool(opts.show_reviews),
         "show_top_review": bool(opts.show_top_review),
+        "ten_point_display": bool(opts.ten_point_display),
         "include_usa": bool(opts.include_usa),
         "include_english": bool(opts.include_english),
         "include_drama": bool(opts.include_drama),
@@ -1846,6 +1858,7 @@ def main():
         ratings_csv=ratings_csv,
         liked_films=liked_films,
         reviewed_films=reviewed_films,
+        ten_point_display=opts.ten_point_display,
     )
     if search_lists:
         write_search_keyword_lists(Path("search_keyword_lists.json"), search_lists)
