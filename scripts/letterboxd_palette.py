@@ -26,7 +26,10 @@ logo-native vertical gradient.
 In-plot inset panels (Top review, Most reviewed years, genre swatch legends)
 fill with the same logo-background charcoal gradient as **No date** bars
 (``undated_charcoal_colormap``: ``#2C3440`` → ``#14181C``, logo-native
-top→bottom); border chrome matches the previous flat panels.
+top→bottom). ``paint_inset_panel_logo_background`` paints fill and rounded
+border on the same contour (opaque charcoal underlay + clipped gradient) so
+there is no black halo between stroke and fill. Seating keeps a clear margin
+from the axes edge (``INSET_PANEL_EDGE_PAD_PX``).
 """
 
 from __future__ import annotations
@@ -367,9 +370,18 @@ def undated_charcoal_colormap():
 
 # In-plot inset panels (Top review / Most reviewed years / genre legends).
 # Same charcoal map as No date bars; logo-native top→bottom orientation.
-INSET_PANEL_BOXSTYLE = "round,pad=0.004,rounding_size=0.01"
+# pad=0 so the rounded contour matches the seating box (no FancyBbox inset).
+INSET_PANEL_BOXSTYLE = "round,pad=0,rounding_size=0.02"
 INSET_PANEL_EDGE_ALPHA = 0.92
 INSET_PANEL_LINEWIDTH = 0.8
+# Display-pixel gap between panel outer edge and axes boundary (all corners).
+INSET_PANEL_EDGE_PAD_PX = 12.0
+# Default type / box scale — a clear step up from the original 7/8 pt panels.
+INSET_PANEL_FONTSIZE = 8.5
+INSET_PANEL_TITLE_FONTSIZE = 10.0
+INSET_PANEL_DATE_FONTSIZE = 7.5
+INSET_PANEL_TOP_REVIEW_WIDTH_FRAC = 0.34
+INSET_PANEL_SWATCH_PX = 12.0
 
 
 def paint_inset_panel_logo_background(
@@ -390,7 +402,12 @@ def paint_inset_panel_logo_background(
     ``UNDATED_LOGO_BOTTOM_HEX``), logo-native top→bottom — same family as
     undated bar / legend swatches. Used by Top review, Most reviewed years,
     and genre swatch legend panels. Coordinates are in ``transform`` space
-    (typically ``ax.transAxes``). Returns the border ``FancyBboxPatch``.
+    (typically ``ax.transAxes``).
+
+    Chrome is one ``FancyBboxPatch`` (opaque top-charcoal face + stroke) so
+    fill and border share the same rounded contour; the gradient is clipped
+    to that artist (slightly oversized extent) so antialias fringes show
+    charcoal, never the black axes behind. Returns the chrome patch.
     """
     import numpy as np
     from matplotlib.patches import FancyBboxPatch
@@ -405,20 +422,21 @@ def paint_inset_panel_logo_background(
         return None
 
     boxstyle = INSET_PANEL_BOXSTYLE
-    # Invisible clip path so the gradient respects rounded corners.
-    clip = FancyBboxPatch(
+    # Opaque face + stroke on the same path: no black halo between them.
+    chrome = FancyBboxPatch(
         (float(x0), float(y0)),
         w,
         h,
         boxstyle=boxstyle,
         transform=transform,
-        facecolor="none",
-        edgecolor="none",
-        linewidth=0,
-        zorder=zorder,
-        clip_on=False,
+        facecolor=UNDATED_LOGO_TOP_HEX,
+        edgecolor=edgecolor,
+        linewidth=linewidth,
+        alpha=INSET_PANEL_EDGE_ALPHA,
+        zorder=zorder + 1,
+        clip_on=True,
     )
-    ax.add_patch(clip)
+    ax.add_patch(chrome)
 
     # imshow updates dataLim / viewLim even when drawn in axes coords —
     # snapshot and restore so bars and ylim stay put.
@@ -430,9 +448,16 @@ def paint_inset_panel_logo_background(
     cmap = undated_charcoal_colormap()
     # Column vector: origin upper → row 0 at top = logo top charcoal.
     grad = np.linspace(0.0, 1.0, 256).reshape(-1, 1)
+    # Slight oversize so the clip edge is fully painted (no raster inset).
+    over = max(w, h) * 0.02
     im = ax.imshow(
         grad,
-        extent=(float(x0), float(x0) + w, float(y0), float(y0) + h),
+        extent=(
+            float(x0) - over,
+            float(x0) + w + over,
+            float(y0) - over,
+            float(y0) + h + over,
+        ),
         origin="upper",
         aspect="auto",
         cmap=cmap,
@@ -441,26 +466,11 @@ def paint_inset_panel_logo_background(
         clip_on=False,
     )
     im.set_transform(transform)
-    im.set_clip_path(clip.get_path(), clip.get_transform())
+    im.set_clip_path(chrome)
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
     ax.set_aspect(aspect, adjustable=adjustable)
-
-    border = FancyBboxPatch(
-        (float(x0), float(y0)),
-        w,
-        h,
-        boxstyle=boxstyle,
-        transform=transform,
-        facecolor="none",
-        edgecolor=edgecolor,
-        linewidth=linewidth,
-        alpha=INSET_PANEL_EDGE_ALPHA,
-        zorder=zorder + 1,
-        clip_on=True,
-    )
-    ax.add_patch(border)
-    return border
+    return chrome
 
 
 def undated_horizontal_colormap():

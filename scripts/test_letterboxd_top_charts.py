@@ -1633,6 +1633,11 @@ def test_most_reviewed_years_panel_wraps_five_per_column(
     assert captured["axes_bottom"] < captured["panel_y"] <= captured["axes_top"]
     mid_x = (captured["axes_left"] + captured["axes_right"]) / 2
     assert captured["panel_x"] < mid_x
+    # Not flush to the corner: title (near panel top/left) keeps an edge margin.
+    from letterboxd_palette import INSET_PANEL_EDGE_PAD_PX
+
+    assert captured["panel_x"] >= captured["axes_left"] + INSET_PANEL_EDGE_PAD_PX * 0.5
+    assert captured["panel_y"] <= captured["axes_top"] - INSET_PANEL_EDGE_PAD_PX * 0.35
     # Title is near the panel top; bottom-aligned seat still keeps it ≥ bar top.
     assert captured["panel_y"] >= captured["tall_bar_top"] - 8.0
     # No reviews → panel omitted.

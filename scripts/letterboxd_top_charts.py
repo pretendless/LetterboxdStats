@@ -34,6 +34,12 @@ from letterboxd_palette import (
     FG,
     GRID,
     HALO,
+    INSET_PANEL_DATE_FONTSIZE,
+    INSET_PANEL_EDGE_PAD_PX,
+    INSET_PANEL_FONTSIZE,
+    INSET_PANEL_SWATCH_PX,
+    INSET_PANEL_TITLE_FONTSIZE,
+    INSET_PANEL_TOP_REVIEW_WIDTH_FRAC,
     ON_BAR,
     RATING_COLORBAR_LABEL,
     UNDATED_WATCH_YEAR,
@@ -895,7 +901,8 @@ def seat_inset_panel_in_axes(
 
     obstacles, renderer = _axes_plot_obstacles(fig, ax)
     axes_box = ax.get_window_extent(renderer=renderer)
-    edge_pad = max(4.0, fontsize * 0.5)
+    # Readable gap from axes edge (not flush to the corner spine).
+    edge_pad = max(float(INSET_PANEL_EDGE_PAD_PX), float(fontsize) * 1.25)
     if prefer_left:
         x0_disp = float(axes_box.x0) + edge_pad
     else:
@@ -1060,7 +1067,7 @@ def seat_inset_panel_bottom_right(
     for attempt in range(max(0, int(max_bumps)) + 1):
         obstacles, renderer = _axes_plot_obstacles(fig, ax)
         axes_box = ax.get_window_extent(renderer=renderer)
-        edge_pad = max(4.0, fontsize * 0.5)
+        edge_pad = max(float(INSET_PANEL_EDGE_PAD_PX), float(fontsize) * 1.25)
         y0_disp = float(axes_box.y0) + edge_pad
         y1_disp = y0_disp + panel_h_px
         x1_target = float(axes_box.x1) - edge_pad
@@ -1123,18 +1130,19 @@ def draw_top_review_panel(
     review: dict | None,
     *,
     corner: str = "bottom_right",
-    fontsize: float = 7,
-    title_fontsize: float = 8,
-    date_fontsize: float = 6.5,
+    fontsize: float = INSET_PANEL_FONTSIZE,
+    title_fontsize: float = INSET_PANEL_TITLE_FONTSIZE,
+    date_fontsize: float = INSET_PANEL_DATE_FONTSIZE,
     max_body_lines: int = 6,
 ) -> bool:
-    """In-plot Top review panel: title (+♥ + stars), truncated text, date.
+    """In-plot Top review panel: title (+♥), ★/½ on next line, text, date.
 
     ``review`` is ``{"title", "text", "date", "liked"?, "rating"?}`` from the
     Top review picker. When ``liked`` is True, append ♥ after the title (same
-    mark as charts). When ``rating`` is set, append ``★…½`` after the title
-    (and ♥). ``corner`` is ``bottom_right`` (watches / higher / count) or
-    ``top_right`` (lower-rating charts). Body text is already capped
+    mark as charts). When ``rating`` is set, draw ``★…½`` on its **own line
+    below the title** (omit the star line entirely when unrated). ``corner``
+    is ``bottom_right`` (watches / higher / count) or ``top_right``
+    (lower-rating charts). Body text is already capped
     (``TOP_REVIEW_MAX_CHARS``); layout may wrap and ellipsize further if the
     panel height is tight. Returns True when drawn. Panel fill is the logo
     charcoal gradient (same as No date bars), top→bottom.
@@ -1146,10 +1154,7 @@ def draw_top_review_panel(
     stars = format_top_review_rating_stars(review.get("rating"))
 
     def _compose_title(name: str) -> str:
-        text = film_title_with_liked_heart(name, liked=liked)
-        if stars:
-            text = f"{text} {stars}"
-        return text
+        return film_title_with_liked_heart(name, liked=liked)
 
     title = _compose_title(base_title)
     body = str(review.get("text") or "").strip()
@@ -1162,10 +1167,13 @@ def draw_top_review_panel(
     inv = ax.transAxes.inverted()
 
     axes_box = ax.get_window_extent(renderer=renderer)
-    panel_w_px = max(120.0, float(axes_box.width) * 0.28)
-    pad_x_px = max(6.0, fontsize * 0.9)
-    pad_y_px = max(5.0, fontsize * 0.7)
+    panel_w_px = max(
+        140.0, float(axes_box.width) * float(INSET_PANEL_TOP_REVIEW_WIDTH_FRAC)
+    )
+    pad_x_px = max(7.0, fontsize * 1.0)
+    pad_y_px = max(6.0, fontsize * 0.8)
     title_gap_px = max(3.0, title_fontsize * 0.35)
+    stars_gap_px = max(2.5, fontsize * 0.3)
     date_gap_px = max(3.0, date_fontsize * 0.35)
     inner_w = max(40.0, panel_w_px - 2 * pad_x_px)
 
@@ -1205,7 +1213,7 @@ def draw_top_review_panel(
     title_w, title_h = _measure(title, fs=title_fontsize, weight="bold")
     shown_title = title
     if title_w > inner_w:
-        # Truncate the film name only; keep ♥ and star suffix intact.
+        # Truncate the film name only; keep ♥ suffix intact.
         lo, hi = 1, len(base_title)
         best = _compose_title(base_title[:1] + "…")
         while lo <= hi:
@@ -1219,6 +1227,10 @@ def draw_top_review_panel(
                 hi = mid - 1
         shown_title = best
         _, title_h = _measure(shown_title, fs=title_fontsize, weight="bold")
+
+    stars_h = 0.0
+    if stars:
+        _, stars_h = _measure(stars, fs=fontsize)
 
     body_lines = _wrap_line(body, fs=fontsize, max_w=inner_w)
     if not body_lines:
@@ -1240,6 +1252,7 @@ def draw_top_review_panel(
     panel_h_px = (
         2 * pad_y_px
         + title_h
+        + (stars_gap_px + stars_h if stars else 0.0)
         + title_gap_px
         + body_h
         + (date_gap_px + date_h if date_s else 0.0)
@@ -1290,7 +1303,24 @@ def draw_top_review_panel(
         clip_on=True,
         zorder=21,
     )
-    cursor_y -= title_h + title_gap_px
+    cursor_y -= title_h
+    if stars:
+        cursor_y -= stars_gap_px
+        sx, sy = inv.transform((x0_disp + pad_x_px, cursor_y))
+        ax.text(
+            float(sx),
+            float(sy),
+            stars,
+            transform=ax.transAxes,
+            fontsize=fontsize,
+            color=FG,
+            ha="left",
+            va="top",
+            clip_on=True,
+            zorder=21,
+        )
+        cursor_y -= stars_h
+    cursor_y -= title_gap_px
     for line in body_lines:
         lx, ly = inv.transform((x0_disp + pad_x_px, cursor_y))
         ax.text(
@@ -1329,8 +1359,8 @@ def draw_most_reviewed_years_panel(
     ax,
     ranked: list[tuple[str, int]] | None,
     *,
-    fontsize: float = 7,
-    title_fontsize: float = 8,
+    fontsize: float = INSET_PANEL_FONTSIZE,
+    title_fontsize: float = INSET_PANEL_TITLE_FONTSIZE,
     entries_per_column: int = 5,
     title: str = "Most reviewed years",
 ) -> bool:
@@ -1389,11 +1419,11 @@ def draw_most_reviewed_years_panel(
             count_digits = max(count_digits, len(str(int(count))))
     reserve_count = int("9" * count_digits)
 
-    col_gap_px = max(16.0, fontsize * 2.2)
-    row_gap_px = max(3.0, fontsize * 0.45)
-    title_gap_px = max(3.0, title_fontsize * 0.4)
-    pad_x_px = max(6.0, fontsize * 0.9)
-    pad_y_px = max(5.0, fontsize * 0.7)
+    col_gap_px = max(18.0, fontsize * 2.3)
+    row_gap_px = max(3.5, fontsize * 0.5)
+    title_gap_px = max(3.5, title_fontsize * 0.4)
+    pad_x_px = max(7.0, fontsize * 1.0)
+    pad_y_px = max(6.0, fontsize * 0.8)
 
     col_w_px = 0.0
     line_h = 0.0
@@ -1504,10 +1534,10 @@ def draw_swatch_legend_panel(
     entries: list[tuple[str, object]],
     *,
     title: str,
-    fontsize: float = 7,
-    title_fontsize: float = 8,
+    fontsize: float = INSET_PANEL_FONTSIZE,
+    title_fontsize: float = INSET_PANEL_TITLE_FONTSIZE,
     entries_per_column: int = 5,
-    swatch_px: float = 10.0,
+    swatch_px: float = INSET_PANEL_SWATCH_PX,
 ) -> bool:
     """In-plot legend panel: colored swatches + labels (genre stacks, etc.).
 
@@ -1563,13 +1593,13 @@ def draw_swatch_legend_panel(
     sample.remove()
     title_probe.remove()
 
-    swatch = max(6.0, float(swatch_px))
-    swatch_gap = max(4.0, fontsize * 0.55)
-    col_gap_px = max(12.0, fontsize * 1.6)
-    row_gap_px = max(3.0, fontsize * 0.4)
-    title_gap_px = max(3.0, title_fontsize * 0.4)
-    pad_x_px = max(6.0, fontsize * 0.9)
-    pad_y_px = max(5.0, fontsize * 0.7)
+    swatch = max(7.0, float(swatch_px))
+    swatch_gap = max(4.5, fontsize * 0.55)
+    col_gap_px = max(14.0, fontsize * 1.7)
+    row_gap_px = max(3.5, fontsize * 0.45)
+    title_gap_px = max(3.5, title_fontsize * 0.4)
+    pad_x_px = max(7.0, fontsize * 1.0)
+    pad_y_px = max(6.0, fontsize * 0.8)
     col_w_px = swatch + swatch_gap + sample_w
 
     for col in columns:

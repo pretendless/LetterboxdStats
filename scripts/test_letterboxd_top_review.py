@@ -29,6 +29,7 @@ from letterboxd_top_charts import (  # noqa: E402
     _prepare_rating_rows,
     chart_diary_entity_stacked,
     chart_rating_hbar,
+    draw_top_review_panel,
 )
 
 
@@ -60,6 +61,53 @@ def test_format_top_review_rating_stars() -> None:
     assert format_top_review_rating_stars(float("nan")) == ""
     assert format_top_review_rating_stars(0) == ""
     assert format_top_review_rating_stars(-1) == ""
+
+
+def test_top_review_panel_stars_on_own_line() -> None:
+    """★/½ is a separate text artist below the title; omitted when unrated."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.bar([0, 1, 2], [2, 5, 3])
+    fig.canvas.draw()
+    assert draw_top_review_panel(
+        fig,
+        ax,
+        {
+            "title": "Star Film (2000)",
+            "text": "A short review body for the panel.",
+            "date": "2024-01-01",
+            "rating": 3.5,
+            "liked": True,
+        },
+    )
+    labels = [t.get_text() for t in ax.texts if str(t.get_text() or "").strip()]
+    assert "★★★½" in labels
+    title_lines = [t for t in labels if "Star Film" in t]
+    assert title_lines
+    assert all("★" not in t and "½" not in t for t in title_lines)
+    plt.close(fig)
+
+    fig2, ax2 = plt.subplots(figsize=(7, 4))
+    ax2.bar([0, 1], [1, 2])
+    fig2.canvas.draw()
+    assert draw_top_review_panel(
+        fig2,
+        ax2,
+        {
+            "title": "Blank Film (2001)",
+            "text": "Unrated review text.",
+            "date": "2024-02-01",
+            "rating": None,
+            "liked": False,
+        },
+    )
+    labels2 = [t.get_text() for t in ax2.texts if str(t.get_text() or "").strip()]
+    assert not any("★" in t or t == "½" for t in labels2)
+    plt.close(fig2)
 
 
 def test_pick_includes_rating_for_stars() -> None:
@@ -540,6 +588,7 @@ def main() -> int:
     test_show_top_review_default_on()
     test_truncate_top_review_text_280()
     test_format_top_review_rating_stars()
+    test_top_review_panel_stars_on_own_line()
     test_pick_includes_rating_for_stars()
     test_pick_shortest_review_wins()
     test_pick_walks_to_first_reviewed_rank()
