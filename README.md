@@ -64,7 +64,7 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 | Command | What it does |
 | --- | --- |
-| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, whether rewatches count in averages, whether to show likes (♥) and reviews (≡), optional Top review (default off), optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. Paste settings reuses a previous `Tops: … Period:` summary from an earlier run. |
+| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, whether rewatches count in averages, whether to show likes (♥) and reviews (≡), optional Top review (default on), optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. Paste settings reuses a previous `Tops: … Period:` summary from an earlier run. |
 | `/start letterboxd` | The same wizard. This is what `https://t.me/lebxdbot?start=letterboxd` opens. |
 | `/stop` | Clears the wizard. If a chart run is already in GitHub Actions, it stops that run. |
 
@@ -87,7 +87,7 @@ The rating-count **threshold** still needs that many **unique rated films** (Nam
 
 Next, two yes/no questions: **Show likes (♥)?** and **Show reviews (≡)?** Both default to **yes** (same as Default mode and when unset). **No** on likes omits ♥ everywhere — tips, titles, Most liked panels, Top review panel titles, search hearts, and inside-bar ♥. **No** on reviews omits ≡ everywhere — tips, Most reviewed, search ≡, and inside-bar ≡ — and skips **Show top review?** (forces Top review off). The settings summary records `Likes: yes/no.` and, when Top review is off, `Reviews: yes/no.`; Paste settings accepts those fields (older summaries without them keep both on).
 
-When reviews are on, **Show top review?** (default **no**). **Yes** draws a bottom-right in-plot panel on listed ranking charts (Most often in the diary; release years / genres / countries / directors / actors / languages / studios — watches and higher/lower rating). The panel walks the drawn top for the highest-ranked row that has a review, then picks among that row’s reviews: highest review/film rating on watches/count tops (and Most often) and on higher-rating charts; lowest on lower-rating charts (then shortest text). Text is truncated to 280 characters; the panel shows film title (year), ♥ when that film is liked, and review date. If Exclude removes the true top on a count chart, the panel is omitted. **Yes** also lifts the full-slate gate so lower-rating charts still emit. Settings summary: when Top review is on, only `Top review: yes.` (implies reviews on); when off, only `Reviews: yes/no.` — never both lines. Paste: `Top review: yes` turns both on; `Reviews: no` turns both off; legacy dual lines still parse.
+When reviews are on, **Show top review?** (default **yes**). **Yes** draws a bottom-right in-plot panel on listed ranking charts (Most often in the diary; release years / genres / countries / directors / actors / languages / studios — watches and higher/lower rating). The panel walks the drawn top for the highest-ranked row that has a review, then picks among that row’s reviews: highest review/film rating on watches/count tops (and Most often) and on higher-rating charts; lowest on lower-rating charts; when every candidate is unrated, liked films first; then latest review Date (then Name/Year). Text is truncated to 280 characters; the panel shows film title (year), ♥ when that film is liked, and review date. If Exclude removes the true top on a count chart, the panel is omitted. **Yes** also lifts the full-slate gate so lower-rating charts still emit. Settings summary: when Top review is on, only `Top review: yes.` (implies reviews on); when off, only `Reviews: yes/no.` — never both lines. Paste: `Top review: yes` turns both on; `Reviews: no` turns both off; legacy dual lines still parse.
 
 Next, the wizard asks whether to remove some rows from the **watch-count** tops.
 
@@ -132,7 +132,7 @@ Description (what Telegram shows on an unused/empty chat, and “What can this b
 
 > Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export ZIP.
 >
-> /start, then the ZIP. Default, Customize, or paste settings. Customize: tops 1–100, threshold, rewatches in averages, likes (♥), reviews (≡), Top review (off by default; panel from highest reviewed rank; unlocks lower-rating charts), Exclude on count tops, Search keywords, watch period. /stop leaves the questions. A started chart run stops too.
+> /start, then the ZIP. Default, Customize, or paste settings. Customize: tops 1–100, threshold, rewatches in averages, likes (♥), reviews (≡), Top review (on by default; panel from highest reviewed rank; unlocks lower-rating charts), Exclude on count tops, Search keywords, watch period. /stop leaves the questions. A started chart run stops too.
 >
 > Author:
 > https://www.last.fm/user/pretendless

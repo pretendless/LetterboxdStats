@@ -4,7 +4,7 @@ Wizard defaults (also the GitHub Actions defaults):
   top_n=20 (allowed 1–100), min_rated=4 (allowed 1–50),
   include_rewatch_in_averages=False (unique-film means),
   show_likes=True, show_reviews=True (♥ / ≡ on charts and search),
-  show_top_review=False (bottom-right review panel on listed ranking charts),
+  show_top_review=True (bottom-right review panel on listed ranking charts),
   include USA, include English, include Drama, include Comedy,
   no custom keyword exclusions, no search keywords,
   full diary span, undated films only on the full span.
@@ -20,12 +20,13 @@ show_likes / show_reviews (default True) gate ♥ and ≡ everywhere: tips, titl
 Most liked / Most reviewed panels, search-keyword lines, and inside-bar marks.
 When False, that mark is omitted (same as having no likes / reviews).
 
-show_top_review (default False) draws a bottom-right in-plot panel on listed
+show_top_review (default True) draws a bottom-right in-plot panel on listed
 ranking charts (title, truncated review text, date). Walks drawn ranks until
 a row has a qualifying review; among that row’s reviews prefers highest Rating
-(count tops, Most often, higher-rating) or lowest (lower-rating), then shortest
-text. Liked films get ♥ after the panel title. When True it also lifts the
-full-slate gate so lower-rating charts still emit.
+(count tops, Most often, higher-rating) or lowest (lower-rating); when every
+candidate is unrated, liked films first; then latest Date; then Name/Year.
+Liked films get ♥ after the panel title. Customize can turn it off. When True
+it also lifts the full-slate gate so lower-rating charts still emit.
 
 Optional search keywords are separate: after all chart PNGs, each keyword
 gets a Telegram film list where the substring matches film metadata
@@ -265,7 +266,7 @@ class ChartOptions:
     include_rewatch_in_averages: bool = False
     show_likes: bool = True
     show_reviews: bool = True
-    show_top_review: bool = False
+    show_top_review: bool = True
     include_usa: bool = True
     include_english: bool = True
     include_drama: bool = True
@@ -310,7 +311,7 @@ def read_chart_options(env: dict | None = None) -> ChartOptions:
         ),
         show_likes=parse_bool_flag(src.get("LETTERBOXD_SHOW_LIKES"), True),
         show_reviews=parse_bool_flag(src.get("LETTERBOXD_SHOW_REVIEWS"), True),
-        show_top_review=parse_bool_flag(src.get("LETTERBOXD_SHOW_TOP_REVIEW"), False),
+        show_top_review=parse_bool_flag(src.get("LETTERBOXD_SHOW_TOP_REVIEW"), True),
         include_usa=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_USA"), True),
         include_english=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_ENGLISH"), True),
         include_drama=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_DRAMA"), True),

@@ -378,14 +378,17 @@ def pick_review_among_keys(
 
     ``prefer``:
       - ``highest_rating`` — highest review-row Rating (else film rating lookup);
-        then shortest text; then Name/Year/Date. Default for watches/count tops,
+        then latest Date; then Name/Year. Default for watches/count tops,
         Most often in the diary, and higher-rating charts.
-      - ``lowest_rating`` — lowest Rating; same tie-breaks (lower-rating charts).
+      - ``lowest_rating`` — lowest Rating; same post-rating tie-breaks
+        (lower-rating charts).
       - ``shortest`` — shortest text only (legacy / tests; not used by charts).
 
     Rating comes from reviews.csv ``Rating`` (diary rating on that review row).
     When missing, optional ``film_ratings`` (merged Name+Year frame or key→float
     map) fills the gap. Unrated rows sort last for both rating preferences.
+    When every candidate is unrated, liked films (``liked_keys``) sort before
+    unliked ones, then latest Date, then Name/Year.
 
     Returns ``{"title", "text", "date", "liked"}`` or None. ``text`` is truncated
     to ``max_chars`` with ellipsis; ``title`` is ``Name (Year)``; ``date`` is the
@@ -409,6 +412,7 @@ def pick_review_among_keys(
     if work.empty:
         return None
     work["_len"] = work["_text"].str.len()
+    liked = set(str(k) for k in (liked_keys or ()) if k is not None and str(k))
 
     mode = str(prefer or TOP_REVIEW_PREFER_SHORTEST).strip().lower()
     if mode in (TOP_REVIEW_PREFER_HIGHEST_RATING, TOP_REVIEW_PREFER_LOWEST_RATING):
@@ -421,10 +425,17 @@ def pick_review_among_keys(
         work["_rating"] = row_rating.where(row_rating.notna() & (row_rating > 0), fallback)
         work["_rating"] = pd.to_numeric(work["_rating"], errors="coerce")
         rating_asc = mode == TOP_REVIEW_PREFER_LOWEST_RATING
-        # Rated first (na last); then shortest text; then stable keys.
+        # Rated first (na last). When all unrated, liked films before unliked.
+        # Then latest Date; then stable Name/Year.
+        all_unrated = bool(work["_rating"].isna().all())
+        work["_unliked"] = (
+            ~work["_film_key"].astype(str).isin(liked)
+            if all_unrated
+            else False
+        )
         work = work.sort_values(
-            by=["_rating", "_len", "Name", "Year", "Date"],
-            ascending=[rating_asc, True, True, True, True],
+            by=["_rating", "_unliked", "Date", "Name", "Year"],
+            ascending=[rating_asc, True, False, True, True],
             na_position="last",
             kind="mergesort",
         )
@@ -445,7 +456,6 @@ def pick_review_among_keys(
             date_str = pd.Timestamp(date_val).strftime("%Y-%m-%d")
         except (TypeError, ValueError):
             date_str = ""
-    liked = set(str(k) for k in (liked_keys or ()) if k is not None and str(k))
     return {
         "title": title,
         "text": truncate_top_review_text(str(row["_text"]), max_chars=max_chars),

@@ -1980,7 +1980,7 @@ def chart_top_rewatches(
         )
     panel_review = None
     if show_top_review and not exclude_hid_top:
-        # Count / rewatch tops: highest review Rating (then shortest), not
+        # Count / rewatch tops: highest review Rating (then latest Date), not
         # shortest-text alone.
         panel_review = pick_top_review_walking_ranks(
             top_review_films if top_review_films is not None else reviewed_films,

@@ -2070,7 +2070,8 @@ def chart_rating_hbar(
     When ``show_top_review``, walk drawn ranks (highest first) and draw a
     review from the first row that has one (or ``top_review`` when precomputed).
     Higher-rating charts prefer the highest review/film Rating; lower-rating
-    charts prefer the lowest; then shortest text. Liked panel films get ♥ after
+    charts prefer the lowest; then latest Date (when all unrated, liked
+    films first). Liked panel films get ♥ after
     the title when their key is in ``liked_keys``. Omit the panel only when no
     drawn row has a review.
     """
@@ -2516,7 +2517,7 @@ def chart_diary_entity_stacked(
     most_reviewed = rank_most_reviewed(reviewed_by_display, top_n)
     panel_review = None
     if show_top_review and not exclude_hid_top:
-        # Count tops: highest review/film Rating (then shortest), same as
+        # Count tops: highest review/film Rating (then latest Date), same as
         # higher-rating charts — not shortest-text alone.
         panel_review = pick_top_review_walking_ranks(
             reviewed_films,
