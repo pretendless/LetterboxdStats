@@ -400,7 +400,7 @@ test("profile card is English, within Telegram limits, and distinct from /start"
   assert.match(DESCRIPTION, /Exclude on count tops/);
   assert.match(DESCRIPTION, /Search keywords/);
   assert.match(DESCRIPTION, /likes \(♥\), reviews \(≡\)/);
-  assert.match(DESCRIPTION, /Top review \(off by default/);
+  assert.match(DESCRIPTION, /Top review \(on by default/);
   assert.match(DESCRIPTION, /rewatches in averages/);
   assert.doesNotMatch(DESCRIPTION, /^Example:$/m);
   assert.doesNotMatch(DESCRIPTION, /ZIP file/);

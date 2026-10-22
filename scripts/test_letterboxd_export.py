@@ -305,14 +305,15 @@ def test_rewatch_in_averages_mean_and_unique_threshold() -> None:
     assert opts_off.include_rewatch_in_averages is False
     assert opts_off.show_likes is True
     assert opts_off.show_reviews is True
-    assert opts_off.show_top_review is False
+    assert opts_off.show_top_review is True
     likes_off = read_chart_options(
         {"LETTERBOXD_SHOW_LIKES": "false", "LETTERBOXD_SHOW_REVIEWS": "no"}
     )
     assert likes_off.show_likes is False
     assert likes_off.show_reviews is False
-    top_on = read_chart_options({"LETTERBOXD_SHOW_TOP_REVIEW": "yes"})
-    assert top_on.show_top_review is True
+    assert likes_off.show_top_review is False
+    top_off = read_chart_options({"LETTERBOXD_SHOW_TOP_REVIEW": "no"})
+    assert top_off.show_top_review is False
 
 
 def test_diary_wins_over_ratings_csv() -> None:

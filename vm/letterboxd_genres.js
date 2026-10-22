@@ -112,7 +112,7 @@ export function defaultLetterboxdOptions() {
     includeRewatchInAverages: false,
     showLikes: true,
     showReviews: true,
-    showTopReview: false,
+    showTopReview: true,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -181,10 +181,10 @@ export function normalizeLetterboxdOptions(options) {
   const windowOk = Boolean(dateFrom && dateTo && dateTo >= dateFrom);
   const showReviews = src.showReviews == null ? true : Boolean(src.showReviews);
   // Top review requires reviews on; clearing reviews also clears top review.
-  // Default off when unset (Customize can enable; keeps full chart runs fast).
+  // Default on when unset (Customize can disable).
   const showTopReview = showReviews
     ? src.showTopReview == null
-      ? false
+      ? true
       : Boolean(src.showTopReview)
     : false;
   return {
@@ -401,7 +401,7 @@ const SETTINGS_SUMMARY_RE =
 const SETTINGS_SUMMARY_LEGACY_BOTH_RE =
   /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*Top review:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
 
-// Pre-Likes/Reviews: same Exclude shape, no Likes:/Reviews: fields (default likes/reviews yes; Top review off).
+// Pre-Likes/Reviews: same Exclude shape, no Likes:/Reviews: fields (default likes/reviews/Top review yes).
 const SETTINGS_SUMMARY_PRE_LIKES_RE =
   /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
 
@@ -589,7 +589,7 @@ export function parseLetterboxdSettingsSummary(text) {
       includeRewatchInAverages: yesNo(preLikes[3]),
       showLikes: true,
       showReviews: true,
-      showTopReview: false,
+      showTopReview: true,
       includeUSA: exclude.includeUSA,
       includeEnglish: exclude.includeEnglish,
       includeDrama: exclude.includeDrama,
@@ -616,7 +616,7 @@ export function parseLetterboxdSettingsSummary(text) {
     includeRewatchInAverages: yesNo(legacy[3]),
     showLikes: true,
     showReviews: true,
-    showTopReview: false,
+    showTopReview: true,
     includeUSA: yesNo(legacy[4]),
     includeEnglish: yesNo(legacy[5]),
     includeDrama: yesNo(legacy[6]),
@@ -879,31 +879,26 @@ function withDefaultButton(rows, label, data) {
   return { inline_keyboard: [...rows, [button(label, data)]] };
 }
 
-/** Neutral object/symbol emojis only — no hand or face glyphs. */
+/** Neutral object/symbol emojis only — no hand or face glyphs.
+ *  Numeric choices (tops, threshold, years, Last N years) stay numbers/labels only.
+ */
 export const WIZARD_EMOJI_YES = "✅";
 export const WIZARD_EMOJI_NO = "❌";
 export const WIZARD_EMOJI_DEFAULT_MODE = "✅";
 export const WIZARD_EMOJI_CUSTOMIZE = "⚙️";
 export const WIZARD_EMOJI_PASTE = "📋";
-export const WIZARD_EMOJI_TOP_10 = "🔟";
-export const WIZARD_EMOJI_TOP_20 = "2️⃣0️⃣";
-export const WIZARD_EMOJI_TOP_30 = "3️⃣0️⃣";
-export const WIZARD_EMOJI_TOP_50 = "5️⃣0️⃣";
-export const WIZARD_EMOJI_MIN_1 = "1️⃣";
-export const WIZARD_EMOJI_MIN_3 = "3️⃣";
-export const WIZARD_EMOJI_MIN_4 = "4️⃣";
-export const WIZARD_EMOJI_MIN_5 = "5️⃣";
 export const WIZARD_EMOJI_FULL_PERIOD = "📅";
 export const WIZARD_EMOJI_CUSTOM_RANGE = "✏️";
-export const WIZARD_EMOJI_LAST_3Y = "🕒";
-export const WIZARD_EMOJI_LAST_5Y = "🕔";
 export const WIZARD_EMOJI_DONE = "✔️";
 export const WIZARD_EMOJI_NONE = "🚫";
-export const WIZARD_EMOJI_YEAR = "📆";
 
-function defaultButtonLabel(emoji, detail = "") {
+/** Default button: emoji of the default choice, or bare ``Default (N)`` when numeric. */
+function defaultButtonLabel(emojiOrEmpty, detail = "") {
+  if (!emojiOrEmpty) {
+    return detail ? `Default (${detail})` : "Default";
+  }
   const tail = detail ? ` (${detail})` : "";
-  return `Default ${emoji}${tail}`;
+  return `Default ${emojiOrEmpty}${tail}`;
 }
 
 export function letterboxdModeKeyboard() {
@@ -920,12 +915,12 @@ export function letterboxdModeKeyboard() {
 export function letterboxdTopKeyboard() {
   return withDefaultButton(
     [[
-      button(`${WIZARD_EMOJI_TOP_10} 10`, "lb:n:10"),
-      button(`${WIZARD_EMOJI_TOP_20} 20`, "lb:n:20"),
-      button(`${WIZARD_EMOJI_TOP_30} 30`, "lb:n:30"),
-      button(`${WIZARD_EMOJI_TOP_50} 50`, "lb:n:50"),
+      button("10", "lb:n:10"),
+      button("20", "lb:n:20"),
+      button("30", "lb:n:30"),
+      button("50", "lb:n:50"),
     ]],
-    defaultButtonLabel(WIZARD_EMOJI_TOP_20, "20"),
+    defaultButtonLabel("", "20"),
     "lb:n:20",
   );
 }
@@ -933,11 +928,11 @@ export function letterboxdTopKeyboard() {
 export function letterboxdMinKeyboard() {
   return withDefaultButton(
     [[
-      button(`${WIZARD_EMOJI_MIN_1} 1`, "lb:m:1"),
-      button(`${WIZARD_EMOJI_MIN_3} 3`, "lb:m:3"),
-      button(`${WIZARD_EMOJI_MIN_5} 5`, "lb:m:5"),
+      button("1", "lb:m:1"),
+      button("3", "lb:m:3"),
+      button("5", "lb:m:5"),
     ]],
-    defaultButtonLabel(WIZARD_EMOJI_MIN_4, "4"),
+    defaultButtonLabel("", "4"),
     "lb:m:4",
   );
 }
@@ -974,16 +969,17 @@ export function recentWatchYears(now = new Date(), count = 5) {
 }
 
 export function letterboxdRangeKeyboard(now = new Date()) {
+  // Calendar years and Last N years are numeric/plain labels — no emoji.
   const years = recentWatchYears(now, 5).map((year) =>
-    button(`${WIZARD_EMOJI_YEAR} ${year}`, `lb:yr:${year}`),
+    button(String(year), `lb:yr:${year}`),
   );
   return {
     inline_keyboard: [
       years.slice(0, 3),
       years.slice(3),
       [
-        button(`${WIZARD_EMOJI_LAST_3Y} Last 3 years`, "lb:y:3"),
-        button(`${WIZARD_EMOJI_LAST_5Y} Last 5 years`, "lb:y:5"),
+        button("Last 3 years", "lb:y:3"),
+        button("Last 5 years", "lb:y:5"),
       ],
       [button(defaultButtonLabel(WIZARD_EMOJI_FULL_PERIOD, "full"), "lb:full")],
     ],
@@ -1113,9 +1109,9 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Show top review?",
-        "When on, ranking charts show a small review panel: film title (♥ if liked), up to 280 characters, and the date. Picks the highest-ranked film that has a review — highest rating on count/higher charts, lowest on lower charts; if none are rated, prefer liked, then the newest date. Also unlocks lower-rating charts when there aren’t enough films for a full top. Default is off.",
+        "When on, ranking charts show a small review panel: film title (♥ if liked), up to 280 characters, and the date. Picks the highest-ranked film that has a review — highest rating on count/higher charts, lowest on lower charts; if none are rated, prefer liked, then the newest date. Also unlocks lower-rating charts when there aren’t enough films for a full top. Default is on.",
       ),
-      reply_markup: letterboxdYesNoKeyboard("lb:toprev", "no"),
+      reply_markup: letterboxdYesNoKeyboard("lb:toprev", "yes"),
     };
   }
   if (step === "exclusions") {

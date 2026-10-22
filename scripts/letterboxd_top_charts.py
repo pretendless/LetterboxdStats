@@ -485,6 +485,61 @@ def _probe_segment_width_px(
             p.remove()
 
 
+def _engagement_label_drawn_width_px(
+    ax,
+    renderer,
+    text: str,
+    *,
+    fontsize: float,
+    fontweight: str = "bold",
+    path_effects=None,
+    mark_fontweight: str | None = "bold",
+) -> float:
+    """Pixel width of an hbar label as ``draw_colored_text_segments`` would draw it.
+
+    Includes the stroke-pad gap before each ♥/≡ so name + marks + **counts** are
+    budgeted together (plain ``_text_width_px`` on the joined string under-counts).
+    """
+    segments = _hbar_label_engagement_segments(text)
+    if not segments:
+        return 0.0
+    fig = ax.figure
+    stroke_pad_px = 2.0 * _path_effect_stroke_linewidth_px(fig, path_effects)
+    probes = []
+    try:
+        total = 0.0
+        for frag, _color in segments:
+            if not frag:
+                continue
+            is_mark = _is_engagement_mark_fragment(frag)
+            if is_mark and stroke_pad_px:
+                total += stroke_pad_px
+            weight = (
+                mark_fontweight if mark_fontweight and is_mark else fontweight
+            )
+            kw = dict(
+                fontsize=fontsize,
+                fontweight=weight,
+                alpha=0,
+            )
+            if path_effects is not None:
+                kw["path_effects"] = path_effects
+            mark_fp = (
+                review_mark_fontproperties()
+                if is_mark and REVIEW_NOTE and REVIEW_NOTE in frag
+                else None
+            )
+            if mark_fp is not None:
+                kw["fontproperties"] = mark_fp
+            p = ax.text(0, 0, frag, **kw)
+            probes.append(p)
+            total += float(p.get_window_extent(renderer=renderer).width)
+        return total
+    finally:
+        for p in probes:
+            p.remove()
+
+
 def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
     """Recolor ♥/≡ inside tick labels to logo orange/blue (axis titles outside bars).
 
@@ -2803,11 +2858,12 @@ def chart_rating_hbar(
     Names are white with a black stroke. Rank + name + optional ``♥ N`` /
     ``≡ M`` form one left label. A bar that holds the full label (or at least
     ``SHORT_BAR_NAME_CHARS`` name characters plus the engagement suffix) keeps
-    that label inside; the name ellipsizes earlier so ♥/≡ still fit. When the
-    natural name is shorter than that threshold, or the bar cannot hold fifteen
-    name characters plus engagement, the whole left label overflows to the
-    right of the bar tip; the mean/(n) tip sits after it with a clear gap.
-    Long-name overflow uses fifteen characters + ``...`` then ♥/≡.
+    that label inside; the name ellipsizes earlier so ♥/≡ **and their counts**
+    still fit inside the bar. When the natural name is shorter than that
+    threshold, or the bar cannot hold fifteen name characters plus engagement,
+    the whole left label overflows to the right of the bar tip; the mean/(n)
+    tip sits after it with a clear gap. Long-name overflow uses fifteen
+    characters + ``...`` then ♥/≡ + counts.
     ascending=False → best at top; True → worst at top.
     The mean to the right is bold and colored on the rating scale. The rated-film
     count sits beside it in regular light text as ``(12)``.
@@ -2907,19 +2963,35 @@ def chart_rating_hbar(
     def x_px(x: float, yi: float) -> float:
         return float(ax.transData.transform((x, yi))[0])
 
-    def name_width(text: str) -> float:
-        return _text_width_px(
-            ax, renderer, text, fontsize=name_fs, fontweight="bold", path_effects=stroke
+    def drawn_width(text: str) -> float:
+        """Width including stroke-pad gaps before ♥/≡ (matches split artists)."""
+        return _engagement_label_drawn_width_px(
+            ax,
+            renderer,
+            text,
+            fontsize=name_fs,
+            fontweight="bold",
+            path_effects=stroke,
+            mark_fontweight="bold",
         )
 
-    def name_chars_that_fit(prefix: str, name: str, max_px: float) -> int:
+    def name_chars_that_fit_with_engage(
+        prefix: str, name: str, engage: str, max_px: float
+    ) -> int:
+        """Largest name prefix whose drawn label (name + ♥/≡ + counts) fits ``max_px``."""
         if max_px <= 0 or not name:
             return 0
         lo, hi = 0, len(name)
         best = 0
         while lo <= hi:
             mid = (lo + hi) // 2
-            if name_width(prefix + name[:mid]) <= max_px:
+            if mid >= len(name):
+                candidate = prefix + name + engage
+            elif mid <= 0:
+                candidate = prefix + NAME_ELLIPSIS + engage
+            else:
+                candidate = prefix + name[:mid].rstrip() + NAME_ELLIPSIS + engage
+            if drawn_width(candidate) <= max_px:
                 best = mid
                 lo = mid + 1
             else:
@@ -2978,12 +3050,12 @@ def chart_rating_hbar(
             liked_count=liked_count,
             reviewed_count=reviewed_count,
         )
-        engage_px = name_width(engage) if engage else 0.0
         inside_px = max(0.0, x_px(avg, yi) - end_pad_px - x_px(pad_left, yi))
-        # Reserve engagement width so name ellipsizes earlier when needed.
-        name_budget_px = max(0.0, inside_px - engage_px)
-        fitted = name_chars_that_fit(prefix, name, name_budget_px)
-        full_w = name_width(prefix + name + engage)
+        # Budget with stroke-pad gaps so ♥/≡ **counts** stay inside the bar.
+        full_w = drawn_width(prefix + name + engage)
+        fitted = name_chars_that_fit_with_engage(
+            prefix, name, engage, inside_px
+        )
 
         if len(name) < SHORT_BAR_NAME_CHARS:
             # Short natural name: whole left label outside, tip follows.
@@ -2993,21 +3065,18 @@ def chart_rating_hbar(
             shown = prefix + name + engage
             inside = True
         elif fitted >= SHORT_BAR_NAME_CHARS:
-            # Keep inside: truncate name into the reserved budget, then ♥/≡.
-            name_part = _fit_text_to_px(
-                ax,
-                renderer,
-                prefix + name,
-                name_budget_px,
-                fontsize=name_fs,
-                fontweight="bold",
-                path_effects=stroke,
-                ellipsis=NAME_ELLIPSIS,
-            )
-            shown = name_part + engage
-            # If measurement slack would still clip ♥/≡ under the bar mask,
-            # fall back to the outside overflow path so marks stay visible.
-            if engage and name_width(shown) > inside_px + 0.5:
+            # Keep inside: ellipsis early enough that marks + counts fit.
+            if fitted >= len(name):
+                shown = prefix + name + engage
+            else:
+                shown = (
+                    prefix
+                    + name[:fitted].rstrip()
+                    + NAME_ELLIPSIS
+                    + engage
+                )
+            # Slack / rounding: if counts would still clip, overflow outside.
+            if engage and drawn_width(shown) > inside_px + 0.5:
                 shown = (
                     prefix
                     + name[:SHORT_BAR_NAME_CHARS].rstrip()

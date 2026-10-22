@@ -184,13 +184,13 @@ test("wizard prompts are html, with a default line and examples", () => {
   assert.match(range.messages[0].text, /Default: full period/);
   const labels = range.messages[0].reply_markup.inline_keyboard.flat().map((button) => button.text);
   assert.deepEqual(labels, [
-    "📆 2026",
-    "📆 2025",
-    "📆 2024",
-    "📆 2023",
-    "📆 2022",
-    "🕒 Last 3 years",
-    "🕔 Last 5 years",
+    "2026",
+    "2025",
+    "2024",
+    "2023",
+    "2022",
+    "Last 3 years",
+    "Last 5 years",
     "Default 📅 (full)",
   ]);
   const top = advanceLetterboxdWizard(
@@ -200,7 +200,7 @@ test("wizard prompts are html, with a default line and examples", () => {
   );
   assert.equal(top.state.topN, 20);
   assert.equal(top.state.step, "min_rated");
-  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default 4️⃣ (4)");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default (4)");
   const minText = top.messages[0].text;
   assert.match(minText, /<b>Threshold<\/b>/);
   assert.match(minText, /Minimum rated films/);
@@ -212,7 +212,7 @@ test("wizard prompts are html, with a default line and examples", () => {
   assert.match(minText, /Default: 4/);
   assert.deepEqual(
     top.messages[0].reply_markup.inline_keyboard[0].map((button) => button.text),
-    ["1️⃣ 1", "3️⃣ 3", "5️⃣ 5"],
+    ["1", "3", "5"],
   );
   assert.equal(top.messages[0].reply_markup.inline_keyboard[0][0].callback_data, "lb:m:1");
   assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].callback_data, "lb:m:4");
@@ -319,7 +319,7 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(showTopReview.state.step, "show_top_review");
   assert.match(showTopReview.messages[0].text, /<b>Show top review\?<\/b>/);
   assert.match(showTopReview.messages[0].text, /small review panel/);
-  assert.match(showTopReview.messages[0].text, /Default is off/);
+  assert.match(showTopReview.messages[0].text, /Default is on/);
   assert.doesNotMatch(showTopReview.messages[0].text, /Default is yes/);
   assert.equal(exclusions.state.showTopReview, false);
   // Reviews off → skip Top review and force top_review=false.
@@ -351,7 +351,7 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(rewatch.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
   assert.equal(showLikes.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
   assert.equal(showReviews.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
-  assert.equal(showTopReview.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
+  assert.equal(showTopReview.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
   assert.equal(exclusions.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
   assert.equal(usa.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
   assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
@@ -433,13 +433,13 @@ test("every wizard keyboard has a one-tap default button alone on the bottom row
   assert.equal(mode.inline_keyboard[0][1].text, "📋 Paste settings");
   assert.equal(last(mode), "Default ✅");
   assert.equal(lastRow(mode).length, 1);
-  assert.equal(last(letterboxdTopKeyboard()), "Default 2️⃣0️⃣ (20)");
+  assert.equal(last(letterboxdTopKeyboard()), "Default (20)");
   assert.equal(lastRow(letterboxdTopKeyboard()).length, 1);
   assert.deepEqual(
     letterboxdMinKeyboard().inline_keyboard[0].map((button) => button.text),
-    ["1️⃣ 1", "3️⃣ 3", "5️⃣ 5"],
+    ["1", "3", "5"],
   );
-  assert.equal(last(letterboxdMinKeyboard()), "Default 4️⃣ (4)");
+  assert.equal(last(letterboxdMinKeyboard()), "Default (4)");
   assert.equal(letterboxdMinKeyboard().inline_keyboard.at(-1)[0].callback_data, "lb:m:4");
   assert.equal(lastRow(letterboxdMinKeyboard()).length, 1);
   assert.equal(last(letterboxdYesNoKeyboard("lb:rew", "no")), "Default ❌");
@@ -465,7 +465,7 @@ test("every wizard keyboard has a one-tap default button alone on the bottom row
   );
   assert.deepEqual(
     letterboxdTopKeyboard().inline_keyboard[0].map((b) => b.text),
-    ["🔟 10", "2️⃣0️⃣ 20", "3️⃣0️⃣ 30", "5️⃣0️⃣ 50"],
+    ["10", "20", "30", "50"],
   );
 });
 
@@ -504,8 +504,8 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
   const defaults = letterboxdAckText("lb-2", {});
   assert.match(defaults, /Rewatches in averages: no/);
   assert.match(defaults, /Likes: yes/);
-  assert.match(defaults, /Reviews: yes/);
-  assert.doesNotMatch(defaults, /Top review:/);
+  assert.match(defaults, /Top review: yes/);
+  assert.doesNotMatch(defaults, /Reviews:/);
   assert.match(defaults, /Exclude: none/);
   assert.match(defaults, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
   const topOn = letterboxdAckText("lb-3", { showTopReview: true });
@@ -636,7 +636,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     },
   );
 
-  // Pre-Likes/Reviews summaries still parse; likes/reviews default on, Top review off.
+  // Pre-Likes/Reviews summaries still parse; likes/reviews/Top review default on.
   assert.deepEqual(
     parseLetterboxdSettingsSummary(
       "Tops: 20. Threshold: 3. Rewatches in averages: no. " +
@@ -648,7 +648,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
       includeRewatchInAverages: false,
       showLikes: true,
       showReviews: true,
-      showTopReview: false,
+      showTopReview: true,
       includeUSA: true,
       includeEnglish: true,
       includeDrama: true,
@@ -696,7 +696,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     includeRewatchInAverages: false,
     showLikes: true,
     showReviews: true,
-    showTopReview: false,
+    showTopReview: true,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -717,7 +717,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     includeRewatchInAverages: false,
     showLikes: true,
     showReviews: true,
-    showTopReview: false,
+    showTopReview: true,
     includeUSA: false,
     includeEnglish: false,
     includeDrama: true,
@@ -849,7 +849,7 @@ test("buildLetterboxdDispatch", () => {
       include_rewatch_in_averages: "false",
       show_likes: "true",
       show_reviews: "true",
-      show_top_review: "false",
+      show_top_review: "true",
       include_usa: "true",
       include_english: "true",
       include_drama: "true",

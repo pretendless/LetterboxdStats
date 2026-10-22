@@ -44,9 +44,9 @@ on:
         default: "true"
         type: string
       show_top_review:
-        description: In-plot top-review panel on ranking charts (true/false; default false); also emits lower-rating charts when on
+        description: In-plot top-review panel on ranking charts (true/false; default true); also emits lower-rating charts when on
         required: false
-        default: "false"
+        default: "true"
         type: string
       include_usa:
         description: Include USA in country tops (true/false)
