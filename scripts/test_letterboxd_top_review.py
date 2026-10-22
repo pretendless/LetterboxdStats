@@ -158,14 +158,15 @@ def test_count_tops_prefer_highest_rating_not_shortest() -> None:
     assert liked["liked"] is True
 
 
-def test_higher_rating_prefers_highest_then_shortest() -> None:
+def test_higher_rating_prefers_highest_then_latest_date() -> None:
+    """Same winning rating → latest Date wins (not shortest text)."""
     reviews = pd.DataFrame(
         [
             {
                 "Name": "Hi",
                 "Year": 2000,
-                "Date": pd.Timestamp("2024-01-01"),
-                "Review": "long high rating text",
+                "Date": pd.Timestamp("2024-06-01"),
+                "Review": "long high rating text that is longer",
                 "Rating": 5.0,
             },
             {
@@ -189,9 +190,10 @@ def test_higher_rating_prefers_highest_then_shortest() -> None:
         reviews, keys, prefer=TOP_REVIEW_PREFER_HIGHEST_RATING
     )
     assert high is not None
-    # Both at 5.0 → shortest text wins.
-    assert high["title"] == "AlsoHi (2001)"
-    assert high["text"] == "short"
+    # Both at 5.0 → latest Date wins even when the text is longer.
+    assert high["title"] == "Hi (2000)"
+    assert high["date"] == "2024-06-01"
+    assert "longer" in high["text"]
 
     low = pick_review_among_keys(
         reviews, keys, prefer=TOP_REVIEW_PREFER_LOWEST_RATING
@@ -206,6 +208,116 @@ def test_higher_rating_prefers_highest_then_shortest() -> None:
     )
     assert short is not None
     assert short["text"] == "y"
+
+
+def test_same_film_same_rating_prefers_latest_date() -> None:
+    """Two reviews for one film at the same rating → most recent Date."""
+    reviews = pd.DataFrame(
+        [
+            {
+                "Name": "Twin",
+                "Year": 1999,
+                "Date": pd.Timestamp("2020-01-01"),
+                "Review": "older note",
+                "Rating": 4.0,
+            },
+            {
+                "Name": "Twin",
+                "Year": 1999,
+                "Date": pd.Timestamp("2023-12-31"),
+                "Review": "much longer newer note that would lose on shortest",
+                "Rating": 4.0,
+            },
+        ]
+    )
+    picked = pick_review_among_keys(
+        reviews, {"Twin|||1999"}, prefer=TOP_REVIEW_PREFER_HIGHEST_RATING
+    )
+    assert picked is not None
+    assert picked["date"] == "2023-12-31"
+    assert "newer" in picked["text"]
+
+
+def test_all_unrated_prefers_liked_then_latest_date() -> None:
+    """When every candidate is unrated: liked first; among liked, latest Date."""
+    reviews = pd.DataFrame(
+        [
+            {
+                "Name": "UnlikedLate",
+                "Year": 2010,
+                "Date": pd.Timestamp("2025-01-01"),
+                "Review": "unliked but very recent",
+                "Rating": float("nan"),
+            },
+            {
+                "Name": "LikedOld",
+                "Year": 2011,
+                "Date": pd.Timestamp("2020-01-01"),
+                "Review": "liked older",
+                "Rating": float("nan"),
+            },
+            {
+                "Name": "LikedNew",
+                "Year": 2012,
+                "Date": pd.Timestamp("2024-06-15"),
+                "Review": "liked newer and longer than the other liked",
+                "Rating": float("nan"),
+            },
+        ]
+    )
+    keys = {"UnlikedLate|||2010", "LikedOld|||2011", "LikedNew|||2012"}
+    liked = {"LikedOld|||2011", "LikedNew|||2012"}
+    picked = pick_review_among_keys(
+        reviews,
+        keys,
+        prefer=TOP_REVIEW_PREFER_HIGHEST_RATING,
+        liked_keys=liked,
+    )
+    assert picked is not None
+    # Liked beats later unliked; among liked, latest Date (not shortest).
+    assert picked["title"] == "LikedNew (2012)"
+    assert picked["date"] == "2024-06-15"
+    assert picked["liked"] is True
+
+    # Without liked_keys, all unrated → latest Date among all.
+    by_date = pick_review_among_keys(
+        reviews, keys, prefer=TOP_REVIEW_PREFER_HIGHEST_RATING
+    )
+    assert by_date is not None
+    assert by_date["title"] == "UnlikedLate (2010)"
+    assert by_date["date"] == "2025-01-01"
+
+
+def test_mixed_rated_unrated_keeps_rating_preference() -> None:
+    """Rated vs unrated: existing rating sort; liked does not override a rating."""
+    reviews = pd.DataFrame(
+        [
+            {
+                "Name": "Rated",
+                "Year": 2000,
+                "Date": pd.Timestamp("2020-01-01"),
+                "Review": "has a rating",
+                "Rating": 3.0,
+            },
+            {
+                "Name": "LikedUnrated",
+                "Year": 2001,
+                "Date": pd.Timestamp("2025-01-01"),
+                "Review": "liked but unrated and later",
+                "Rating": float("nan"),
+            },
+        ]
+    )
+    keys = {"Rated|||2000", "LikedUnrated|||2001"}
+    high = pick_review_among_keys(
+        reviews,
+        keys,
+        prefer=TOP_REVIEW_PREFER_HIGHEST_RATING,
+        liked_keys={"LikedUnrated|||2001"},
+    )
+    assert high is not None
+    assert high["title"] == "Rated (2000)"
+    assert high["liked"] is False
 
 
 def test_rating_prefer_uses_film_ratings_fallback() -> None:
@@ -349,7 +461,10 @@ def main() -> int:
     test_pick_shortest_review_wins()
     test_pick_walks_to_first_reviewed_rank()
     test_count_tops_prefer_highest_rating_not_shortest()
-    test_higher_rating_prefers_highest_then_shortest()
+    test_higher_rating_prefers_highest_then_latest_date()
+    test_same_film_same_rating_prefers_latest_date()
+    test_all_unrated_prefers_liked_then_latest_date()
+    test_mixed_rated_unrated_keeps_rating_preference()
     test_rating_prefer_uses_film_ratings_fallback()
     with TemporaryDirectory() as tmp:
         test_exclude_keyword_suppresses_top_review_panel(Path(tmp))
