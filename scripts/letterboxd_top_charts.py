@@ -130,7 +130,7 @@ def film_title_with_engagement_marks(
 
 
 def category_label_with_liked_count(name: str, liked_count: int) -> str:
-    """Category bar label: ``Drama ♥ 12`` when liked_count > 0; else the name only."""
+    """Category bar label: ``Drama 12 ♥`` when liked_count > 0; else the name only."""
     label = str(name or "?")
     try:
         n = int(liked_count)
@@ -138,13 +138,13 @@ def category_label_with_liked_count(name: str, liked_count: int) -> str:
         n = 0
     if n <= 0:
         return label
-    return f"{label} {LIKED_HEART} {n}"
+    return f"{label} {n} {LIKED_HEART}"
 
 
 def category_label_with_engagement_counts(
     name: str, liked_count: int = 0, reviewed_count: int = 0
 ) -> str:
-    """Category label with optional ``♥ N`` and/or ``≡ M`` when > 0."""
+    """Category label with optional ``N ♥`` and/or ``M ≡`` when > 0."""
     label = category_label_with_liked_count(name, liked_count)
     try:
         n = int(reviewed_count)
@@ -152,22 +152,22 @@ def category_label_with_engagement_counts(
         n = 0
     if n <= 0 or not REVIEW_NOTE:
         return label
-    return f"{label} {REVIEW_NOTE} {n}"
+    return f"{label} {n} {REVIEW_NOTE}"
 
 
 def format_liked_tip(liked_count: int) -> str | None:
-    """Tip fragment ``♥ N`` when N > 0; otherwise None (omit the tip entirely)."""
+    """Tip fragment ``N ♥`` when N > 0; otherwise None (omit the tip entirely)."""
     try:
         n = int(liked_count)
     except (TypeError, ValueError):
         return None
     if n <= 0:
         return None
-    return f"{LIKED_HEART} {n}"
+    return f"{n} {LIKED_HEART}"
 
 
 def format_reviewed_tip(reviewed_count: int) -> str | None:
-    """Tip fragment ``≡ N`` (U+2261) when N > 0; otherwise None."""
+    """Tip fragment ``N ≡`` (U+2261) when N > 0; otherwise None."""
     if not REVIEW_NOTE:
         return None
     try:
@@ -176,11 +176,11 @@ def format_reviewed_tip(reviewed_count: int) -> str | None:
         return None
     if n <= 0:
         return None
-    return f"{REVIEW_NOTE} {n}"
+    return f"{n} {REVIEW_NOTE}"
 
 
 def format_engagement_tip(liked_count: int = 0, reviewed_count: int = 0) -> str | None:
-    """Combined tip ``♥ N ≡ M`` for whichever counts are > 0; None when both omit."""
+    """Combined tip ``N ♥ M ≡`` for whichever counts are > 0; None when both omit."""
     parts = []
     liked = format_liked_tip(liked_count)
     if liked:
@@ -554,8 +554,8 @@ def draw_watch_year_most_liked_panel(
 
         mark_fp = review_mark_fontproperties()
         for rank, (name, count) in enumerate(rank_rows, start=1):
-            # Rank: ``1. Name `` + bold mark (♥ or ≡) + space + bold count.
-            # Latin and marks stay on DejaVu (theme default). ≡ matches ♥ N weight.
+            # Rank: ``1. Name `` + bold count + space + bold mark (♥ or ≡).
+            # Latin and marks stay on DejaVu (theme default). ≡ matches N ♥ weight.
             mark_draw = _mpl_engagement_text(mark)
             head = f"{rank}. {name} "
             head_artist = ax.text(
@@ -573,12 +573,28 @@ def draw_watch_year_most_liked_panel(
             fig.canvas.draw()
             renderer = fig.canvas.get_renderer()
             hb = head_artist.get_window_extent(renderer=renderer)
-            x_mark, _ym = inv.transform((hb.x1, hb.y0))
+            x_count, _yc = inv.transform((hb.x1, hb.y0))
+            count_artist = ax.text(
+                float(x_count),
+                y_line,
+                f"{int(count)} ",
+                transform=ax.transAxes,
+                fontsize=fontsize,
+                fontweight="bold",
+                color=FG,
+                ha="left",
+                va="top",
+                clip_on=False,
+            )
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            cb = count_artist.get_window_extent(renderer=renderer)
+            x_mark, _ym = inv.transform((cb.x1, cb.y0))
             use_mark_fp = mark_fp if mark_draw == REVIEW_NOTE else None
-            mark_artist = ax.text(
+            ax.text(
                 float(x_mark),
                 y_line,
-                f"{mark_draw} ",
+                mark_draw,
                 transform=ax.transAxes,
                 fontsize=fontsize,
                 fontweight="bold",
@@ -587,22 +603,6 @@ def draw_watch_year_most_liked_panel(
                 va="top",
                 clip_on=False,
                 fontproperties=use_mark_fp,
-            )
-            fig.canvas.draw()
-            renderer = fig.canvas.get_renderer()
-            mb = mark_artist.get_window_extent(renderer=renderer)
-            x_count, _yc = inv.transform((mb.x1 + 1.0, mb.y0))
-            ax.text(
-                float(x_count),
-                y_line,
-                str(int(count)),
-                transform=ax.transAxes,
-                fontsize=fontsize,
-                fontweight="bold",
-                color=FG,
-                ha="left",
-                va="top",
-                clip_on=False,
             )
             # Advance by measured line height in display pixels — never axes
             # fraction (tall language/director hbars would stretch the list).
@@ -639,6 +639,294 @@ def count_avg_text_style(label: str) -> dict:
     }
 
 
+def most_reviewed_years_column_sizes(
+    n: int, *, entries_per_column: int = 5
+) -> list[int]:
+    """Row counts per column for the Most reviewed years panel.
+
+    Default fill is ``entries_per_column`` (5) then wrap right. When there are
+    at least two columns and the last would be a short remainder (1–3 after a
+    full column), rebalance the **last two** columns toward even heights:
+
+    - 5+1 → 3+3, 5+2 → 4+3, 5+3 → 4+4
+    - 5+4 stays 5+4
+
+    Earlier full columns are unchanged. Example: 11 → ``[5, 3, 3]``.
+    """
+    try:
+        total = int(n)
+    except (TypeError, ValueError):
+        return []
+    if total <= 0:
+        return []
+    per_col = max(1, int(entries_per_column))
+    sizes: list[int] = []
+    remaining = total
+    while remaining > 0:
+        take = min(per_col, remaining)
+        sizes.append(take)
+        remaining -= take
+    if len(sizes) >= 2 and 0 < sizes[-1] < per_col and sizes[-1] <= 3:
+        pair = sizes[-2] + sizes[-1]
+        left = (pair + 1) // 2
+        right = pair - left
+        sizes[-2] = left
+        sizes[-1] = right
+    return sizes
+
+
+def draw_most_reviewed_years_panel(
+    fig,
+    ax,
+    ranked: list[tuple[str, int]] | None,
+    *,
+    fontsize: float = 7,
+    title_fontsize: float = 8,
+    entries_per_column: int = 5,
+    title: str = "Most reviewed years",
+) -> bool:
+    """Top-left inset panel: years ranked by date-bound review tip counts.
+
+    Five numbered rows per column, then wrap to the next column on the right.
+    A short final remainder (1–3) rebalances the last two columns (see
+    ``most_reviewed_years_column_sizes``). Panel size grows with content.
+    Returns True when drawn; False when omitted (no positive review positions).
+    Compact line spacing matches Most liked.
+    """
+    from matplotlib.patches import FancyBboxPatch
+
+    rows = _positive_rank_rows(ranked)
+    if not rows or not REVIEW_NOTE:
+        return False
+    per_col = max(1, int(entries_per_column))
+    col_sizes = most_reviewed_years_column_sizes(
+        len(rows), entries_per_column=per_col
+    )
+    columns: list[list[tuple[int, str, int]]] = [[] for _ in col_sizes]
+    cursor = 0
+    for col_i, size in enumerate(col_sizes):
+        for _ in range(size):
+            name, count = rows[cursor]
+            columns[col_i].append((cursor + 1, name, int(count)))
+            cursor += 1
+    n_cols = len(columns)
+
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    inv = ax.transAxes.inverted()
+    mark_fp = review_mark_fontproperties()
+    mark_draw = _mpl_engagement_text(REVIEW_NOTE)
+    use_mark_fp = mark_fp if mark_draw == REVIEW_NOTE else None
+
+    # Measure one sample line and the title to size columns in display pixels.
+    sample_head = ax.text(
+        0,
+        0,
+        "99. 9999 ",
+        transform=ax.transAxes,
+        fontsize=fontsize,
+        fontweight="normal",
+        alpha=0,
+    )
+    sample_count = ax.text(
+        0,
+        0,
+        "999 ",
+        transform=ax.transAxes,
+        fontsize=fontsize,
+        fontweight="bold",
+        alpha=0,
+    )
+    sample_mark = ax.text(
+        0,
+        0,
+        mark_draw,
+        transform=ax.transAxes,
+        fontsize=fontsize,
+        fontweight="bold",
+        alpha=0,
+        fontproperties=use_mark_fp,
+    )
+    title_probe = ax.text(
+        0,
+        0,
+        title,
+        transform=ax.transAxes,
+        fontsize=title_fontsize,
+        fontweight="bold",
+        alpha=0,
+    )
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    head_w = float(sample_head.get_window_extent(renderer=renderer).width)
+    count_w = float(sample_count.get_window_extent(renderer=renderer).width)
+    mark_w = float(sample_mark.get_window_extent(renderer=renderer).width)
+    line_h = float(sample_head.get_window_extent(renderer=renderer).height)
+    title_h = float(title_probe.get_window_extent(renderer=renderer).height)
+    title_w = float(title_probe.get_window_extent(renderer=renderer).width)
+    for artist in (sample_head, sample_count, sample_mark, title_probe):
+        artist.remove()
+
+    col_gap_px = max(10.0, fontsize * 1.4)
+    row_gap_px = max(2.0, fontsize * 0.35)
+    title_gap_px = max(3.0, title_fontsize * 0.4)
+    pad_x_px = max(6.0, fontsize * 0.9)
+    pad_y_px = max(5.0, fontsize * 0.7)
+    col_w_px = head_w + count_w + mark_w
+    # Real years are four digits; widen slightly from measured heads if needed.
+    for col in columns:
+        for rank, name, count in col:
+            probe = ax.text(
+                0,
+                0,
+                f"{rank}. {name} ",
+                transform=ax.transAxes,
+                fontsize=fontsize,
+                alpha=0,
+            )
+            cprobe = ax.text(
+                0,
+                0,
+                f"{count} ",
+                transform=ax.transAxes,
+                fontsize=fontsize,
+                fontweight="bold",
+                alpha=0,
+            )
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            w = (
+                float(probe.get_window_extent(renderer=renderer).width)
+                + float(cprobe.get_window_extent(renderer=renderer).width)
+                + mark_w
+            )
+            col_w_px = max(col_w_px, w)
+            probe.remove()
+            cprobe.remove()
+
+    max_rows = max((len(c) for c in columns), default=0)
+    body_h_px = (
+        max_rows * line_h + max(0, max_rows - 1) * row_gap_px if max_rows else 0.0
+    )
+    panel_w_px = (
+        2 * pad_x_px
+        + n_cols * col_w_px
+        + max(0, n_cols - 1) * col_gap_px
+    )
+    panel_w_px = max(panel_w_px, title_w + 2 * pad_x_px)
+    panel_h_px = 2 * pad_y_px + title_h + title_gap_px + body_h_px
+
+    # Anchor just inside the axes top-left; expand ylim if tips would collide.
+    origin_disp = ax.transAxes.transform((0.02, 0.98))
+    x0_disp = float(origin_disp[0])
+    y1_disp = float(origin_disp[1])
+    x1_disp = x0_disp + panel_w_px
+    y0_disp = y1_disp - panel_h_px
+    # If the panel sits over the highest left-side bar tips, push ylim up.
+    y0_data, y1_data = ax.get_ylim()
+    corner_data = ax.transData.inverted().transform((x1_disp, y0_disp))
+    if corner_data[1] < y1_data:
+        # Need headroom above current tip zone for the panel box.
+        needed = float(y1_data - corner_data[1]) + (y1_data - y0_data) * 0.04
+        ax.set_ylim(y0_data, y1_data + max(needed, (y1_data - y0_data) * 0.08))
+        fig.canvas.draw()
+        origin_disp = ax.transAxes.transform((0.02, 0.98))
+        x0_disp = float(origin_disp[0])
+        y1_disp = float(origin_disp[1])
+        x1_disp = x0_disp + panel_w_px
+        y0_disp = y1_disp - panel_h_px
+
+    x0, y0 = inv.transform((x0_disp, y0_disp))
+    x1, y1 = inv.transform((x1_disp, y1_disp))
+    box = FancyBboxPatch(
+        (float(x0), float(y0)),
+        float(x1 - x0),
+        float(y1 - y0),
+        boxstyle="round,pad=0.004,rounding_size=0.01",
+        transform=ax.transAxes,
+        facecolor="#14181C",
+        edgecolor=FG,
+        linewidth=0.8,
+        alpha=0.92,
+        zorder=20,
+        clip_on=False,
+    )
+    ax.add_patch(box)
+
+    title_x, title_y = inv.transform((x0_disp + pad_x_px, y1_disp - pad_y_px))
+    ax.text(
+        float(title_x),
+        float(title_y),
+        title,
+        transform=ax.transAxes,
+        fontsize=title_fontsize,
+        fontweight="bold",
+        color=FG,
+        ha="left",
+        va="top",
+        clip_on=False,
+        zorder=21,
+    )
+    # First row starts under the title.
+    line_y_disp = y1_disp - pad_y_px - title_h - title_gap_px
+    for col_i, col in enumerate(columns):
+        col_x_disp = x0_disp + pad_x_px + col_i * (col_w_px + col_gap_px)
+        y_disp = line_y_disp
+        for rank, name, count in col:
+            x_axes, y_axes = inv.transform((col_x_disp, y_disp))
+            head = f"{rank}. {name} "
+            head_artist = ax.text(
+                float(x_axes),
+                float(y_axes),
+                head,
+                transform=ax.transAxes,
+                fontsize=fontsize,
+                fontweight="normal",
+                color=FG,
+                ha="left",
+                va="top",
+                clip_on=False,
+                zorder=21,
+            )
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            hb = head_artist.get_window_extent(renderer=renderer)
+            xc, _yc = inv.transform((hb.x1, hb.y0))
+            count_artist = ax.text(
+                float(xc),
+                float(y_axes),
+                f"{count} ",
+                transform=ax.transAxes,
+                fontsize=fontsize,
+                fontweight="bold",
+                color=FG,
+                ha="left",
+                va="top",
+                clip_on=False,
+                zorder=21,
+            )
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            cb = count_artist.get_window_extent(renderer=renderer)
+            xm, _ym = inv.transform((cb.x1, cb.y0))
+            ax.text(
+                float(xm),
+                float(y_axes),
+                mark_draw,
+                transform=ax.transAxes,
+                fontsize=fontsize,
+                fontweight="bold",
+                color=FG,
+                ha="left",
+                va="top",
+                clip_on=False,
+                zorder=21,
+                fontproperties=use_mark_fp,
+            )
+            y_disp = float(hb.y0) - row_gap_px
+    return True
+
+
 def _place_liked_tip_inline_after(
     fig,
     ax,
@@ -648,7 +936,7 @@ def _place_liked_tip_inline_after(
     reviewed_counts=None,
     fontsize=8,
 ) -> None:
-    """Horizontal tips: ``♥ N □ M`` on the same row after the last tip metric."""
+    """Horizontal tips: ``N ♥ □ M ≡`` on the same row after the last tip metric."""
     if not anchor_artists:
         return
     n = len(anchor_artists)
@@ -704,7 +992,7 @@ def chart_stacked_count_hbar(
 
     Full-bleed stacked count chart for TMDB watches_by_* (and similar):
     readable y-names without oversized fonts or empty black voids.
-    Tip row is count + average, then ``♥ N`` / REVIEW_MARK inline when N > 0.
+    Tip row is count + average, then ``N ♥`` / REVIEW_MARK inline when N > 0.
     Right side panel: Watch year + Most liked + Most reviewed (when present).
     """
     if not labels or not years or matrix.size == 0:
@@ -839,7 +1127,7 @@ def _prepare_rating_rows(
 ) -> list[tuple[str, float, int | None, int, bool, int, bool]]:
     """Return (label, avg, rated_n, liked_count, film_liked, reviewed_count, film_reviewed).
 
-    ``liked_count`` / ``reviewed_count`` are for category avg charts (``♥ N`` /
+    ``liked_count`` / ``reviewed_count`` are for category avg charts (``N ♥`` /
     REVIEW_MARK beside the name). ``film_liked`` / ``film_reviewed`` are for
     film-title bars (bare marks after the visible title).
     """
@@ -1034,8 +1322,8 @@ def chart_rating_hbar(
 ) -> bool:
     """Horizontal bars for TMDB avg tops.
 
-    Names are white with a black stroke. Rank + name + optional ``♥ N`` /
-    ``≡ M`` form one left label. A bar that holds the full label (or at least
+    Names are white with a black stroke. Rank + name + optional ``N ♥`` /
+    ``M ≡`` form one left label. A bar that holds the full label (or at least
     ``SHORT_BAR_NAME_CHARS`` name characters plus the engagement suffix) keeps
     that label inside; the name ellipsizes earlier so ♥/≡ still fit. When the
     natural name is shorter than that threshold, or the bar cannot hold fifteen
@@ -1142,7 +1430,7 @@ def chart_rating_hbar(
         liked_count: int,
         reviewed_count: int,
     ) -> str:
-        """Bare ♥/≡ for film rows; `` ♥ N ≡ M`` for category counts; else empty."""
+        """Bare ♥/≡ for film rows; `` N ♥ M ≡`` for category counts; else empty."""
         if film_liked or film_reviewed:
             return film_title_with_engagement_marks(
                 "", liked=film_liked, reviewed=film_reviewed
@@ -1351,7 +1639,7 @@ def chart_diary_entity_stacked(
 
     When ``catalog`` is omitted, counts stay diary-dated only (legacy callers /
     tests). When ``liked_keys`` / ``reviewed_keys`` are set, tips may show
-    ``♥ N`` / REVIEW_MARK (inline after count+avg) for unique Name+Year films
+    ``N ♥`` / REVIEW_MARK (inline after count+avg) for unique Name+Year films
     in likes/films.csv / reviews.csv.
     """
     frame = catalog if catalog is not None else diary
@@ -1504,7 +1792,7 @@ def chart_release_years_by_rating(
     """«Годы выхода — выше/ниже оценка» as TMDB-style horizontal avg bars.
 
     Same layout as deep-stats hbars: left «оценка» colorbar, in-bar
-    ``N. Year ♥ a ≡ b`` when like/review counts > 0 (white + black stroke).
+    ``N. Year a ♥ b ≡`` when like/review counts > 0 (white + black stroke).
     The mean to the right is bold and rating-colored; the rated-film count is
     regular light text in parentheses. Not the watch-year / release-decade
     line charts.
