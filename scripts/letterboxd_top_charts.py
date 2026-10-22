@@ -107,10 +107,10 @@ def _mpl_engagement_text(text: str) -> str:
     return str(text or "").replace("\ufe0e", "").replace("\ufe0f", "")
 
 
-def outside_engagement_mark_color(mark: str) -> str:
-    """Logo color for a ♥ / ≡ glyph drawn outside a bar or column fill.
+def engagement_mark_color(mark: str) -> str:
+    """Logo color for a ♥ / ≡ glyph wherever it appears (bars, tips, panels, titles).
 
-    Inside-bar labels keep ``ON_BAR`` (white); callers must not use this there.
+    ♥ → ``MARK_LIKE_HEX`` orange; ≡ → ``MARK_REVIEW_HEX`` blue. Never white.
     """
     token = _mpl_engagement_text(mark)
     if token.startswith(LIKED_HEART) or token == LIKED_HEART:
@@ -118,6 +118,10 @@ def outside_engagement_mark_color(mark: str) -> str:
     if REVIEW_NOTE and (token.startswith(REVIEW_NOTE) or token == REVIEW_NOTE):
         return MARK_REVIEW_HEX
     return FG
+
+
+# Backward-compatible alias (same logo colors inside and outside bars).
+outside_engagement_mark_color = engagement_mark_color
 
 
 def engagement_tip_segments(tip: str) -> list[tuple[str, str]]:
@@ -137,7 +141,7 @@ def engagement_tip_segments(tip: str) -> list[tuple[str, str]]:
         if match.start() > pos:
             segments.append((text[pos : match.start()], FG))
         mark, gap, num = match.group(1), match.group(2), match.group(3)
-        segments.append((mark, outside_engagement_mark_color(mark)))
+        segments.append((mark, engagement_mark_color(mark)))
         if gap:
             segments.append((gap, FG))
         segments.append((num, FG))
@@ -166,14 +170,15 @@ def title_engagement_segments(title: str) -> list[tuple[str, str]]:
     if head:
         segments.append((head, FG))
     for ch in marks:
-        segments.append((ch, outside_engagement_mark_color(ch)))
+        segments.append((ch, engagement_mark_color(ch)))
     return segments or [(text, FG)]
 
 
-def _outside_hbar_label_segments(label: str) -> list[tuple[str, str]]:
-    """Outside-bar left label: white name text; ♥/≡ logo-colored (counts FG).
+def _hbar_label_engagement_segments(label: str) -> list[tuple[str, str]]:
+    """Hbar left label: white name/counts; ♥/≡ always logo-colored.
 
-    Handles both bare film marks (``…♥≡``) and category tips (``… ♥ N ≡ M``).
+    Used both inside and outside the bar fill. Handles bare film marks
+    (``…♥≡``) and category tips (``… ♥ N ≡ M``).
     """
     import re
 
@@ -193,13 +198,17 @@ def _outside_hbar_label_segments(label: str) -> list[tuple[str, str]]:
         if match.start() > pos:
             segments.append((text[pos : match.start()], ON_BAR))
         mark, rest = match.group(1), match.group(2)
-        segments.append((mark, outside_engagement_mark_color(mark)))
+        segments.append((mark, engagement_mark_color(mark)))
         if rest:
             segments.append((rest, ON_BAR))
         pos = match.end()
     if pos < len(text):
         segments.append((text[pos:], ON_BAR))
     return segments or [(text, ON_BAR)]
+
+
+# Alias kept for call sites / tests that still import the old name.
+_outside_hbar_label_segments = _hbar_label_engagement_segments
 
 
 def _figure_renderer(fig):
@@ -364,7 +373,7 @@ def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
             or (REVIEW_NOTE and f"{REVIEW_NOTE} " in text)
         ):
             # Rebuild via tip-aware splitter on the engagement tail.
-            segments = _outside_hbar_label_segments(text)
+            segments = _hbar_label_engagement_segments(text)
             # Tick labels use FG for the name (not ON_BAR).
             segments = [
                 (frag, FG if color == ON_BAR else color) for frag, color in segments
@@ -579,7 +588,7 @@ def _draw_ranked_count_mark_line(
     head, mark_s, count_s = _ranked_mark_line_pieces(rank, name, count, mark)
     use_mark_fp = mark_fp if mark_s.startswith(REVIEW_NOTE) else None
     mark_glyph = mark_s.strip()
-    mark_color = outside_engagement_mark_color(mark_glyph)
+    mark_color = engagement_mark_color(mark_glyph)
     text_kw = dict(
         transform=transform,
         fontsize=fontsize,
@@ -2696,73 +2705,29 @@ def chart_rating_hbar(
             )
             inside = False
 
-        clip_inside = inside
         # Optional mark font when theme default lacks ≡ (normally unused).
         note_fp = review_mark_fontproperties()
+        # Name/counts white; ♥ orange / ≡ blue — same inside and outside the bar.
+        segs = _hbar_label_engagement_segments(shown)
+        artists = draw_colored_text_segments(
+            ax,
+            pad_left,
+            yi,
+            segs,
+            fontsize=name_fs,
+            ha="left",
+            va="center",
+            fontweight="bold",
+            mark_fontweight="bold",
+            path_effects=stroke,
+            clip_on=inside,
+            zorder=5,
+            fontproperties=note_fp,
+        )
         if inside:
-            # Inside the bar: whole label stays ON_BAR (white), including ♥/≡.
-            main_shown = shown
-            note_part = ""
-            if note_fp is not None and REVIEW_NOTE in shown:
-                split_at = shown.index(REVIEW_NOTE)
-                main_shown = shown[:split_at]
-                note_part = shown[split_at:]
-            txt = ax.text(
-                pad_left,
-                yi,
-                main_shown,
-                ha="left",
-                va="center",
-                fontsize=name_fs,
-                fontweight="bold",
-                color=ON_BAR,
-                path_effects=stroke,
-                clip_on=True,
-                zorder=5,
-            )
-            txt.set_clip_path(bar)
-            anchor = txt
-            if note_part:
-                renderer = _figure_renderer(fig)
-                bb = txt.get_window_extent(renderer=renderer)
-                x_note = float(ax.transData.inverted().transform((bb.x1, bb.y0))[0])
-                note_artist = ax.text(
-                    x_note,
-                    yi,
-                    note_part,
-                    ha="left",
-                    va="center",
-                    fontsize=name_fs,
-                    fontweight="bold",
-                    color=ON_BAR,
-                    path_effects=stroke,
-                    clip_on=True,
-                    zorder=5,
-                    fontproperties=note_fp,
-                )
-                note_artist.set_clip_path(bar)
-                anchor = note_artist
-        else:
-            # Outside the bar: name white; ♥ orange / ≡ blue (logo brand).
-            segs = _outside_hbar_label_segments(shown)
-            artists = draw_colored_text_segments(
-                ax,
-                pad_left,
-                yi,
-                segs,
-                fontsize=name_fs,
-                ha="left",
-                va="center",
-                fontweight="bold",
-                mark_fontweight="bold",
-                path_effects=stroke,
-                clip_on=False,
-                zorder=5,
-                fontproperties=note_fp,
-            )
-            anchor = artists[-1] if artists else ax.text(
-                pad_left, yi, shown, alpha=0
-            )
+            for artist in artists:
+                artist.set_clip_path(bar)
+        anchor = artists[-1] if artists else ax.text(pad_left, yi, shown, alpha=0)
         rows_drawn.append((anchor, inside, yi, avg, rated))
 
     # Overflowing labels push the mean past their right edge so the two never overlap.

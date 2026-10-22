@@ -156,14 +156,19 @@ def test_no_date_legend_swatch_is_logo_gray_gradient():
 
 
 def test_outside_engagement_mark_colors_use_logo_brand():
-    """♥ → orange, ≡ → blue outside bars; tip segments keep counts on FG."""
+    """♥ → orange, ≡ → blue everywhere; tip segments keep counts on FG."""
     import matplotlib.colors as mcolors
-    from letterboxd_palette import FG, MARK_LIKE_HEX, MARK_REVIEW_HEX
+    from letterboxd_palette import FG, MARK_LIKE_HEX, MARK_REVIEW_HEX, ON_BAR
     from letterboxd_top_charts import (
+        _hbar_label_engagement_segments,
+        engagement_mark_color,
         engagement_tip_segments,
         outside_engagement_mark_color,
     )
 
+    assert engagement_mark_color(LIKED_HEART) == MARK_LIKE_HEX
+    assert engagement_mark_color(REVIEW_NOTE) == MARK_REVIEW_HEX
+    # Alias still resolves to the same logo colors.
     assert outside_engagement_mark_color(LIKED_HEART) == MARK_LIKE_HEX
     assert outside_engagement_mark_color(REVIEW_NOTE) == MARK_REVIEW_HEX
     segs = engagement_tip_segments(f"{LIKED_HEART} 2 {REVIEW_NOTE} 3")
@@ -172,6 +177,14 @@ def test_outside_engagement_mark_colors_use_logo_brand():
     assert by_frag[REVIEW_NOTE] == MARK_REVIEW_HEX
     assert by_frag["2"] == FG
     assert by_frag["3"] == FG
+    # Inside/outside hbar labels: name/counts white; marks logo-colored.
+    label_segs = _hbar_label_engagement_segments(
+        f"1. France {LIKED_HEART} 1 {REVIEW_NOTE} 73"
+    )
+    by_label = {frag: color for frag, color in label_segs}
+    assert by_label[LIKED_HEART] == MARK_LIKE_HEX
+    assert by_label[REVIEW_NOTE] == MARK_REVIEW_HEX
+    assert by_label["1. France "] == ON_BAR
     # Colors round-trip as the brand hexes.
     assert mcolors.to_hex(MARK_LIKE_HEX).lower() == "#ff8000"
     assert mcolors.to_hex(MARK_REVIEW_HEX).lower() == "#40bcf4"
@@ -1479,16 +1492,34 @@ def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
     # Head starts inside/left of the short bar tip; colored marks continue past.
     assert overflow_box.x0 < short_bar.x1
 
-    # Long inside label keeps engagement in one ON_BAR string; tip past the bar.
-    inside_labels = [
-        t for t in captured["texts"] if t.get_text().startswith("1. ") and LIKED_HEART in t.get_text()
+    # Long inside label: name stays ON_BAR; ♥/≡ are separate logo-colored artists.
+    inside_heads = [
+        t
+        for t in captured["texts"]
+        if t.get_text().startswith("1. ")
+        and t.get_clip_on() is True
+        and LIKED_HEART not in t.get_text()
+        and REVIEW_NOTE not in t.get_text()
     ]
-    assert len(inside_labels) == 1
-    inside = inside_labels[0]
-    assert inside.get_clip_on() is True
-    assert REVIEW_NOTE in inside.get_text()
-    assert inside.get_text().endswith(f"{REVIEW_NOTE} 2")
-    assert mcolors.to_hex(inside.get_color()).lower() == ON_BAR.lower()
+    assert len(inside_heads) == 1
+    inside_head = inside_heads[0]
+    assert mcolors.to_hex(inside_head.get_color()).lower() == ON_BAR.lower()
+    inside_hearts = [
+        t
+        for t in captured["texts"]
+        if t.get_text() == LIKED_HEART
+        and t.get_clip_on() is True
+        and mcolors.to_hex(t.get_color()).lower() == MARK_LIKE_HEX.lower()
+    ]
+    inside_reviews = [
+        t
+        for t in captured["texts"]
+        if t.get_text() == REVIEW_NOTE
+        and t.get_clip_on() is True
+        and mcolors.to_hex(t.get_color()).lower() == MARK_REVIEW_HEX.lower()
+    ]
+    assert inside_hearts
+    assert inside_reviews
     long_bar = max(captured["bars"], key=lambda box: box.width)
     assert captured["extent"]["4.60"].x0 > long_bar.x1
 
