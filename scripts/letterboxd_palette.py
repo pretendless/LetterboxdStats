@@ -24,9 +24,9 @@ horizontal bars rotate it 90° (left→right). Legend swatches use the
 logo-native vertical gradient.
 
 In-plot inset panels (Top review, Most reviewed years, genre swatch legends)
-fill with the logo circle gradient left→right (orange → green → blue) under a
-dark translucent overlay so labels stay readable; border chrome matches the
-previous flat panels.
+fill with the same logo-background charcoal gradient as **No date** bars
+(``undated_charcoal_colormap``: ``#2C3440`` → ``#14181C``, logo-native
+top→bottom); border chrome matches the previous flat panels.
 """
 
 from __future__ import annotations
@@ -365,29 +365,11 @@ def undated_charcoal_colormap():
     return _UNDATED_CMAP
 
 
-_LOGO_CIRCLES_CMAP = None
-
 # In-plot inset panels (Top review / Most reviewed years / genre legends).
+# Same charcoal map as No date bars; logo-native top→bottom orientation.
 INSET_PANEL_BOXSTYLE = "round,pad=0.004,rounding_size=0.01"
-INSET_PANEL_OVERLAY_HEX = "#14181C"
-INSET_PANEL_OVERLAY_ALPHA = 0.62
 INSET_PANEL_EDGE_ALPHA = 0.92
 INSET_PANEL_LINEWIDTH = 0.8
-
-
-def logo_circles_colormap():
-    """LinearSegmentedColormap: logo orange → green → blue (t=0→1, left→right)."""
-    global _LOGO_CIRCLES_CMAP
-    if _LOGO_CIRCLES_CMAP is not None:
-        return _LOGO_CIRCLES_CMAP
-    from matplotlib.colors import LinearSegmentedColormap
-
-    _LOGO_CIRCLES_CMAP = LinearSegmentedColormap.from_list(
-        "logo_circles",
-        [LOGO_ORANGE_HEX, LOGO_GREEN_HEX, LOGO_BLUE_HEX],
-        N=256,
-    )
-    return _LOGO_CIRCLES_CMAP
 
 
 def paint_inset_panel_logo_background(
@@ -402,11 +384,13 @@ def paint_inset_panel_logo_background(
     edgecolor: str | None = None,
     linewidth: float = INSET_PANEL_LINEWIDTH,
 ):
-    """Rounded inset panel: logo orange→green→blue L→R + dark overlay + border.
+    """Rounded inset panel: logo charcoal gradient (No date map) + border.
 
-    Used by Top review, Most reviewed years, and genre swatch legend panels.
-    Coordinates are in ``transform`` space (typically ``ax.transAxes``).
-    Returns the border ``FancyBboxPatch``.
+    Fill uses ``undated_charcoal_colormap`` (``UNDATED_LOGO_TOP_HEX`` →
+    ``UNDATED_LOGO_BOTTOM_HEX``), logo-native top→bottom — same family as
+    undated bar / legend swatches. Used by Top review, Most reviewed years,
+    and genre swatch legend panels. Coordinates are in ``transform`` space
+    (typically ``ax.transAxes``). Returns the border ``FancyBboxPatch``.
     """
     import numpy as np
     from matplotlib.patches import FancyBboxPatch
@@ -443,12 +427,13 @@ def paint_inset_panel_logo_background(
     aspect = ax.get_aspect()
     adjustable = ax.get_adjustable()
 
-    cmap = logo_circles_colormap()
-    grad = np.linspace(0.0, 1.0, 256).reshape(1, -1)
+    cmap = undated_charcoal_colormap()
+    # Column vector: origin upper → row 0 at top = logo top charcoal.
+    grad = np.linspace(0.0, 1.0, 256).reshape(-1, 1)
     im = ax.imshow(
         grad,
         extent=(float(x0), float(x0) + w, float(y0), float(y0) + h),
-        origin="lower",
+        origin="upper",
         aspect="auto",
         cmap=cmap,
         interpolation="bilinear",
@@ -461,22 +446,6 @@ def paint_inset_panel_logo_background(
     ax.set_ylim(ylim)
     ax.set_aspect(aspect, adjustable=adjustable)
 
-    # Dark wash so FG labels / swatches stay readable on bright logo colors.
-    ax.add_patch(
-        FancyBboxPatch(
-            (float(x0), float(y0)),
-            w,
-            h,
-            boxstyle=boxstyle,
-            transform=transform,
-            facecolor=INSET_PANEL_OVERLAY_HEX,
-            edgecolor="none",
-            linewidth=0,
-            alpha=INSET_PANEL_OVERLAY_ALPHA,
-            zorder=zorder + 0.5,
-            clip_on=True,
-        )
-    )
     border = FancyBboxPatch(
         (float(x0), float(y0)),
         w,

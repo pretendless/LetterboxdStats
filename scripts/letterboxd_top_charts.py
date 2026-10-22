@@ -1136,8 +1136,8 @@ def draw_top_review_panel(
     (and ♥). ``corner`` is ``bottom_right`` (watches / higher / count) or
     ``top_right`` (lower-rating charts). Body text is already capped
     (``TOP_REVIEW_MAX_CHARS``); layout may wrap and ellipsize further if the
-    panel height is tight.     Returns True when drawn. Panel fill is the logo circle gradient
-    (orange→green→blue) with a dark overlay for readable text.
+    panel height is tight. Returns True when drawn. Panel fill is the logo
+    charcoal gradient (same as No date bars), top→bottom.
     """
     if not review or not isinstance(review, dict):
         return False
@@ -1343,8 +1343,8 @@ def draw_most_reviewed_years_panel(
     Five numbered rows per column, then wrap right; a short final remainder
     (1–3) rebalances the last two columns (see
     ``most_reviewed_years_column_sizes``). Lines use ``≡ N`` (symbol then
-    count). Panel fill is the logo circle gradient (orange→green→blue) with
-    a dark overlay. Returns True when drawn; False when omitted.
+    count). Panel fill is the logo charcoal gradient (same as No date bars).
+    Returns True when drawn; False when omitted.
     """
     rows = _positive_rank_rows(ranked)
     if not rows or not REVIEW_NOTE:
@@ -1515,8 +1515,8 @@ def draw_swatch_legend_panel(
     column, wrap right, rebalance a short final remainder, seat **top-left**
     with the panel bottom at the tallest bar top and raise only to clear
     bars/tips. ``entries`` is ``[(label, color), ...]`` in legend order
-    (red→violet for genre stacks). Panel fill is the logo circle gradient
-    (orange→green→blue) with a dark overlay.
+    (red→violet for genre stacks). Panel fill is the logo charcoal gradient
+    (same as No date bars).
     """
     from matplotlib.patches import Rectangle
 

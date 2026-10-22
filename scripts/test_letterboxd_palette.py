@@ -290,25 +290,20 @@ def test_genre_spectrum_color_map_stable_across_subsets():
     assert genre_spectrum_color_map([]) == {}
 
 
-def test_logo_circles_colormap_and_inset_panel_paint():
-    """Inset panels: orange→green→blue L→R under a dark overlay + border."""
+def test_inset_panel_uses_undated_charcoal_gradient():
+    """Inset panels: same No date charcoal map, logo-native top→bottom + border."""
     from letterboxd_palette import (
-        LOGO_BLUE_HEX,
-        LOGO_GREEN_HEX,
-        LOGO_ORANGE_HEX,
-        logo_circles_colormap,
+        UNDATED_LOGO_BOTTOM_HEX,
+        UNDATED_LOGO_TOP_HEX,
         paint_inset_panel_logo_background,
+        undated_charcoal_colormap,
     )
     import matplotlib.colors as mcolors
     import matplotlib.pyplot as plt
 
-    cmap = logo_circles_colormap()
-    assert mcolors.to_hex(cmap(0.0)).lower() == LOGO_ORANGE_HEX.lower()
-    assert mcolors.to_hex(cmap(1.0)).lower() == LOGO_BLUE_HEX.lower()
-    # Mid knot is logo green (8-bit sample may be ±1 from the exact hex).
-    mid = tuple(int(round(c * 255)) for c in cmap(0.5)[:3])
-    assert mid[0] == 3 and mid[1] == 229 and mid[2] in (62, 63)
-    del LOGO_GREEN_HEX
+    cmap = undated_charcoal_colormap()
+    assert mcolors.to_hex(cmap(0.0)).lower() == UNDATED_LOGO_TOP_HEX.lower()
+    assert mcolors.to_hex(cmap(1.0)).lower() == UNDATED_LOGO_BOTTOM_HEX.lower()
 
     fig, ax = plt.subplots(figsize=(4, 3))
     ax.bar([0, 1], [1, 2])
@@ -322,10 +317,12 @@ def test_logo_circles_colormap_and_inset_panel_paint():
     assert border is not None
     assert border.get_facecolor()[3] == 0.0  # edge-only chrome
     assert len(ax.images) == before_images + 1
+    # Panel image samples the undated charcoal map.
+    assert ax.images[-1].cmap is cmap
     assert (
         sum(1 for p in ax.patches if p.__class__.__name__ == "FancyBboxPatch")
-        == before_fancy + 3
-    )  # clip + overlay + border
+        == before_fancy + 2
+    )  # clip + border
     # Gradient uses imshow, not Rectangle strips (bar-height tests count Rectangles).
     assert sum(1 for p in ax.patches if p.__class__.__name__ == "Rectangle") == 2
     plt.close(fig)
@@ -338,5 +335,5 @@ if __name__ == "__main__":
     test_discrete_ranks_use_logo_knots_then_even_midpoints()
     test_rating_scale_uses_full_range_and_same_anchors()
     test_genre_spectrum_color_map_stable_across_subsets()
-    test_logo_circles_colormap_and_inset_panel_paint()
+    test_inset_panel_uses_undated_charcoal_gradient()
     print("ok")
