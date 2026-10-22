@@ -112,7 +112,7 @@ export function defaultLetterboxdOptions() {
     includeRewatchInAverages: false,
     showLikes: true,
     showReviews: true,
-    showTopReview: true,
+    showTopReview: false,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -181,10 +181,10 @@ export function normalizeLetterboxdOptions(options) {
   const windowOk = Boolean(dateFrom && dateTo && dateTo >= dateFrom);
   const showReviews = src.showReviews == null ? true : Boolean(src.showReviews);
   // Top review requires reviews on; clearing reviews also clears top review.
-  // Default on when Reviews are on and the field is unset.
+  // Default off when unset (Customize can enable; keeps full chart runs fast).
   const showTopReview = showReviews
     ? src.showTopReview == null
-      ? true
+      ? false
       : Boolean(src.showTopReview)
     : false;
   return {
@@ -401,7 +401,7 @@ const SETTINGS_SUMMARY_RE =
 const SETTINGS_SUMMARY_LEGACY_BOTH_RE =
   /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*Top review:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
 
-// Pre-Likes/Reviews: same Exclude shape, no Likes:/Reviews: fields (default both yes; Top review on).
+// Pre-Likes/Reviews: same Exclude shape, no Likes:/Reviews: fields (default likes/reviews yes; Top review off).
 const SETTINGS_SUMMARY_PRE_LIKES_RE =
   /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
 
@@ -589,7 +589,7 @@ export function parseLetterboxdSettingsSummary(text) {
       includeRewatchInAverages: yesNo(preLikes[3]),
       showLikes: true,
       showReviews: true,
-      showTopReview: true,
+      showTopReview: false,
       includeUSA: exclude.includeUSA,
       includeEnglish: exclude.includeEnglish,
       includeDrama: exclude.includeDrama,
@@ -616,7 +616,7 @@ export function parseLetterboxdSettingsSummary(text) {
     includeRewatchInAverages: yesNo(legacy[3]),
     showLikes: true,
     showReviews: true,
-    showTopReview: true,
+    showTopReview: false,
     includeUSA: yesNo(legacy[4]),
     includeEnglish: yesNo(legacy[5]),
     includeDrama: yesNo(legacy[6]),
@@ -1068,7 +1068,7 @@ function promptFor(step, state, now = new Date()) {
         "Show top review?",
         "When yes, ranking charts get a bottom-right panel from the highest-ranked row that has a review (title with ♥ when liked, text up to 280 characters, date). Count tops and higher-rating charts prefer the highest-rated review; lower-rating charts prefer the lowest; when all candidates are unrated, liked films first; then latest review date. Also unlocks lower-rating charts even when there are fewer qualifying rows than the top size. Default is yes.",
       ),
-      reply_markup: letterboxdYesNoKeyboard("lb:toprev", "yes"),
+      reply_markup: letterboxdYesNoKeyboard("lb:toprev", "no"),
     };
   }
   if (step === "exclusions") {

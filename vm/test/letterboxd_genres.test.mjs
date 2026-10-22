@@ -350,7 +350,7 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(rewatch.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
   assert.equal(showLikes.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
   assert.equal(showReviews.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
-  assert.equal(showTopReview.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
+  assert.equal(showTopReview.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
   assert.equal(exclusions.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
   assert.equal(usa.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
   assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
@@ -494,13 +494,13 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
   const defaults = letterboxdAckText("lb-2", {});
   assert.match(defaults, /Rewatches in averages: no/);
   assert.match(defaults, /Likes: yes/);
-  assert.match(defaults, /Top review: yes/);
-  assert.doesNotMatch(defaults, /Reviews:/);
+  assert.match(defaults, /Reviews: yes/);
+  assert.doesNotMatch(defaults, /Top review:/);
   assert.match(defaults, /Exclude: none/);
   assert.match(defaults, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
-  const topOff = letterboxdAckText("lb-3", { showTopReview: false });
-  assert.match(topOff, /Reviews: yes/);
-  assert.doesNotMatch(topOff, /Top review:/);
+  const topOn = letterboxdAckText("lb-3", { showTopReview: true });
+  assert.match(topOn, /Top review: yes/);
+  assert.doesNotMatch(topOn, /Reviews:/);
 });
 
 test("settings summary parser finds paragraph in noisy text and round-trips", () => {
@@ -626,7 +626,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     },
   );
 
-  // Pre-Likes/Reviews summaries still parse; likes/reviews/top review default on.
+  // Pre-Likes/Reviews summaries still parse; likes/reviews default on, Top review off.
   assert.deepEqual(
     parseLetterboxdSettingsSummary(
       "Tops: 20. Threshold: 3. Rewatches in averages: no. " +
@@ -638,7 +638,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
       includeRewatchInAverages: false,
       showLikes: true,
       showReviews: true,
-      showTopReview: true,
+      showTopReview: false,
       includeUSA: true,
       includeEnglish: true,
       includeDrama: true,
@@ -686,7 +686,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     includeRewatchInAverages: false,
     showLikes: true,
     showReviews: true,
-    showTopReview: true,
+    showTopReview: false,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -707,7 +707,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     includeRewatchInAverages: false,
     showLikes: true,
     showReviews: true,
-    showTopReview: true,
+    showTopReview: false,
     includeUSA: false,
     includeEnglish: false,
     includeDrama: true,
@@ -839,7 +839,7 @@ test("buildLetterboxdDispatch", () => {
       include_rewatch_in_averages: "false",
       show_likes: "true",
       show_reviews: "true",
-      show_top_review: "true",
+      show_top_review: "false",
       include_usa: "true",
       include_english: "true",
       include_drama: "true",

@@ -4,7 +4,7 @@ Wizard defaults (also the GitHub Actions defaults):
   top_n=20 (allowed 1–100), min_rated=4 (allowed 1–50),
   include_rewatch_in_averages=False (unique-film means),
   show_likes=True, show_reviews=True (♥ / ≡ on charts and search),
-  show_top_review=True (in-plot review panel on listed ranking charts),
+  show_top_review=False (in-plot review panel; Customize can enable),
   include USA, include English, include Drama, include Comedy,
   no custom keyword exclusions, no search keywords,
   full diary span, undated films only on the full span.
@@ -20,15 +20,15 @@ show_likes / show_reviews (default True) gate ♥ and ≡ everywhere: tips, titl
 Most liked / Most reviewed panels, search-keyword lines, and inside-bar marks.
 When False, that mark is omitted (same as having no likes / reviews).
 
-show_top_review (default True) draws an in-plot panel on listed ranking charts
-(title, optional ★/½ on the next line for the pick rating, truncated review text, date). Corner:
-bottom-right on watches/count / higher-rating; top-right on lower-rating.
-Walks drawn ranks until a row has a qualifying review; among that row’s reviews
-prefers highest Rating (count tops, Most often, higher-rating) or lowest
-(lower-rating); when every candidate is unrated, liked films first; then latest
-Date; then Name/Year. Liked films get ♥ after the panel title. Customize can
-turn it off. When True it also lifts the full-slate gate so lower-rating charts
-still emit.
+show_top_review (default False) draws an in-plot panel on listed ranking charts
+when Customize turns it on (title, optional ★/½ on the next line for the pick
+rating, truncated review text, date). Corner: bottom-right on watches/count /
+higher-rating; top-right on lower-rating. Walks drawn ranks until a row has a
+qualifying review; among that row’s reviews prefers highest Rating (count tops,
+Most often, higher-rating) or lowest (lower-rating); when every candidate is
+unrated, liked films first; then latest Date; then Name/Year. Liked films get ♥
+after the panel title. When True it also lifts the full-slate gate so
+lower-rating charts still emit. Default off keeps full chart runs fast.
 
 Optional search keywords are separate: after all chart PNGs, each keyword
 gets a Telegram film list where the substring matches film metadata
@@ -268,7 +268,7 @@ class ChartOptions:
     include_rewatch_in_averages: bool = False
     show_likes: bool = True
     show_reviews: bool = True
-    show_top_review: bool = True
+    show_top_review: bool = False
     include_usa: bool = True
     include_english: bool = True
     include_drama: bool = True
@@ -305,15 +305,23 @@ def read_chart_options(env: dict | None = None) -> ChartOptions:
         date_from = None
         date_to = None
     include_undated = parse_bool_flag(src.get("LETTERBOXD_INCLUDE_UNDATED"), False) if date_from else False
+    show_likes = parse_bool_flag(src.get("LETTERBOXD_SHOW_LIKES"), True)
+    show_reviews = parse_bool_flag(src.get("LETTERBOXD_SHOW_REVIEWS"), True)
+    # Default off; Customize / env can enable. Reviews off forces Top review off.
+    show_top_review = (
+        parse_bool_flag(src.get("LETTERBOXD_SHOW_TOP_REVIEW"), False)
+        if show_reviews
+        else False
+    )
     return ChartOptions(
         top_n=clamp_top_n(src.get("LETTERBOXD_TOP_N")),
         min_rated=clamp_min_rated(src.get("LETTERBOXD_MIN_RATED")),
         include_rewatch_in_averages=parse_bool_flag(
             src.get("LETTERBOXD_INCLUDE_REWATCH_IN_AVERAGES"), False
         ),
-        show_likes=parse_bool_flag(src.get("LETTERBOXD_SHOW_LIKES"), True),
-        show_reviews=parse_bool_flag(src.get("LETTERBOXD_SHOW_REVIEWS"), True),
-        show_top_review=parse_bool_flag(src.get("LETTERBOXD_SHOW_TOP_REVIEW"), True),
+        show_likes=show_likes,
+        show_reviews=show_reviews,
+        show_top_review=show_top_review,
         include_usa=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_USA"), True),
         include_english=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_ENGLISH"), True),
         include_drama=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_DRAMA"), True),

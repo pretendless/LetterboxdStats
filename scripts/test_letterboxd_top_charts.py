@@ -177,6 +177,44 @@ def test_outside_engagement_mark_colors_use_logo_brand():
     assert mcolors.to_hex(MARK_REVIEW_HEX).lower() == "#40bcf4"
 
 
+def test_recolor_ticklabels_hides_original_to_avoid_duplicate_titles():
+    """Most often / stacked hbars: one title per row after ♥/≡ recolor."""
+    import matplotlib.pyplot as plt
+    from letterboxd_top_charts import (
+        film_title_with_engagement_marks,
+        recolor_ticklabel_engagement_marks,
+    )
+
+    fig, ax = plt.subplots(figsize=(6, 3))
+    labels = [
+        film_title_with_engagement_marks("Grosse Pointe Blank (1997)", reviewed=True),
+        film_title_with_engagement_marks("Before Sunrise (1995)", liked=True),
+        "No Mark Film (2001)",
+    ]
+    ax.barh([0, 1, 2], [5, 4, 3])
+    ax.set_yticks([0, 1, 2])
+    ax.set_yticklabels(labels)
+    recolor_ticklabel_engagement_marks(ax, axis="y")
+    fig.tight_layout()
+    fig.canvas.draw()
+    # Marked tick Texts stay hidden after layout/draw (not restored as a 2nd copy).
+    # get_yticklabels() omits invisible labels — read majorTicks.label1 instead.
+    label1s = [tick.label1 for tick in ax.yaxis.majorTicks]
+    assert len(label1s) == 3
+    assert label1s[0].get_visible() is False
+    assert label1s[1].get_visible() is False
+    assert label1s[2].get_visible() is True  # unmarked keeps the native tick label
+    custom = [t.get_text() for t in ax.texts]
+    assert "Grosse Pointe Blank (1997)" in custom
+    assert REVIEW_NOTE in custom
+    assert "Before Sunrise (1995)" in custom
+    assert LIKED_HEART in custom
+    # Title head appears once among custom fragments (not also as a visible tick).
+    assert custom.count("Grosse Pointe Blank (1997)") == 1
+    assert custom.count("Before Sunrise (1995)") == 1
+    plt.close(fig)
+
+
 def test_liked_heart_helpers_use_black_heart_suit():
     """Film truncation, category counts, tips, and Most liked ranking."""
     assert LIKED_HEART == "\u2665"
@@ -2069,6 +2107,7 @@ def test_rating_hbar_worst_skips_short_slate(tmp_path: Path | None = None):
 if __name__ == "__main__":
     test_display_lang()
     test_outside_engagement_mark_colors_use_logo_brand()
+    test_recolor_ticklabels_hides_original_to_avoid_duplicate_titles()
     test_liked_heart_helpers_use_black_heart_suit()
     test_review_mark_helpers_use_identical_to()
     test_no_date_legend_swatch_is_logo_gray_gradient()
