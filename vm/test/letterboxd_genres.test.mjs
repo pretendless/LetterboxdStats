@@ -249,9 +249,17 @@ test("binary steps keep the default button and drop the repeated lines", () => {
     { step: "min_rated", fileId },
     { kind: "callback", step: "min_rated", value: 3 },
   );
-  const exclusions = advanceLetterboxdWizard(
+  const showLikes = advanceLetterboxdWizard(
     rewatch.state,
     { kind: "callback", step: "rewatch_avg", value: false },
+  );
+  const showReviews = advanceLetterboxdWizard(
+    showLikes.state,
+    { kind: "callback", step: "show_likes", value: true },
+  );
+  const exclusions = advanceLetterboxdWizard(
+    showReviews.state,
+    { kind: "callback", step: "show_reviews", value: true },
   );
   const usa = advanceLetterboxdWizard(
     exclusions.state,
@@ -277,7 +285,20 @@ test("binary steps keep the default button and drop the repeated lines", () => {
     { step: "range_start", fileId, dateFrom: "2024-01-01", dateTo: "2024-12-31" },
     { kind: "callback", step: "range_start", year: 2024 },
   );
-  for (const message of [rewatch, exclusions, usa, english, drama, comedy, search, period, skip, undated]) {
+  for (const message of [
+    rewatch,
+    showLikes,
+    showReviews,
+    exclusions,
+    usa,
+    english,
+    drama,
+    comedy,
+    search,
+    period,
+    skip,
+    undated,
+  ]) {
     assert.doesNotMatch(message.messages[0].text, /For example:/);
     assert.doesNotMatch(message.messages[0].text, /Default:/);
   }
@@ -285,7 +306,13 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.match(rewatch.messages[0].text, /<b>Count rewatches in averages\?<\/b>/);
   assert.match(rewatch.messages[0].text, /By default averages use each film’s last set rating/);
   assert.match(rewatch.messages[0].text, /every rated diary entry should affect the average/);
-  assert.equal(exclusions.state.includeRewatchInAverages, false);
+  assert.equal(showLikes.state.includeRewatchInAverages, false);
+  assert.equal(showLikes.state.step, "show_likes");
+  assert.match(showLikes.messages[0].text, /<b>Show likes \(♥\)\?<\/b>/);
+  assert.equal(showReviews.state.showLikes, true);
+  assert.equal(showReviews.state.step, "show_reviews");
+  assert.match(showReviews.messages[0].text, /<b>Show reviews \(≡\)\?<\/b>/);
+  assert.equal(exclusions.state.showReviews, true);
   assert.match(exclusions.messages[0].text, /<b>Remove some rows from the watch-count tops\?<\/b>/);
   assert.match(usa.messages[0].text, /<b>Show USA in the country top\?<\/b>/);
   assert.match(english.messages[0].text, /<b>Show English in the language top\?<\/b>/);
@@ -304,6 +331,8 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.deepEqual(skip.state.excludeKeywords, []);
   assert.match(undated.messages[0].text, /<b>Add films with no diary date\?<\/b>/);
   assert.equal(rewatch.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
+  assert.equal(showLikes.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
+  assert.equal(showReviews.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
   assert.equal(exclusions.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
   assert.equal(usa.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
   assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
@@ -316,6 +345,10 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(parseLetterboxdCallback("lb:rew:0").step, "rewatch_avg");
   assert.equal(parseLetterboxdCallback("lb:rew:0").value, false);
   assert.equal(parseLetterboxdCallback("lb:rew:1").value, true);
+  assert.equal(parseLetterboxdCallback("lb:likes:0").step, "show_likes");
+  assert.equal(parseLetterboxdCallback("lb:likes:0").value, false);
+  assert.equal(parseLetterboxdCallback("lb:revs:1").step, "show_reviews");
+  assert.equal(parseLetterboxdCallback("lb:revs:1").value, true);
   assert.equal(parseLetterboxdCallback("lb:excl:0").step, "exclusions");
   assert.equal(parseLetterboxdCallback("lb:excl:0").value, false);
   assert.equal(parseLetterboxdCallback("lb:drama:0").step, "drama");
@@ -418,6 +451,8 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
     topN: 20,
     minRated: 3,
     includeRewatchInAverages: true,
+    showLikes: false,
+    showReviews: true,
     includeUSA: true,
     includeEnglish: false,
     includeDrama: false,
@@ -426,6 +461,8 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
     searchKeywords: ["Elijah Wood"],
   });
   assert.match(text, /Rewatches in averages: yes/);
+  assert.match(text, /Likes: no/);
+  assert.match(text, /Reviews: yes/);
   assert.match(text, /Exclude: English, Drama, "Wood", "2001"/);
   assert.match(text, /Search: "Elijah Wood"/);
   assert.doesNotMatch(text, /USA:\s*(yes|no)/);
@@ -433,6 +470,8 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
   assert.match(text, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
   const defaults = letterboxdAckText("lb-2", {});
   assert.match(defaults, /Rewatches in averages: no/);
+  assert.match(defaults, /Likes: yes/);
+  assert.match(defaults, /Reviews: yes/);
   assert.match(defaults, /Exclude: none/);
   assert.match(defaults, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
 });
@@ -442,6 +481,8 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     topN: 30,
     minRated: 5,
     includeRewatchInAverages: true,
+    showLikes: false,
+    showReviews: true,
     includeUSA: false,
     includeEnglish: true,
     includeDrama: false,
@@ -454,6 +495,8 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   };
   const summary = formatLetterboxdSettingsSummary(options);
   assert.match(summary, /^Tops: 30\. Threshold: 5\./);
+  assert.match(summary, /Likes: no/);
+  assert.match(summary, /Reviews: yes/);
   assert.match(summary, /Exclude: USA, Drama, "Wood", "2001"/);
   assert.match(summary, /Period: 2021-01-01 — 2022-06-30\./);
   assert.match(summary, /No diary date: yes\./);
@@ -467,6 +510,8 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     topN: 30,
     minRated: 5,
     includeRewatchInAverages: true,
+    showLikes: false,
+    showReviews: true,
     includeUSA: false,
     includeEnglish: true,
     includeDrama: false,
@@ -480,12 +525,14 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   assert.equal(formatLetterboxdSettingsSummary(parsed), summary);
 
   const fullLine =
-    "Tops: 20. Threshold: 3. Rewatches in averages: no. " +
+    "Tops: 20. Threshold: 3. Rewatches in averages: no. Likes: yes. Reviews: yes. " +
     "Exclude: none. Search: none. Period: full.";
   assert.deepEqual(parseLetterboxdSettingsSummary(`noise ${fullLine} trailing`), {
     topN: 20,
     minRated: 3,
     includeRewatchInAverages: false,
+    showLikes: true,
+    showReviews: true,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -497,16 +544,42 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     includeUndated: false,
   });
 
+  // Pre-Likes/Reviews summaries still parse; both marks default on.
+  assert.deepEqual(
+    parseLetterboxdSettingsSummary(
+      "Tops: 20. Threshold: 3. Rewatches in averages: no. " +
+        "Exclude: none. Search: none. Period: full.",
+    ),
+    {
+      topN: 20,
+      minRated: 3,
+      includeRewatchInAverages: false,
+      showLikes: true,
+      showReviews: true,
+      includeUSA: true,
+      includeEnglish: true,
+      includeDrama: true,
+      includeComedy: true,
+      excludeKeywords: [],
+      searchKeywords: [],
+      dateFrom: "",
+      dateTo: "",
+      includeUndated: false,
+    },
+  );
+
   // Flags-only Exclude (Comedy include stays on → omitted).
   assert.deepEqual(
     parseLetterboxdSettingsSummary(
-      "Tops: 20. Threshold: 4. Rewatches in averages: no. " +
+      "Tops: 20. Threshold: 4. Rewatches in averages: no. Likes: no. Reviews: no. " +
         "Exclude: USA, English, Drama. Search: none. Period: full.",
     ),
     {
       topN: 20,
       minRated: 4,
       includeRewatchInAverages: false,
+      showLikes: false,
+      showReviews: false,
       includeUSA: false,
       includeEnglish: false,
       includeDrama: false,
@@ -527,6 +600,8 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     topN: 20,
     minRated: 3,
     includeRewatchInAverages: false,
+    showLikes: true,
+    showReviews: true,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -545,6 +620,8 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     topN: 20,
     minRated: 3,
     includeRewatchInAverages: false,
+    showLikes: true,
+    showReviews: true,
     includeUSA: false,
     includeEnglish: false,
     includeDrama: true,
@@ -562,14 +639,14 @@ test("settings summary parser rejects missing or malformed text", () => {
   assert.equal(parseLetterboxdSettingsSummary("Tops: 20. Period: full."), null);
   assert.equal(
     parseLetterboxdSettingsSummary(
-      "Tops: 999. Threshold: 3. Rewatches in averages: no. " +
+      "Tops: 999. Threshold: 3. Rewatches in averages: no. Likes: yes. Reviews: yes. " +
         "Exclude: none. Search: none. Period: full.",
     ),
     null,
   );
   assert.equal(
     parseLetterboxdSettingsSummary(
-      "Tops: 20. Threshold: 3. Rewatches in averages: maybe. " +
+      "Tops: 20. Threshold: 3. Rewatches in averages: maybe. Likes: yes. Reviews: yes. " +
         "Exclude: none. Search: none. Period: full.",
     ),
     null,
@@ -596,6 +673,8 @@ test("paste settings mode asks for summary then finishes with parsed options", (
     topN: 10,
     minRated: 10,
     includeRewatchInAverages: false,
+    showLikes: false,
+    showReviews: false,
     includeUSA: true,
     includeEnglish: false,
     includeDrama: true,
@@ -616,6 +695,8 @@ test("paste settings mode asks for summary then finishes with parsed options", (
       topN: 10,
       minRated: 10,
       includeRewatchInAverages: false,
+      showLikes: false,
+      showReviews: false,
       includeUSA: true,
       includeEnglish: false,
       includeDrama: true,
@@ -669,6 +750,8 @@ test("buildLetterboxdDispatch", () => {
       top_n: "20",
       min_rated: "4",
       include_rewatch_in_averages: "false",
+      show_likes: "true",
+      show_reviews: "true",
       include_usa: "true",
       include_english: "true",
       include_drama: "true",

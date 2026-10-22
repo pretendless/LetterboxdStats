@@ -110,6 +110,8 @@ export function defaultLetterboxdOptions() {
     topN: LETTERBOXD_TOP_N_DEFAULT,
     minRated: LETTERBOXD_MIN_RATED_DEFAULT,
     includeRewatchInAverages: false,
+    showLikes: true,
+    showReviews: true,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -180,6 +182,8 @@ export function normalizeLetterboxdOptions(options) {
     topN: clampInt(src.topN, LETTERBOXD_TOP_N_MIN, LETTERBOXD_TOP_N_MAX, LETTERBOXD_TOP_N_DEFAULT),
     minRated: clampInt(src.minRated, LETTERBOXD_MIN_RATED_MIN, LETTERBOXD_MIN_RATED_MAX, LETTERBOXD_MIN_RATED_DEFAULT),
     includeRewatchInAverages: src.includeRewatchInAverages == null ? false : Boolean(src.includeRewatchInAverages),
+    showLikes: src.showLikes == null ? true : Boolean(src.showLikes),
+    showReviews: src.showReviews == null ? true : Boolean(src.showReviews),
     includeUSA: src.includeUSA == null ? true : Boolean(src.includeUSA),
     includeEnglish: src.includeEnglish == null ? true : Boolean(src.includeEnglish),
     includeDrama: src.includeDrama == null ? true : Boolean(src.includeDrama),
@@ -204,6 +208,8 @@ export function encodeAwaitLetterboxd(state = {}) {
   if (state.includeRewatchInAverages != null) {
     out.includeRewatchInAverages = Boolean(state.includeRewatchInAverages);
   }
+  if (state.showLikes != null) out.showLikes = Boolean(state.showLikes);
+  if (state.showReviews != null) out.showReviews = Boolean(state.showReviews);
   if (state.includeUSA != null) out.includeUSA = Boolean(state.includeUSA);
   if (state.includeEnglish != null) out.includeEnglish = Boolean(state.includeEnglish);
   if (state.includeDrama != null) out.includeDrama = Boolean(state.includeDrama);
@@ -239,6 +245,8 @@ export function decodeAwaitLetterboxd(raw) {
       minRated: parsed.minRated == null ? null : parsed.minRated,
       includeRewatchInAverages:
         parsed.includeRewatchInAverages == null ? null : Boolean(parsed.includeRewatchInAverages),
+      showLikes: parsed.showLikes == null ? null : Boolean(parsed.showLikes),
+      showReviews: parsed.showReviews == null ? null : Boolean(parsed.showReviews),
       includeUSA: parsed.includeUSA == null ? null : Boolean(parsed.includeUSA),
       includeEnglish: parsed.includeEnglish == null ? null : Boolean(parsed.includeEnglish),
       includeDrama: parsed.includeDrama == null ? null : Boolean(parsed.includeDrama),
@@ -354,6 +362,8 @@ export function formatLetterboxdSettingsSummary(options) {
   return (
     `Tops: ${opts.topN}. Threshold: ${opts.minRated}. ` +
     `Rewatches in averages: ${opts.includeRewatchInAverages ? "yes" : "no"}. ` +
+    `Likes: ${opts.showLikes ? "yes" : "no"}. ` +
+    `Reviews: ${opts.showReviews ? "yes" : "no"}. ` +
     `Exclude: ${formatExcludeSummaryList(opts)}. ` +
     `Search: ${formatKeywordSummaryList(opts.searchKeywords)}. ` +
     `Period: ${period}.` +
@@ -362,8 +372,12 @@ export function formatLetterboxdSettingsSummary(options) {
   );
 }
 
-// Current shape: flags + keywords live under Exclude (no separate USA:/English: fields).
+// Current shape: Likes/Reviews after Rewatches; flags + keywords under Exclude.
 const SETTINGS_SUMMARY_RE =
+  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
+
+// Pre-Likes/Reviews: same Exclude shape, no Likes:/Reviews: fields (default both yes).
+const SETTINGS_SUMMARY_PRE_LIKES_RE =
   /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
 
 // Legacy: separate USA/English/Drama/Comedy yes/no fields + keyword-only Exclude.
@@ -452,19 +466,47 @@ export function parseLetterboxdSettingsSummary(text) {
     if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
     if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
     if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
-    const period = parsePeriodAndUndated(src, current, 6, yesNo);
+    const period = parsePeriodAndUndated(src, current, 8, yesNo);
     if (!period) return null;
-    const exclude = parseExcludeSummaryList(current[4]);
+    const exclude = parseExcludeSummaryList(current[6]);
     return normalizeLetterboxdOptions({
       topN,
       minRated,
       includeRewatchInAverages: yesNo(current[3]),
+      showLikes: yesNo(current[4]),
+      showReviews: yesNo(current[5]),
       includeUSA: exclude.includeUSA,
       includeEnglish: exclude.includeEnglish,
       includeDrama: exclude.includeDrama,
       includeComedy: exclude.includeComedy,
       excludeKeywords: exclude.excludeKeywords,
-      searchKeywords: parseQuotedKeywordList(current[5]),
+      searchKeywords: parseQuotedKeywordList(current[7]),
+      ...period,
+    });
+  }
+
+  const preLikes = src.match(SETTINGS_SUMMARY_PRE_LIKES_RE);
+  if (preLikes) {
+    const topN = Number(preLikes[1]);
+    const minRated = Number(preLikes[2]);
+    if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
+    if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
+    if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
+    const period = parsePeriodAndUndated(src, preLikes, 6, yesNo);
+    if (!period) return null;
+    const exclude = parseExcludeSummaryList(preLikes[4]);
+    return normalizeLetterboxdOptions({
+      topN,
+      minRated,
+      includeRewatchInAverages: yesNo(preLikes[3]),
+      showLikes: true,
+      showReviews: true,
+      includeUSA: exclude.includeUSA,
+      includeEnglish: exclude.includeEnglish,
+      includeDrama: exclude.includeDrama,
+      includeComedy: exclude.includeComedy,
+      excludeKeywords: exclude.excludeKeywords,
+      searchKeywords: parseQuotedKeywordList(preLikes[5]),
       ...period,
     });
   }
@@ -483,6 +525,8 @@ export function parseLetterboxdSettingsSummary(text) {
     topN,
     minRated,
     includeRewatchInAverages: yesNo(legacy[3]),
+    showLikes: true,
+    showReviews: true,
     includeUSA: yesNo(legacy[4]),
     includeEnglish: yesNo(legacy[5]),
     includeDrama: yesNo(legacy[6]),
@@ -856,7 +900,7 @@ export function letterboxdModePrompt() {
     text: [
       "<b>How should the charts be built?</b>",
       "",
-      "ZIP received. Default builds the usual set right away. Customize sets the top size, threshold, whether rewatches count in averages, optional exclusions, optional search keywords, and dates. Paste settings reuses a previous Tops: … Period: summary.",
+      "ZIP received. Default builds the usual set right away. Customize sets the top size, threshold, whether rewatches count in averages, whether to show likes (♥) and reviews (≡), optional exclusions, optional search keywords, and dates. Paste settings reuses a previous Tops: … Period: summary.",
       "",
       "Buttons below, or reply with text. Cancel with /stop.",
     ].join("\n"),
@@ -908,6 +952,24 @@ function promptFor(step, state, now = new Date()) {
         "By default averages use each film’s last set rating, even if you watched it several times. Choose Yes if every rated diary entry should affect the average.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:rew", "no"),
+    };
+  }
+  if (step === "show_likes") {
+    return {
+      text: choicePrompt(
+        "Show likes (♥)?",
+        "Hearts mark liked films on chart tips, titles, Most liked lists, and search lines. Default is yes (same as today).",
+      ),
+      reply_markup: letterboxdYesNoKeyboard("lb:likes"),
+    };
+  }
+  if (step === "show_reviews") {
+    return {
+      text: choicePrompt(
+        "Show reviews (≡)?",
+        "The ≡ mark shows reviewed films on chart tips, titles, Most reviewed lists, and search lines. Default is yes (same as today).",
+      ),
+      reply_markup: letterboxdYesNoKeyboard("lb:revs"),
     };
   }
   if (step === "exclusions") {
@@ -1064,6 +1126,8 @@ export function parseLetterboxdCallback(data) {
   match = raw.match(/^lb:m:(1|3|4|5)$/);
   if (match) return { step: "min_rated", value: Number(match[1]) };
   if (raw === "lb:rew:1" || raw === "lb:rew:0") return { step: "rewatch_avg", value: raw.endsWith("1") };
+  if (raw === "lb:likes:1" || raw === "lb:likes:0") return { step: "show_likes", value: raw.endsWith("1") };
+  if (raw === "lb:revs:1" || raw === "lb:revs:0") return { step: "show_reviews", value: raw.endsWith("1") };
   if (raw === "lb:excl:1" || raw === "lb:excl:0") return { step: "exclusions", value: raw.endsWith("1") };
   if (raw === "lb:usa:1" || raw === "lb:usa:0") return { step: "usa", value: raw.endsWith("1") };
   if (raw === "lb:en:1" || raw === "lb:en:0") return { step: "english", value: raw.endsWith("1") };
@@ -1181,7 +1245,17 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
   if (step === "rewatch_avg") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
     if (value == null) return retry(state, "Need yes or no. The report has not started.");
-    return go({ ...state, includeRewatchInAverages: value }, "exclusions", now);
+    return go({ ...state, includeRewatchInAverages: value }, "show_likes", now);
+  }
+  if (step === "show_likes") {
+    const value = kind === "callback" ? input.value : parseYesNoText(input.text);
+    if (value == null) return retry(state, "Need yes or no. The report has not started.");
+    return go({ ...state, showLikes: value }, "show_reviews", now);
+  }
+  if (step === "show_reviews") {
+    const value = kind === "callback" ? input.value : parseYesNoText(input.text);
+    if (value == null) return retry(state, "Need yes or no. The report has not started.");
+    return go({ ...state, showReviews: value }, "exclusions", now);
   }
   if (step === "exclusions") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
@@ -1376,6 +1450,8 @@ export function buildLetterboxdDispatch({ repo, workflow, ref, jobId, chatId, fi
         top_n: String(opts.topN),
         min_rated: String(opts.minRated),
         include_rewatch_in_averages: opts.includeRewatchInAverages ? "true" : "false",
+        show_likes: opts.showLikes ? "true" : "false",
+        show_reviews: opts.showReviews ? "true" : "false",
         include_usa: opts.includeUSA ? "true" : "false",
         include_english: opts.includeEnglish ? "true" : "false",
         include_drama: opts.includeDrama ? "true" : "false",

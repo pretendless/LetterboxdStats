@@ -1943,8 +1943,11 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
-        liked_keys = liked_film_keys(load_liked_films(zip_path))
-        reviewed_films = load_reviewed_films(zip_path)
+        # show_likes / show_reviews off → empty sets (omit ♥ / ≡ everywhere).
+        liked_keys = liked_film_keys(
+            load_liked_films(zip_path) if opts.show_likes else None
+        )
+        reviewed_films = load_reviewed_films(zip_path) if opts.show_reviews else None
         reviewed_keys = reviewed_film_keys(reviewed_films)
         # Date-sensitive charts: diary only (need Watched Date).
         span_start, span_end = resolve_watch_bounds(diary, opts.date_from, opts.date_to)
@@ -2016,6 +2019,8 @@ def main(argv: list[str] | None = None) -> int:
         summary["date_to"] = opts.date_to or ""
         summary["include_undated"] = bool(opts.include_undated and opts.has_window)
         summary["include_rewatch_in_averages"] = bool(opts.include_rewatch_in_averages)
+        summary["show_likes"] = bool(opts.show_likes)
+        summary["show_reviews"] = bool(opts.show_reviews)
         summary["watch_time_grain"] = grain
         summary["exclude_keywords"] = list(opts.exclude_keywords or ())
         year_avgs = release_year_avg_lookup(ratings_for_catalog(catalog, film_ratings))

@@ -3,6 +3,7 @@
 Wizard defaults (also the GitHub Actions defaults):
   top_n=20 (allowed 1–100), min_rated=4 (allowed 1–50),
   include_rewatch_in_averages=False (unique-film means),
+  show_likes=True, show_reviews=True (♥ / ≡ on charts and search),
   include USA, include English, include Drama, include Comedy,
   no custom keyword exclusions, no search keywords,
   full diary span, undated films only on the full span.
@@ -13,6 +14,10 @@ apply only to quantitative / count tops — never to average-rating tops.
 include_rewatch_in_averages only changes qualitative means (each rated diary
 row vs one rating per Name+Year). Threshold gates stay on unique rated films.
 Most often in the diary and search-keyword lists are unaffected.
+
+show_likes / show_reviews (default True) gate ♥ and ≡ everywhere: tips, titles,
+Most liked / Most reviewed panels, search-keyword lines, and inside-bar marks.
+When False, that mark is omitted (same as having no likes / reviews).
 
 Optional search keywords are separate: after all chart PNGs, each keyword
 gets a Telegram film list where the substring matches film metadata
@@ -250,6 +255,8 @@ class ChartOptions:
     top_n: int = TOP_N_DEFAULT
     min_rated: int = MIN_RATED_DEFAULT
     include_rewatch_in_averages: bool = False
+    show_likes: bool = True
+    show_reviews: bool = True
     include_usa: bool = True
     include_english: bool = True
     include_drama: bool = True
@@ -292,6 +299,8 @@ def read_chart_options(env: dict | None = None) -> ChartOptions:
         include_rewatch_in_averages=parse_bool_flag(
             src.get("LETTERBOXD_INCLUDE_REWATCH_IN_AVERAGES"), False
         ),
+        show_likes=parse_bool_flag(src.get("LETTERBOXD_SHOW_LIKES"), True),
+        show_reviews=parse_bool_flag(src.get("LETTERBOXD_SHOW_REVIEWS"), True),
         include_usa=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_USA"), True),
         include_english=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_ENGLISH"), True),
         include_drama=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_DRAMA"), True),
