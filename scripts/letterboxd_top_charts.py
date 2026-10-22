@@ -234,6 +234,49 @@ def rank_most_liked(
 rank_most_reviewed = rank_most_liked
 
 
+def rank_library_most_reviewed(
+    reviewed_films,
+    top_n: int,
+    *,
+    min_reviews: int = 2,
+) -> list[tuple[str, int]]:
+    """Library-wide films by review-row count; drop entries below ``min_reviews``.
+
+    Labels are ``Name (Year)`` (year omitted when missing). Default
+    ``min_reviews=2`` keeps only films with more than one review (``❝`` count
+    from reviews.csv rows). Empty when nothing qualifies — callers omit the
+    Most reviewed section.
+    """
+    import pandas as pd
+
+    if not top_n or top_n <= 0 or reviewed_films is None or getattr(reviewed_films, "empty", True):
+        return []
+    work = reviewed_films.copy()
+    names = work["Name"].fillna("").astype(str).str.strip()
+    work = work[names != ""].copy()
+    if work.empty:
+        return []
+    work["_film_key"] = film_name_year_key(work)
+    grouped = work.groupby("_film_key", dropna=False).agg(
+        count=("Name", "size"),
+        Name=("Name", "first"),
+        Year=("Year", "first"),
+    )
+    floor = max(1, int(min_reviews))
+    items: dict[str, int] = {}
+    for _, row in grouped.iterrows():
+        n = int(row["count"])
+        if n < floor:
+            continue
+        year_val = row["Year"]
+        year_s = f" ({int(year_val)})" if pd.notna(year_val) else ""
+        label = f"{str(row['Name'])}{year_s}"
+        items[label] = n
+    if not items:
+        return []
+    return rank_most_reviewed(items, top_n)
+
+
 def display_lang(code) -> str:
     key = str(code or "").strip().lower()
     return LANG_LABELS.get(key) or key or "?"

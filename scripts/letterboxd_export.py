@@ -23,9 +23,11 @@ liked (often a bulk-like day), not a reliable match to Watched Date / diary
 Date, so per-view likes are not recoverable from this export shape.
 likes/reviews.csv is review-URI only and is not mapped to films here.
 
-Film reviews: top-level reviews.csv (Name+Year; diary-entry URI). One unique
-film key per Name+Year even when multiple review rows exist. Prefer reviews.csv
-over deleted/orphaned copies; never use likes/reviews.csv for film identity.
+Film reviews: top-level reviews.csv (Name+Year; diary-entry URI; Date = when
+the review was written). Keep every review row plus Date for watch-date tip
+attribution and library-wide review counts. Film-level presence
+(``reviewed_film_keys``) is still unique Name+Year. Prefer reviews.csv over
+deleted/orphaned copies; never use likes/reviews.csv for film identity.
 """
 
 from __future__ import annotations
@@ -244,12 +246,13 @@ def liked_film_keys(liked_films: pd.DataFrame | None) -> set[str]:
 def load_reviewed_films(zip_path: Path | str) -> pd.DataFrame:
     """Parse top-level reviews.csv if present. Empty frame when missing (not an error).
 
-    Film-level reviews: unique Name+Year (one key even with multiple review rows).
-    Prefer reviews.csv; never pick deleted/orphaned copies or likes/reviews.csv
-    (that file is review-URI likes, not film reviews).
+    Keeps every review row with Name, Year, and parsed ``Date`` (review-written
+    day). Multiple rows for the same Name+Year stay — watch-date tips and
+    library-wide review counts need each row. Prefer reviews.csv; never pick
+    deleted/orphaned copies or likes/reviews.csv (review-URI likes, not films).
     """
     path = Path(zip_path)
-    empty_cols = ["Name", "Year"]
+    empty_cols = ["Name", "Year", "Date"]
     if not path.is_file():
         return pd.DataFrame(columns=empty_cols)
     try:
@@ -285,17 +288,32 @@ def load_reviewed_films(zip_path: Path | str) -> pd.DataFrame:
     df = df[df["Name"].astype(str).str.strip() != ""].copy()
     if df.empty:
         return pd.DataFrame(columns=empty_cols)
-    df = df.copy()
-    df["_film_key"] = film_name_year_key(df)
-    df = df.groupby("_film_key", dropna=False, as_index=False).head(1)
-    return df[["Name", "Year"]].copy()
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    else:
+        df["Date"] = pd.NaT
+    return df[["Name", "Year", "Date"]].copy()
 
 
 def reviewed_film_keys(reviewed_films: pd.DataFrame | None) -> set[str]:
-    """Name|||Year keys from a reviews.csv frame."""
+    """Unique Name|||Year keys from a reviews.csv frame (film-level presence)."""
     if reviewed_films is None or getattr(reviewed_films, "empty", True):
         return set()
     return set(film_name_year_key(reviewed_films).tolist())
+
+
+def film_review_row_counts(reviewed_films: pd.DataFrame | None) -> dict[str, int]:
+    """Library-wide review-row counts keyed by Name|||Year."""
+    if reviewed_films is None or getattr(reviewed_films, "empty", True):
+        return {}
+    work = reviewed_films.copy()
+    names = work["Name"].fillna("").astype(str).str.strip()
+    work = work[names != ""].copy()
+    if work.empty:
+        return {}
+    work["_film_key"] = film_name_year_key(work)
+    counts = work.groupby("_film_key", dropna=False).size()
+    return {str(k): int(v) for k, v in counts.items()}
 
 
 def watched_only_films(diary: pd.DataFrame, watched: pd.DataFrame) -> pd.DataFrame:

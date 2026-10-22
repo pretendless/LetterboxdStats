@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 
 from letterboxd_calendar_charts import (
+    _reviewed_counts_by_review_date_grain,
+    _reviewed_counts_by_review_weekday_month,
     build_diary_summary,
     chart_viewing_pace,
     diary_rating_means_by_watch_year,
@@ -23,6 +25,7 @@ from letterboxd_calendar_charts import (
     main as cal_main,
 )
 from letterboxd_export import (
+    film_review_row_counts,
     latest_rated_union,
     liked_film_keys,
     load_export,
@@ -35,6 +38,7 @@ from letterboxd_export import (
     scope_letterboxd_frames,
     unique_rated_film_count,
 )
+from letterboxd_top_charts import rank_library_most_reviewed
 from letterboxd_genre_charts import (
     _filter_entity_names,
     _filter_genre_names,
@@ -607,7 +611,7 @@ def test_load_liked_films_from_zip(tmp: Path) -> None:
 
 
 def test_load_reviewed_films_from_zip(tmp: Path) -> None:
-    """reviews.csv Name+Year unique; skip likes/reviews.csv; missing → empty."""
+    """reviews.csv keeps all rows + Date; keys unique; skip likes/reviews.csv."""
     diary_csv = """Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date
 2024-01-02,Reviewed Film,2020,https://boxd.it/aaa,4.0,,,2024-01-01
 2024-01-03,Other Film,2019,https://boxd.it/bbb,3.0,,,2024-01-02
@@ -623,6 +627,16 @@ def test_load_reviewed_films_from_zip(tmp: Path) -> None:
     keys = reviewed_film_keys(reviewed)
     # Unique Name+Year even with two review rows for Reviewed Film.
     assert keys == {"Reviewed Film|||2020", "Paris, Texas|||1984"}
+    # All rows kept with parsed Date (not deduped to one film row).
+    assert len(reviewed) == 3
+    assert "Date" in reviewed.columns
+    assert film_review_row_counts(reviewed) == {
+        "Reviewed Film|||2020": 2,
+        "Paris, Texas|||1984": 1,
+    }
+    ranked = rank_library_most_reviewed(reviewed, top_n=5, min_reviews=2)
+    assert ranked == [("Reviewed Film (2020)", 2)]
+    assert rank_library_most_reviewed(reviewed, top_n=5, min_reviews=3) == []
 
     zip_no = tmp / "no_reviews.zip"
     _write_zip(zip_no, diary_csv)
@@ -667,6 +681,42 @@ def test_load_reviewed_films_from_zip(tmp: Path) -> None:
     assert by_name["Other Film"]["reviewed"] is False
 
 
+def test_review_tips_follow_review_date_not_watch_year() -> None:
+    """Watched year A + review Date year B → ❝ under B, not A."""
+    reviews = pd.DataFrame(
+        [
+            # Watched 2026 (diary), written 2024 → tip for 2024.
+            {
+                "Name": "Late Review",
+                "Year": 2000,
+                "Date": "2024-06-01",
+            },
+            {
+                "Name": "Same Year",
+                "Year": 2001,
+                "Date": "2026-02-01",
+            },
+            {
+                "Name": "Same Year Again",
+                "Year": 2002,
+                "Date": "2026-08-01",
+            },
+        ]
+    )
+    reviews["Date"] = pd.to_datetime(reviews["Date"])
+    year_index = [2024, 2025, 2026]
+    counts = _reviewed_counts_by_review_date_grain(reviews, year_index, "year")
+    assert counts == [1, 0, 2]
+
+    # Weekday of review Date (2024-06-01 and 2026-08-01 are both Saturday=5).
+    week, month = _reviewed_counts_by_review_weekday_month(reviews)
+    assert week[5] == 2  # Sat
+    assert week[6] == 1  # Sun 2026-02-01
+    assert month[5] == 1  # June
+    assert month[1] == 1  # February
+    assert month[7] == 1  # August
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as raw:
         tmp = Path(raw)
@@ -684,6 +734,7 @@ def main() -> int:
         test_count_avg_label_and_usa_english_filter()
         test_load_liked_films_from_zip(tmp)
         test_load_reviewed_films_from_zip(tmp)
+        test_review_tips_follow_review_date_not_watch_year()
     print("test_letterboxd_export: ok")
     return 0
 

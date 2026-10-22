@@ -84,6 +84,7 @@ from letterboxd_top_charts import (  # noqa: E402
     film_title_with_liked_heart,
     format_engagement_tip,
     format_liked_tip,
+    rank_library_most_reviewed,
     rank_most_liked,
     rank_most_reviewed,
 )
@@ -623,6 +624,7 @@ def chart_weekday_month(
     *,
     liked_keys=None,
     reviewed_keys=None,
+    reviewed_films=None,
     top_n: int = TOP_N_DEFAULT,
 ) -> None:
     df = df.copy()
@@ -631,7 +633,7 @@ def chart_weekday_month(
     df["month"] = df["Watched Date"].dt.month
     df["_film_key"] = film_name_year_key(df)
     liked = set(liked_keys or ())
-    reviewed = set(reviewed_keys or ())
+    del reviewed_keys  # film-level keys; ❝ tips use review Date instead
 
     years = sorted(df["watch_year"].unique().tolist())
     colors = year_colors(years)
@@ -664,10 +666,10 @@ def chart_weekday_month(
 
     week_liked = [count_liked_among_keys(week_keys[i], liked) for i in range(7)]
     month_liked = [count_liked_among_keys(month_keys[i], liked) for i in range(12)]
-    week_reviewed = [count_reviewed_among_keys(week_keys[i], reviewed) for i in range(7)]
-    month_reviewed = [
-        count_reviewed_among_keys(month_keys[i], reviewed) for i in range(12)
-    ]
+    # ❝: review Date weekday/month — not films watched that day/month.
+    week_reviewed, month_reviewed = _reviewed_counts_by_review_weekday_month(
+        reviewed_films
+    )
     # Two panels → two lists: all liked weekdays (≤7); months capped by top_n.
     most_liked_weekdays = rank_most_liked(
         {WEEKDAYS[i]: week_liked[i] for i in range(7)},
@@ -944,7 +946,7 @@ def _place_count_avg_above_bars(
 def _engagement_counts_by_watch_grain(
     df: pd.DataFrame, index, grain: str, mark_keys
 ) -> list[int]:
-    """Unique Name+Year films in mark_keys per watch-time bucket (count tips)."""
+    """Unique Name+Year films in mark_keys per watch-time bucket (♥ tips)."""
     marked = set(mark_keys or ())
     if not marked or df is None or getattr(df, "empty", True):
         return [0] * len(index)
@@ -977,6 +979,59 @@ def _liked_counts_by_watch_grain(
     return _engagement_counts_by_watch_grain(df, index, grain, liked_keys)
 
 
+def _review_dates_frame(reviewed_films) -> pd.DataFrame:
+    """Reviews with a parseable written ``Date`` (empty when none)."""
+    if reviewed_films is None or getattr(reviewed_films, "empty", True):
+        return pd.DataFrame(columns=["Date"])
+    work = reviewed_films.copy()
+    if "Date" not in work.columns:
+        return pd.DataFrame(columns=["Date"])
+    work["Date"] = pd.to_datetime(work["Date"], errors="coerce")
+    work = work[work["Date"].notna()].copy()
+    return work
+
+
+def _reviewed_counts_by_review_date_grain(
+    reviewed_films, index, grain: str
+) -> list[int]:
+    """❝ tip counts: review rows whose own written Date falls in each bucket.
+
+    Does not attribute a review to a watch year just because the film was
+    watched then. Counts review rows (not unique films).
+    """
+    n = len(index)
+    work = _review_dates_frame(reviewed_films)
+    if work.empty:
+        return [0] * n
+    if grain == "year":
+        work["_bucket"] = work["Date"].dt.year
+    elif grain == "month":
+        work["_bucket"] = work["Date"].dt.to_period("M")
+    else:
+        work["_bucket"] = work["Date"].dt.normalize()
+    out: list[int] = []
+    for key in index:
+        bucket_key = _watch_bucket_key(key, grain)
+        mask = work["_bucket"].map(lambda v, g=grain: _watch_bucket_key(v, g)) == bucket_key
+        out.append(int(mask.sum()))
+    return out
+
+
+def _reviewed_counts_by_review_weekday_month(
+    reviewed_films,
+) -> tuple[list[int], list[int]]:
+    """❝ tip counts for weekday (0–6) and month (0–11) from review Date."""
+    week = [0] * 7
+    month = [0] * 12
+    work = _review_dates_frame(reviewed_films)
+    if work.empty:
+        return week, month
+    for ts in work["Date"]:
+        week[int(ts.weekday())] += 1
+        month[int(ts.month) - 1] += 1
+    return week, month
+
+
 def chart_views_by_year(
     df: pd.DataFrame,
     path: Path,
@@ -986,7 +1041,9 @@ def chart_views_by_year(
     span_end=None,
     liked_keys=None,
     reviewed_keys=None,
+    reviewed_films=None,
 ) -> None:
+    del reviewed_keys  # film-level keys; ❝ tips use review Date via reviewed_films
     dates = df["Watched Date"].dropna()
     if dates.empty:
         return
@@ -1043,8 +1100,9 @@ def chart_views_by_year(
         fontsize=fontsize,
         rotation=rotation,
         liked_counts=_liked_counts_by_watch_grain(df, counts.index, grain, liked_keys),
-        reviewed_counts=_engagement_counts_by_watch_grain(
-            df, counts.index, grain, reviewed_keys
+        # ❝ follows review Date (not film watched that year). reviewed_keys unused.
+        reviewed_counts=_reviewed_counts_by_review_date_grain(
+            reviewed_films, counts.index, grain
         ),
     )
     save_dark_figure(fig, path, dpi=160)
@@ -1736,6 +1794,7 @@ def chart_top_rewatches(
     exclude_keywords: tuple[str, ...] | list[str] | None = None,
     liked_keys: set[str] | frozenset | None = None,
     reviewed_keys: set[str] | frozenset | None = None,
+    reviewed_films: pd.DataFrame | None = None,
 ) -> bool:
     """Horizontal stacked bars of rewatched films, colored by watch year.
 
@@ -1747,6 +1806,10 @@ def chart_top_rewatches(
 
     Liked / reviewed films append ♥ / REVIEW_MARK after the visible title on
     the y-label. Tip row is count + average only (no liked/review-count tip).
+
+    Side panel: Watch year legend only, plus library-wide **Most reviewed**
+    (films with more than one reviews.csv row). No Most liked list on this
+    chart. When every film has at most one review, omit Most reviewed.
     """
     del film_ratings  # unique-film merge must not feed this chart's tip
     liked = set(liked_keys or ())
@@ -1780,15 +1843,10 @@ def chart_top_rewatches(
     kept_rows = eligible[:limit]
     if not kept_rows:
         return False
-    # Most liked / reviewed: rank eligible rewatch films by mark (0/1), top ``limit``.
-    liked_by_label = {
-        label: (1 if str(key_id) in liked else 0) for key_id, _row, label in eligible
-    }
-    reviewed_by_label = {
-        label: (1 if str(key_id) in reviewed else 0) for key_id, _row, label in eligible
-    }
-    most_liked = rank_most_liked(liked_by_label, limit)
-    most_reviewed = rank_most_reviewed(reviewed_by_label, limit)
+    # Library-wide Most reviewed (count > 1 only). No Most liked on this chart.
+    most_reviewed = rank_library_most_reviewed(
+        reviewed_films, limit, min_reviews=2
+    )
     # Chart draws bottom→top; reverse so the most-watched sits at the top.
     kept_rows = list(reversed(kept_rows))
 
@@ -1828,7 +1886,8 @@ def chart_top_rewatches(
     avg_labels = [format_single_rating_label(rating_lookup.get(key_id)) for key_id in keys]
 
     # Row pitch stays ~0.42 in so a longer rewatch list gets a taller figure.
-    has_side = bool(most_liked or most_reviewed)
+    # Legend always draws; widen only when Most reviewed is present.
+    has_side = bool(most_reviewed)
     fig_w = 12.4 if has_side else 11.4
     fig, ax = plt.subplots(figsize=(fig_w, max(4, len(labels) * 0.42)))
     y = np.arange(len(labels))
@@ -1871,7 +1930,7 @@ def chart_top_rewatches(
         ax,
         years,
         palette,
-        most_liked,
+        most_liked=None,
         most_reviewed=most_reviewed,
         fontsize=8,
         title_fontsize=9,
@@ -1921,7 +1980,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
         liked_keys = liked_film_keys(load_liked_films(zip_path))
-        reviewed_keys = reviewed_film_keys(load_reviewed_films(zip_path))
+        reviewed_films = load_reviewed_films(zip_path)
+        reviewed_keys = reviewed_film_keys(reviewed_films)
         # Date-sensitive charts: diary only (need Watched Date).
         span_start, span_end = resolve_watch_bounds(diary, opts.date_from, opts.date_to)
         grain = watch_time_grain(span_start, span_end)
@@ -1929,7 +1989,7 @@ def main(argv: list[str] | None = None) -> int:
             diary,
             Path("views_by_weekday_month.png"),
             liked_keys=liked_keys,
-            reviewed_keys=reviewed_keys,
+            reviewed_films=reviewed_films,
             top_n=opts.top_n,
         )
         chart_views_by_year(
@@ -1939,7 +1999,7 @@ def main(argv: list[str] | None = None) -> int:
             span_start=span_start,
             span_end=span_end,
             liked_keys=liked_keys,
-            reviewed_keys=reviewed_keys,
+            reviewed_films=reviewed_films,
         )
         chart_decade_rating(
             diary,
@@ -1976,6 +2036,7 @@ def main(argv: list[str] | None = None) -> int:
             exclude_keywords=opts.exclude_keywords,
             liked_keys=liked_keys,
             reviewed_keys=reviewed_keys,
+            reviewed_films=reviewed_films,
         )
         summary = build_diary_summary(
             diary,

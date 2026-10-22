@@ -47,6 +47,7 @@ from letterboxd_top_charts import (
     format_reviewed_tip,
     normalize_most_liked_sections,
     normalize_most_reviewed_sections,
+    rank_library_most_reviewed,
     rank_most_liked,
     rank_most_reviewed,
 )
@@ -1194,6 +1195,136 @@ def test_top_rewatches_avg_is_diary_row_mean(tmp_path: Path | None = None):
     assert _rgba(by_text["3.00"].get_color()) == _rgba(rating_color(3.0))
 
 
+def test_top_rewatches_side_panel_library_most_reviewed(tmp_path: Path | None = None):
+    """Most often chart: no Most liked; Most reviewed only for films with ❝ > 1."""
+    import letterboxd_calendar_charts as cal
+
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-rewatch-most-reviewed")
+    out.mkdir(parents=True, exist_ok=True)
+    diary = pd.DataFrame(
+        [
+            {"Name": "Repeat", "Year": 2001, "Rating": 4.0, "Watched Date": "2020-01-01"},
+            {"Name": "Repeat", "Year": 2001, "Rating": 3.0, "Watched Date": "2021-01-01"},
+            {"Name": "Other", "Year": 1999, "Rating": 2.0, "Watched Date": "2020-06-01"},
+            {"Name": "Other", "Year": 1999, "Rating": 5.0, "Watched Date": "2021-06-01"},
+        ]
+    )
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+    liked_keys = {"Repeat|||2001", "Other|||1999"}
+
+    def _capture_panel(reviewed_films, dest: Path) -> dict:
+        captured: dict = {}
+        real = cal.draw_watch_year_most_liked_panel
+
+        def grab(fig, ax, years, palette, most_liked=None, **kwargs):
+            captured["most_liked"] = most_liked
+            captured["most_reviewed"] = kwargs.get("most_reviewed")
+            captured["years"] = list(years or [])
+            return real(fig, ax, years, palette, most_liked, **kwargs)
+
+        cal.draw_watch_year_most_liked_panel = grab
+        try:
+            cal.chart_top_rewatches(
+                diary,
+                dest,
+                liked_keys=liked_keys,
+                reviewed_keys={"Repeat|||2001", "Other|||1999", "Off Chart|||1980"},
+                reviewed_films=reviewed_films,
+            )
+        finally:
+            cal.draw_watch_year_most_liked_panel = real
+        return captured
+
+    # Every film has exactly one review → omit Most reviewed (and Most liked).
+    singles = pd.DataFrame(
+        [
+            {"Name": "Repeat", "Year": 2001, "Date": "2020-01-02"},
+            {"Name": "Other", "Year": 1999, "Date": "2020-06-02"},
+            {"Name": "Off Chart", "Year": 1980, "Date": "2019-01-01"},
+        ]
+    )
+    singles["Date"] = pd.to_datetime(singles["Date"])
+    assert rank_library_most_reviewed(singles, top_n=10, min_reviews=2) == []
+    none_panel = _capture_panel(singles, out / "top_rewatches_no_multi.png")
+    assert none_panel.get("most_liked") is None
+    assert none_panel.get("most_reviewed") in (None, [])
+    assert none_panel.get("years")  # Watch year legend still drawn
+
+    # One film with two reviews → library-wide Most reviewed lists it.
+    multis = pd.DataFrame(
+        [
+            {"Name": "Off Chart", "Year": 1980, "Date": "2018-01-01"},
+            {"Name": "Off Chart", "Year": 1980, "Date": "2019-01-01"},
+            {"Name": "Repeat", "Year": 2001, "Date": "2020-01-02"},
+        ]
+    )
+    multis["Date"] = pd.to_datetime(multis["Date"])
+    assert rank_library_most_reviewed(multis, top_n=5, min_reviews=2) == [
+        ("Off Chart (1980)", 2)
+    ]
+    multi_panel = _capture_panel(multis, out / "top_rewatches_multi.png")
+    assert multi_panel.get("most_liked") is None
+    assert multi_panel.get("most_reviewed") == [("Off Chart (1980)", 2)]
+    texts_multi = _texts_on_save(
+        lambda c: c.chart_top_rewatches(
+            diary,
+            out / "top_rewatches_multi_texts.png",
+            liked_keys=liked_keys,
+            reviewed_films=multis,
+        )
+    )
+    labels_multi = {t.get_text() for t in texts_multi}
+    assert "Most liked" not in labels_multi
+    assert "Most reviewed" in labels_multi
+    assert any("Off Chart" in t.get_text() for t in texts_multi)
+    assert REVIEW_NOTE in " ".join(labels_multi)
+
+
+def test_views_by_year_reviewed_tip_uses_review_date(tmp_path: Path | None = None):
+    """Film watches by year: ❝ follows review Date, not watch year of the film."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-views-review-date")
+    out.mkdir(parents=True, exist_ok=True)
+    diary = pd.DataFrame(
+        [
+            {"Name": "Late Review", "Year": 2000, "Rating": 4.0, "Watched Date": "2026-01-15"},
+            {"Name": "Other", "Year": 2001, "Rating": 3.0, "Watched Date": "2024-06-01"},
+            {"Name": "Other", "Year": 2001, "Rating": 5.0, "Watched Date": "2025-06-01"},
+        ]
+    )
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+    # Review written in 2024 for a film watched in 2026 → tip under 2024.
+    reviews = pd.DataFrame(
+        [{"Name": "Late Review", "Year": 2000, "Date": "2024-03-01"}]
+    )
+    reviews["Date"] = pd.to_datetime(reviews["Date"])
+    # Film-level keys would wrongly put ❝ on 2026 if attributed by watch year.
+    reviewed_keys = {"Late Review|||2000"}
+
+    texts = _texts_on_save(
+        lambda cal: cal.chart_views_by_year(
+            diary,
+            out / "years_review_date.png",
+            liked_keys=None,
+            reviewed_keys=reviewed_keys,
+            reviewed_films=reviews,
+        )
+    )
+    tip = f"{REVIEW_NOTE} 1"
+    assert tip in {t.get_text() for t in texts}
+    # Engagement tip should sit with the 2024 bar, not invent a lone ❝ on 2026
+    # only — we assert the helper attribution separately; here the tip text exists
+    # and film-level keys alone are insufficient without reviewed_films dates.
+    texts_keys_only = _texts_on_save(
+        lambda cal: cal.chart_views_by_year(
+            diary,
+            out / "years_keys_only.png",
+            reviewed_keys=reviewed_keys,
+            reviewed_films=None,
+        )
+    )
+    assert tip not in {t.get_text() for t in texts_keys_only}
+
+
 def test_views_count_bars_show_avg_or_dash(tmp_path: Path | None = None):
     """Year and day count bars: white count, bold colored mean, dash if unrated."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-views-avg")
@@ -1434,6 +1565,8 @@ if __name__ == "__main__":
     test_letterboxd_rating_distribution_percent_tips()
     test_rating_distribution_includes_undated_no_date()
     test_top_rewatches_avg_is_diary_row_mean()
+    test_top_rewatches_side_panel_library_most_reviewed()
+    test_views_by_year_reviewed_tip_uses_review_date()
     test_views_count_bars_show_avg_or_dash()
     test_stacked_count_hbar_long_names()
     print("ok")
