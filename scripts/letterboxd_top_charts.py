@@ -408,6 +408,26 @@ def review_mark_fontproperties():
     return None
 
 
+def _ticklabel_engagement_segments(text: str) -> list[tuple[str, str]]:
+    """Split a tick label into (fragment, color); ♥/≡ logo-colored, name FG."""
+    raw = str(text or "")
+    if not raw:
+        return []
+    has_marks = LIKED_HEART in raw or (REVIEW_NOTE and REVIEW_NOTE in raw)
+    if not has_marks:
+        return [(raw, FG)]
+    # Category form with counts needs tip-style split (``Drama ♥ 12 ≡ 3``).
+    if any(ch.isdigit() for ch in raw) and (
+        f"{LIKED_HEART} " in raw
+        or (REVIEW_NOTE and f"{REVIEW_NOTE} " in raw)
+    ):
+        segments = _hbar_label_engagement_segments(raw)
+        return [
+            (frag, FG if color == ON_BAR else color) for frag, color in segments
+        ]
+    return title_engagement_segments(raw)
+
+
 def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
     """Recolor ♥/≡ inside tick labels to logo orange/blue (axis titles outside bars).
 
@@ -417,34 +437,62 @@ def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
     drawing the colored segments. ``set_text("")`` is not enough: measuring
     draws inside ``draw_colored_text_segments`` restore FixedFormatter strings
     and the title appears twice (gutter + near the bar zero-line).
+
+    Y-axis film titles share one left edge: after layout, every tick (marked or
+    not) is redrawn ``ha='left'`` at the leftmost reserved gutter edge, then
+    ♥/≡ follow the name. Marks therefore never pull names sideways when present
+    or absent. X-axis ticks keep their native ``ha`` (only marked labels redraw).
     """
-    axis_obj = ax.yaxis if str(axis).lower().startswith("y") else ax.xaxis
+    is_y = str(axis).lower().startswith("y")
+    axis_obj = ax.yaxis if is_y else ax.xaxis
     fig = ax.figure
     fig.canvas.draw()
-    for label in axis_obj.get_ticklabels():
+    tick_labels = list(axis_obj.get_ticklabels())
+    if not tick_labels:
+        return
+
+    common_left_disp: float | None = None
+    if is_y:
+        renderer = fig.canvas.get_renderer()
+        lefts: list[float] = []
+        for label in tick_labels:
+            text = str(label.get_text() or "")
+            if not text.strip():
+                continue
+            lefts.append(float(label.get_window_extent(renderer=renderer).x0))
+        if lefts:
+            common_left_disp = min(lefts)
+
+    for label in tick_labels:
         text = str(label.get_text() or "")
-        if LIKED_HEART not in text and not (
-            REVIEW_NOTE and REVIEW_NOTE in text
-        ):
+        if not text.strip():
             continue
-        segments = title_engagement_segments(text)
-        # Category form with counts needs tip-style split.
-        if any(ch.isdigit() for ch in text) and (
-            f"{LIKED_HEART} " in text
-            or (REVIEW_NOTE and f"{REVIEW_NOTE} " in text)
-        ):
-            # Rebuild via tip-aware splitter on the engagement tail.
-            segments = _hbar_label_engagement_segments(text)
-            # Tick labels use FG for the name (not ON_BAR).
-            segments = [
-                (frag, FG if color == ON_BAR else color) for frag, color in segments
-            ]
+        has_marks = LIKED_HEART in text or (
+            REVIEW_NOTE and REVIEW_NOTE in text
+        )
+        # X-axis: only rebuild marked labels (preserve unmarked native ticks).
+        if not is_y and not has_marks:
+            continue
+        # Y-axis unmarked rows still redraw so names share the left column.
+        if is_y and common_left_disp is None and not has_marks:
+            continue
+        segments = _ticklabel_engagement_segments(text)
+        if not segments:
+            continue
         x, y = label.get_position()
         transform = label.get_transform()
-        ha = label.get_ha()
         va = label.get_va()
         fontsize = label.get_fontsize()
         weight = label.get_fontweight()
+        if is_y and common_left_disp is not None:
+            # Shared left column in display pixels → label transform coords.
+            origin = transform.transform((float(x), float(y)))
+            x = float(
+                transform.inverted().transform((common_left_disp, origin[1]))[0]
+            )
+            ha = "left"
+        else:
+            ha = label.get_ha()
         # Survive later canvas.draw() / tight_layout (unlike set_text("")).
         label.set_visible(False)
         draw_colored_text_segments(

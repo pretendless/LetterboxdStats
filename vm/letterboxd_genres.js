@@ -1066,7 +1066,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Show top review?",
-        "When yes, ranking charts get a bottom-right panel from the highest-ranked row that has a review (title with ♥ when liked, text up to 280 characters, date). Count tops and higher-rating charts prefer the highest-rated review; lower-rating charts prefer the lowest; when all candidates are unrated, liked films first; then latest review date. Also unlocks lower-rating charts even when there are fewer qualifying rows than the top size. Default is yes.",
+        "When on, ranking charts show a small review panel: film title (♥ if liked), up to 280 characters, and the date. Picks the highest-ranked film that has a review — highest rating on count/higher charts, lowest on lower charts; if none are rated, prefer liked, then the newest date. Also unlocks lower-rating charts when there aren’t enough films for a full top. Default is off.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:toprev", "no"),
     };

@@ -320,6 +320,9 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(showTopReview.state.showReviews, true);
   assert.equal(showTopReview.state.step, "show_top_review");
   assert.match(showTopReview.messages[0].text, /<b>Show top review\?<\/b>/);
+  assert.match(showTopReview.messages[0].text, /small review panel/);
+  assert.match(showTopReview.messages[0].text, /Default is off/);
+  assert.doesNotMatch(showTopReview.messages[0].text, /Default is yes/);
   assert.equal(exclusions.state.showTopReview, false);
   // Reviews off → skip Top review and force top_review=false.
   const skipTopReview = advanceLetterboxdWizard(
