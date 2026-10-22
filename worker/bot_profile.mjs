@@ -12,7 +12,7 @@ export const DESCRIPTION =
   "\n" +
   "/start, then the ZIP. Default, Customize, or paste settings. Customize: tops 1–100, " +
   "threshold, rewatches in averages, likes (♥), reviews (≡), Top review (off by default; " +
-  "bottom-right shortest-review panel; unlocks lower-rating charts), Exclude on count tops, " +
+  "panel from highest reviewed rank; unlocks lower-rating charts), Exclude on count tops, " +
   "Search keywords, watch period. /stop leaves the questions. A started chart run stops too.\n" +
   "\n" +
   "Author:\n" +

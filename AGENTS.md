@@ -103,11 +103,11 @@ Wizard / Actions / `ChartOptions.include_rewatch_in_averages` (env `LETTERBOXD_I
 
 ## Likes / reviews display toggles
 
-Wizard / Actions / `ChartOptions.show_likes` / `show_reviews` (env `LETTERBOXD_SHOW_LIKES` / `LETTERBOXD_SHOW_REVIEWS`). Both default **true**. When false, that mark is omitted everywhere (tips, titles, Most liked / Most reviewed, search lines, inside-bar labels) by clearing liked / reviewed keys before chart and search builders. Settings summary: `Likes: yes/no.` and `Reviews: yes/no.`; paste accepts them (missing → yes).
+Wizard / Actions / `ChartOptions.show_likes` / `show_reviews` (env `LETTERBOXD_SHOW_LIKES` / `LETTERBOXD_SHOW_REVIEWS`). Both default **true**. When false, that mark is omitted everywhere (tips, titles, Most liked / Most reviewed, search lines, inside-bar labels) by clearing liked / reviewed keys before chart and search builders. Reviews off also skips the Top review wizard step and forces `show_top_review=false`. Settings summary: `Likes: yes/no.`; when Top review is off, `Reviews: yes/no.` (no Top review line). Paste accepts them (missing → yes).
 
 ## Top review panel
 
-Wizard / Actions / `ChartOptions.show_top_review` (env `LETTERBOXD_SHOW_TOP_REVIEW`). Default **false**. When true, listed ranking charts get a bottom-right in-plot panel: film title (year), review text truncated to `TOP_REVIEW_MAX_CHARS` (280) with ellipsis, and review Date. Topmost visual row of that chart; among reviews for films in that category, shortest text wins. Exclude hiding the true count-top suppresses the panel. Also forces lower-rating charts to emit (lifts full-slate gate). Settings summary: `Top review: yes/no.`; paste missing → no.
+Wizard / Actions / `ChartOptions.show_top_review` (env `LETTERBOXD_SHOW_TOP_REVIEW`). Default **false**. Only offered when Reviews is on. When true, listed ranking charts get a bottom-right in-plot panel: film title (year), review text truncated to `TOP_REVIEW_MAX_CHARS` (280) with ellipsis, and review Date. Walk drawn ranks (1, 2, …) to the first row with a qualifying review; omit only if none in the top have one. Among that row’s reviews: watches/count / Most often → shortest text; higher-rating charts → highest `reviews.csv` Rating (else merged film rating), then shortest; lower-rating → lowest, then shortest. Exclude hiding the true count-top suppresses the panel. Also forces lower-rating charts to emit (lifts full-slate gate). Settings summary: Top review on → only `Top review: yes.` (implies reviews); off → only `Reviews: yes/no.`; never both. Paste: `Top review: yes` ⇒ both on; `Reviews: no` ⇒ both off; legacy dual lines still parse.
 
 ## Non-date quantitative count charts
 

@@ -85,9 +85,9 @@ The rating-count **threshold** still needs that many **unique rated films** (Nam
 
 **Most often in the diary** always uses all rated diary rows for its tip mean — this setting does not change that. **Search-keyword** film lists always list every view’s rating slot; the toggle does not change those lists. Watch-time average charts that already mean over each rated diary row in its watch bucket stay as they are.
 
-Next, two yes/no questions: **Show likes (♥)?** and **Show reviews (≡)?** Both default to **yes** (same as Default mode and when unset). **No** on likes omits ♥ everywhere — tips, titles, Most liked panels, search hearts, and inside-bar ♥. **No** on reviews omits ≡ everywhere — tips, Most reviewed, search ≡, and inside-bar ≡. The settings summary records `Likes: yes/no.` and `Reviews: yes/no.`; Paste settings accepts those fields (older summaries without them keep both on).
+Next, two yes/no questions: **Show likes (♥)?** and **Show reviews (≡)?** Both default to **yes** (same as Default mode and when unset). **No** on likes omits ♥ everywhere — tips, titles, Most liked panels, search hearts, and inside-bar ♥. **No** on reviews omits ≡ everywhere — tips, Most reviewed, search ≡, and inside-bar ≡ — and skips **Show top review?** (forces Top review off). The settings summary records `Likes: yes/no.` and, when Top review is off, `Reviews: yes/no.`; Paste settings accepts those fields (older summaries without them keep both on).
 
-Then **Show top review?** (default **no**). **Yes** draws a bottom-right in-plot panel on listed ranking charts (Most often in the diary; release years / genres / countries / directors / actors / languages / studios — watches and higher/lower rating). The panel shows the film title (year), review text (shortest qualifying review for the topmost visual row, truncated to 280 characters), and the review date. If Exclude removes the true top on a count chart, the panel is omitted. **Yes** also lifts the full-slate gate so lower-rating charts still emit. Settings summary: `Top review: yes/no.`; Paste settings accepts it (missing → no).
+When reviews are on, **Show top review?** (default **no**). **Yes** draws a bottom-right in-plot panel on listed ranking charts (Most often in the diary; release years / genres / countries / directors / actors / languages / studios — watches and higher/lower rating). The panel walks the drawn top for the highest-ranked row that has a review, then picks among that row’s reviews: shortest text on watches/count tops (and Most often); highest review/film rating on higher-rating charts; lowest on lower-rating charts (then shortest). Text is truncated to 280 characters; the panel shows film title (year) and review date. If Exclude removes the true top on a count chart, the panel is omitted. **Yes** also lifts the full-slate gate so lower-rating charts still emit. Settings summary: when Top review is on, only `Top review: yes.` (implies reviews on); when off, only `Reviews: yes/no.` — never both lines. Paste: `Top review: yes` turns both on; `Reviews: no` turns both off; legacy dual lines still parse.
 
 Next, the wizard asks whether to remove some rows from the **watch-count** tops.
 
@@ -132,7 +132,7 @@ Description (what Telegram shows on an unused/empty chat, and “What can this b
 
 > Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export ZIP.
 >
-> /start, then the ZIP. Default, Customize, or paste settings. Customize: tops 1–100, threshold, rewatches in averages, likes (♥), reviews (≡), Top review (off by default; bottom-right shortest-review panel; unlocks lower-rating charts), Exclude on count tops, Search keywords, watch period. /stop leaves the questions. A started chart run stops too.
+> /start, then the ZIP. Default, Customize, or paste settings. Customize: tops 1–100, threshold, rewatches in averages, likes (♥), reviews (≡), Top review (off by default; panel from highest reviewed rank; unlocks lower-rating charts), Exclude on count tops, Search keywords, watch period. /stop leaves the questions. A started chart run stops too.
 >
 > Author:
 > https://www.last.fm/user/pretendless
