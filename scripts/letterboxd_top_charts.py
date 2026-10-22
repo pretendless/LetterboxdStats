@@ -1083,15 +1083,20 @@ def draw_top_review_panel(
 ) -> bool:
     """Bottom-right in-plot panel: film title, truncated review text, date.
 
-    ``review`` is ``{"title", "text", "date"}`` from the Top review picker.
-    Body text is already capped (``TOP_REVIEW_MAX_CHARS``); layout may wrap and
-    ellipsize further if the panel height is tight. Returns True when drawn.
+    ``review`` is ``{"title", "text", "date", "liked"?}`` from the Top review
+    picker. When ``liked`` is True, append ♥ after the title (same mark as
+    charts). Body text is already capped (``TOP_REVIEW_MAX_CHARS``); layout may
+    wrap and ellipsize further if the panel height is tight. Returns True when
+    drawn.
     """
     from matplotlib.patches import FancyBboxPatch
 
     if not review or not isinstance(review, dict):
         return False
-    title = str(review.get("title") or "").strip()
+    title = film_title_with_liked_heart(
+        str(review.get("title") or "").strip(),
+        liked=bool(review.get("liked")),
+    )
     body = str(review.get("text") or "").strip()
     date_s = str(review.get("date") or "").strip()
     if not title or not body:
@@ -2044,6 +2049,7 @@ def chart_rating_hbar(
     show_top_review: bool = False,
     top_review: dict | None = None,
     film_ratings: pd.DataFrame | dict | None = None,
+    liked_keys: set[str] | frozenset | None = None,
 ) -> bool:
     """Horizontal bars for TMDB avg tops.
 
@@ -2064,7 +2070,8 @@ def chart_rating_hbar(
     When ``show_top_review``, walk drawn ranks (highest first) and draw a
     review from the first row that has one (or ``top_review`` when precomputed).
     Higher-rating charts prefer the highest review/film Rating; lower-rating
-    charts prefer the lowest; then shortest text. Omit the panel only when no
+    charts prefer the lowest; then shortest text. Liked panel films get ♥ after
+    the title when their key is in ``liked_keys``. Omit the panel only when no
     drawn row has a review.
     """
     import matplotlib.patheffects as path_effects
@@ -2096,6 +2103,7 @@ def chart_rating_hbar(
             (row[7] for row in usable),
             prefer=prefer,
             film_ratings=film_ratings,
+            liked_keys=liked_keys,
         )
 
     # barh draws first row at bottom — reverse so rank 1 sits at top.
@@ -2508,9 +2516,13 @@ def chart_diary_entity_stacked(
     most_reviewed = rank_most_reviewed(reviewed_by_display, top_n)
     panel_review = None
     if show_top_review and not exclude_hid_top:
+        # Count tops: highest review/film Rating (then shortest), same as
+        # higher-rating charts — not shortest-text alone.
         panel_review = pick_top_review_walking_ranks(
             reviewed_films,
             (entity_keys.get(n) or () for n in rank_order_names),
+            prefer=TOP_REVIEW_PREFER_HIGHEST_RATING,
+            liked_keys=liked,
         )
     return chart_stacked_count_hbar(
         labels,
@@ -2584,6 +2596,7 @@ def chart_release_years_by_rating(
     reviewed_films: pd.DataFrame | None = None,
     show_top_review: bool = False,
     film_ratings: pd.DataFrame | dict | None = None,
+    liked_keys: set[str] | frozenset | None = None,
 ) -> bool:
     """«Годы выхода — выше/ниже оценка» as TMDB-style horizontal avg bars.
 
@@ -2635,6 +2648,7 @@ def chart_release_years_by_rating(
         reviewed_films=reviewed_films,
         show_top_review=show_top_review,
         film_ratings=film_ratings,
+        liked_keys=liked_keys,
     )
 
 

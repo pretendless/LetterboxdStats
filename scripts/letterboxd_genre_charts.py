@@ -1238,6 +1238,8 @@ def chart_deep_rating_tops(
     allow_short_worst: bool = False,
     reviewed_films=None,
     show_top_review: bool = False,
+    film_ratings=None,
+    liked_keys=None,
 ) -> dict:
     """Blue→green→red horizontal avg charts for TMDB «выше» + «ниже оценка» tops."""
     footer = "Source: Letterboxd diary/watched + TMDB metadata"
@@ -1329,6 +1331,8 @@ def chart_deep_rating_tops(
             allow_short_worst=allow_short_worst and ascending,
             reviewed_films=reviewed_films,
             show_top_review=show_top_review,
+            film_ratings=film_ratings,
+            liked_keys=liked_keys,
         )
     return made
 
@@ -1696,6 +1700,8 @@ def main():
         ascending=False,
         reviewed_films=top_review_films,
         show_top_review=opts.show_top_review,
+        film_ratings=film_ratings,
+        liked_keys=liked_keys,
     )
     made_genre_worst = chart_rating_hbar(
         genres_by_rating_worst,
@@ -1707,6 +1713,8 @@ def main():
         allow_short_worst=force_worst,
         reviewed_films=top_review_films,
         show_top_review=opts.show_top_review,
+        film_ratings=film_ratings,
+        liked_keys=liked_keys,
     )
 
     deep = aggregate_person_stats(
@@ -1772,6 +1780,8 @@ def main():
         allow_short_worst=force_worst,
         reviewed_films=top_review_films,
         show_top_review=opts.show_top_review,
+        film_ratings=film_ratings,
+        liked_keys=liked_keys,
     )
 
     genre_summary = {
