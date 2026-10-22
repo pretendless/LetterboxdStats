@@ -341,19 +341,21 @@ def test_inset_panel_uses_undated_charcoal_gradient():
     )
     assert len(ax.images) == before_images + 1
     im = ax.images[-1]
-    # Visible top→bottom gradient (not buried under an opaque face).
-    assert im.cmap is cmap
-    assert im.get_clip_on() is True
-    assert im.get_clip_path() is not None
+    # Baked RGBA gradient above underlay, below stroke (visible, rounded alpha).
     assert im.get_zorder() > underlay.get_zorder()
     assert im.get_zorder() < border.get_zorder()
     arr = im.get_array()
-    assert float(arr[0, 0]) < float(arr[-1, 0])  # origin upper: top t=0, bottom t=1
-    top_hex = mcolors.to_hex(cmap(float(arr[0, 0]))).lower()
-    bot_hex = mcolors.to_hex(cmap(float(arr[-1, 0]))).lower()
-    assert top_hex == UNDATED_LOGO_TOP_HEX.lower()
-    assert bot_hex == UNDATED_LOGO_BOTTOM_HEX.lower()
-    assert top_hex != bot_hex
+    assert arr.ndim == 3 and arr.shape[-1] == 4
+    # Origin upper: row 0 is logo top charcoal; last row is bottom.
+    top_rgb = arr[0, arr.shape[1] // 2, :3]
+    bot_rgb = arr[-1, arr.shape[1] // 2, :3]
+    assert mcolors.to_hex(top_rgb).lower() == UNDATED_LOGO_TOP_HEX.lower()
+    assert mcolors.to_hex(bot_rgb).lower() == UNDATED_LOGO_BOTTOM_HEX.lower()
+    assert mcolors.to_hex(top_rgb).lower() != mcolors.to_hex(bot_rgb).lower()
+    # Transparent corners of the raster (baked contour — not a square fill).
+    assert float(arr[0, 0, 3]) < 0.25
+    assert float(arr[0, 0, 3]) < float(arr[arr.shape[0] // 2, arr.shape[1] // 2, 3])
+    assert float(arr[arr.shape[0] // 2, arr.shape[1] // 2, 3]) > 0.9
     # Gradient uses imshow, not Rectangle strips (bar-height tests count Rectangles).
     assert sum(1 for p in ax.patches if p.__class__.__name__ == "Rectangle") == 2
     plt.close(fig)

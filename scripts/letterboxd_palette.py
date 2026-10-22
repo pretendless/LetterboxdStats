@@ -27,9 +27,9 @@ In-plot inset panels (Top review, Most reviewed years, genre swatch legends)
 fill with the same logo-background charcoal gradient as **No date** bars
 (``undated_charcoal_colormap``: ``#2C3440`` → ``#14181C``, logo-native
 top→bottom). ``paint_inset_panel_logo_background`` stacks a rounded opaque
-underlay, a clipped ``imshow`` gradient (``clip_on=True`` so the path is
-honored), and a stroke-only matching border — gradient stays visible and
-inside the rounded contour. Seating keeps a clear margin from the axes edge
+underlay, a cached RGBA ``imshow`` with **baked rounded alpha** (FancyBbox
+``clip_path`` does not clip AxesImage here), and a stroke-only matching
+border. Seating keeps a clear margin from the axes edge
 (``INSET_PANEL_EDGE_PAD_PX``).
 """
 
@@ -388,22 +388,71 @@ INSET_PANEL_TITLE_FONTSIZE = 10.0
 INSET_PANEL_DATE_FONTSIZE = 7.5
 INSET_PANEL_TOP_REVIEW_WIDTH_FRAC = 0.34
 INSET_PANEL_SWATCH_PX = 12.0
-# Tiny cached column for panel imshow (bilinear stretches to the box).
-# 32 rows is enough for a smooth #2C3440 → #14181C read; avoids a 256-row
-# raster rebuild on every Top review / Most reviewed / genre legend panel.
-_INSET_PANEL_GRAD_T = None
+# Cached RGBA fill: small raster with rounded alpha (FancyBbox clip_path is
+# unreliable for AxesImage in our matplotlib). Keyed by aspect bucket.
+_INSET_PANEL_RGBA_CACHE: dict[tuple[int, int, int, int], object] = {}
 
 
-def _inset_panel_gradient_column():
-    """Cached (N, 1) float column, t=0 at top → t=1 at bottom (origin upper)."""
-    global _INSET_PANEL_GRAD_T
-    if _INSET_PANEL_GRAD_T is None:
-        import numpy as np
+def _inset_panel_rounding_size() -> float:
+    """Parse ``rounding_size`` from ``INSET_PANEL_BOXSTYLE`` (axes units)."""
+    for part in str(INSET_PANEL_BOXSTYLE).split(","):
+        part = part.strip()
+        if part.startswith("rounding_size="):
+            try:
+                return float(part.split("=", 1)[1])
+            except ValueError:
+                break
+    return 0.02
 
-        _INSET_PANEL_GRAD_T = np.linspace(0.0, 1.0, 32, dtype=np.float64).reshape(
-            -1, 1
-        )
-    return _INSET_PANEL_GRAD_T
+
+def _rounded_rect_alpha(h: int, w: int, radius_x: float, radius_y: float):
+    """Float alpha (h, w): 1 inside a rounded rect, 0 outside (soft 1px edge)."""
+    import numpy as np
+
+    yy, xx = np.ogrid[:h, :w]
+    rx = max(0.5, float(radius_x))
+    ry = max(0.5, float(radius_y))
+    # Map to a unit circle outside the inner axis-aligned inset.
+    cx = np.clip(xx, rx, w - 1 - rx)
+    cy = np.clip(yy, ry, h - 1 - ry)
+    # Elliptical distance in corner regions.
+    dist = np.sqrt(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2)
+    inside = (xx >= rx) & (xx < w - rx) & (yy >= ry) & (yy < h - ry)
+    alpha = np.clip(1.5 - dist, 0.0, 1.0)
+    return np.where(inside, 1.0, alpha).astype(np.float64)
+
+
+def _inset_panel_gradient_rgba(width: float, height: float):
+    """Cached (H, W, 4) logo charcoal gradient with rounded transparent corners.
+
+    ``imshow`` clip_path against FancyBbox does not clip in this stack; baking
+    the contour into alpha keeps square corners from painting past the stroke.
+    """
+    import numpy as np
+
+    w = max(1e-6, float(width))
+    h = max(1e-6, float(height))
+    # Modest raster; nearest sampling avoids bilinear bleed into transparent corners.
+    base = 48
+    if w >= h:
+        pix_w = base
+        pix_h = max(16, int(round(base * h / w)))
+    else:
+        pix_h = base
+        pix_w = max(16, int(round(base * w / h)))
+    rs = _inset_panel_rounding_size()
+    # Quantize radii so the cache stays small across similar panels.
+    rx = max(1, int(round(rs / w * (pix_w - 1))))
+    ry = max(1, int(round(rs / h * (pix_h - 1))))
+    key = (pix_h, pix_w, rx, ry)
+    cached = _INSET_PANEL_RGBA_CACHE.get(key)
+    if cached is not None:
+        return cached
+    t = np.linspace(0.0, 1.0, pix_h, dtype=np.float64).reshape(-1, 1)
+    rgba = undated_charcoal_colormap()(np.repeat(t, pix_w, axis=1)).astype(np.float64)
+    rgba[..., 3] = _rounded_rect_alpha(pix_h, pix_w, rx, ry)
+    _INSET_PANEL_RGBA_CACHE[key] = rgba
+    return rgba
 
 
 def paint_inset_panel_logo_background(
@@ -426,14 +475,12 @@ def paint_inset_panel_logo_background(
     and genre swatch legend panels. Coordinates are in ``transform`` space
     (typically ``ax.transAxes``).
 
-    Layering (same FancyBbox contour for all three):
+    Layering (same rounded contour):
 
-    1. Opaque charcoal **underlay** (rounded) so antialias fringes never show
-       the black axes.
-    2. ``imshow`` gradient **above** the underlay, ``clip_on=True`` and clipped
-       to the underlay path (``clip_on=False`` would ignore ``clip_path`` and
-       paint square corners past the stroke).
-    3. Stroke-only **border** on top.
+    1. Opaque charcoal **underlay** FancyBbox (AA fringe → charcoal, not black).
+    2. Cached RGBA ``imshow`` with **baked rounded alpha** (matplotlib's
+       FancyBbox ``clip_path`` does not clip AxesImage reliably here).
+    3. Stroke-only **border** FancyBbox on top.
 
     Returns the border ``FancyBboxPatch``.
     """
@@ -471,30 +518,18 @@ def paint_inset_panel_logo_background(
     aspect = ax.get_aspect()
     adjustable = ax.get_adjustable()
 
-    cmap = undated_charcoal_colormap()
-    # Cached tiny column; bilinear + clip keeps a visible charcoal gradient.
-    grad = _inset_panel_gradient_column()
-    # Slight oversize so the clip edge is fully painted (no raster inset).
-    over = max(w, h) * 0.02
-    # clip_on must be True: matplotlib ignores clip_path when clip_on is False.
+    rgba = _inset_panel_gradient_rgba(w, h)
+    # Exact panel extent (no oversize — that was painting past the stroke).
     im = ax.imshow(
-        grad,
-        extent=(
-            float(x0) - over,
-            float(x0) + w + over,
-            float(y0) - over,
-            float(y0) + h + over,
-        ),
+        rgba,
+        extent=(float(x0), float(x0) + w, float(y0), float(y0) + h),
         origin="upper",
         aspect="auto",
-        cmap=cmap,
-        interpolation="bilinear",
+        interpolation="nearest",
         zorder=zorder + 0.5,
-        clip_on=True,
+        clip_on=False,
     )
     im.set_transform(transform)
-    im.set_clip_path(underlay)
-    im.set_clip_on(True)
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
     ax.set_aspect(aspect, adjustable=adjustable)

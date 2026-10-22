@@ -197,21 +197,18 @@ def test_recolor_ticklabels_hides_original_to_avoid_duplicate_titles():
     recolor_ticklabel_engagement_marks(ax, axis="y")
     fig.tight_layout()
     fig.canvas.draw()
-    # Marked tick Texts stay hidden after layout/draw (not restored as a 2nd copy).
-    # get_yticklabels() omits invisible labels — read majorTicks.label1 instead.
-    label1s = [tick.label1 for tick in ax.yaxis.majorTicks]
-    assert len(label1s) == 3
-    assert label1s[0].get_visible() is False
-    assert label1s[1].get_visible() is False
-    assert label1s[2].get_visible() is True  # unmarked keeps the native tick label
+    # Tick strings stay blank after layout/draw (no second native copy).
+    assert all(not str(t.get_text() or "") for t in ax.get_yticklabels())
     custom = [t.get_text() for t in ax.texts]
     assert "Grosse Pointe Blank (1997)" in custom
     assert REVIEW_NOTE in custom
     assert "Before Sunrise (1995)" in custom
     assert LIKED_HEART in custom
-    # Title head appears once among custom fragments (not also as a visible tick).
+    assert "No Mark Film (2001)" in custom
+    # Title head appears once among custom fragments.
     assert custom.count("Grosse Pointe Blank (1997)") == 1
     assert custom.count("Before Sunrise (1995)") == 1
+    assert custom.count("No Mark Film (2001)") == 1
     plt.close(fig)
 
 

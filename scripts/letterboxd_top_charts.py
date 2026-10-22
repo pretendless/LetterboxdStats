@@ -341,40 +341,57 @@ def review_mark_fontproperties():
 def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
     """Recolor ♥/≡ inside tick labels to logo orange/blue (axis titles outside bars).
 
-    Hides the original tick Text (``set_visible(False)``) before drawing the
-    colored segments. ``set_text("")`` is not enough: measuring draws inside
-    ``draw_colored_text_segments`` restore FixedFormatter strings and the
-    title appears twice (gutter + near the bar zero-line).
+    Replaces tick strings with a persistent empty FixedFormatter and redraws
+    each label as colored (or plain) text artists. Hiding or ``set_text("")``
+    alone is not enough: later ``tight_layout`` / ``canvas.draw`` restore the
+    formatter strings so titles appear twice (gutter + bar zero-line).
     """
     axis_obj = ax.yaxis if str(axis).lower().startswith("y") else ax.xaxis
     fig = ax.figure
     fig.canvas.draw()
-    for label in axis_obj.get_ticklabels():
+    # Snapshot before blanking — include currently invisible labels via majorTicks.
+    tick_labels = [tick.label1 for tick in axis_obj.majorTicks]
+    snapshots = []
+    for label in tick_labels:
         text = str(label.get_text() or "")
-        if LIKED_HEART not in text and not (
-            REVIEW_NOTE and REVIEW_NOTE in text
-        ):
+        if not text:
             continue
-        segments = title_engagement_segments(text)
-        # Category form with counts needs tip-style split.
-        if any(ch.isdigit() for ch in text) and (
-            f"{LIKED_HEART} " in text
-            or (REVIEW_NOTE and f"{REVIEW_NOTE} " in text)
-        ):
-            # Rebuild via tip-aware splitter on the engagement tail.
-            segments = _outside_hbar_label_segments(text)
-            # Tick labels use FG for the name (not ON_BAR).
-            segments = [
-                (frag, FG if color == ON_BAR else color) for frag, color in segments
-            ]
-        x, y = label.get_position()
-        transform = label.get_transform()
-        ha = label.get_ha()
-        va = label.get_va()
-        fontsize = label.get_fontsize()
-        weight = label.get_fontweight()
-        # Survive later canvas.draw() / tight_layout (unlike set_text("")).
-        label.set_visible(False)
+        snapshots.append(
+            (
+                text,
+                label.get_position(),
+                label.get_transform(),
+                label.get_ha(),
+                label.get_va(),
+                label.get_fontsize(),
+                label.get_fontweight(),
+            )
+        )
+    if not snapshots:
+        return
+    # Permanent blank tick strings (survives later draws).
+    empty = [""] * len(axis_obj.get_majorticklocs())
+    if str(axis).lower().startswith("y"):
+        ax.set_yticklabels(empty)
+    else:
+        ax.set_xticklabels(empty)
+    for text, (x, y), transform, ha, va, fontsize, weight in snapshots:
+        has_marks = LIKED_HEART in text or (
+            REVIEW_NOTE and REVIEW_NOTE in text
+        )
+        if has_marks:
+            segments = title_engagement_segments(text)
+            if any(ch.isdigit() for ch in text) and (
+                f"{LIKED_HEART} " in text
+                or (REVIEW_NOTE and f"{REVIEW_NOTE} " in text)
+            ):
+                segments = _outside_hbar_label_segments(text)
+                segments = [
+                    (frag, FG if color == ON_BAR else color)
+                    for frag, color in segments
+                ]
+        else:
+            segments = [(text, FG)]
         draw_colored_text_segments(
             ax,
             float(x),
@@ -2107,7 +2124,6 @@ def chart_stacked_count_hbar(
         left_stack += vals
     ax.set_yticks(y)
     ax.set_yticklabels(labels)
-    recolor_ticklabel_engagement_marks(ax, axis="y")
     ax.set_xlabel(xlabel)
     ax.set_title(title)
     ax.xaxis.grid(True, color=GRID, linewidth=0.8)
@@ -2142,6 +2158,8 @@ def chart_stacked_count_hbar(
         fig.tight_layout(rect=[0.0, 0.025, right_frac, 1.0])
     else:
         fig.tight_layout(rect=[0.0, 0.0, right_frac, 1.0])
+    # After layout so blank FixedFormatter labels are not restored as duplicates.
+    recolor_ticklabel_engagement_marks(ax, axis="y")
     draw_watch_year_most_liked_panel(
         fig,
         ax,
