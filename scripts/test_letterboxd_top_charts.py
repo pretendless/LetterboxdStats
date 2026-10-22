@@ -1574,7 +1574,9 @@ def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
 
     def grab(fig, dest, **kwargs):
         ax = fig.axes[0]
+        fig.canvas.draw()
         renderer = fig.canvas.get_renderer()
+        captured["renderer"] = renderer
         captured["texts"] = list(ax.texts)
         captured["extent"] = {
             t.get_text(): t.get_window_extent(renderer=renderer) for t in ax.texts
@@ -1598,6 +1600,7 @@ def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
     import matplotlib.colors as mcolors
     from letterboxd_palette import MARK_LIKE_HEX, MARK_REVIEW_HEX, ON_BAR
 
+    renderer = captured["renderer"]
     # Outside labels are split so ♥/≡ can take logo colors.
     a24_head = next(t for t in captured["texts"] if t.get_text().startswith("2. A24"))
     assert a24_head.get_clip_on() is False
@@ -1660,6 +1663,130 @@ def test_avg_hbar_engagement_reserves_space_and_short_name_overflows(
     assert inside_reviews
     long_bar = max(captured["bars"], key=lambda box: box.width)
     assert captured["extent"]["4.60"].x0 > long_bar.x1
+    # Inside ♥/≡ **counts** must not spill past the bar tip (stroke-pad budget).
+    inside_count_artists = [
+        t
+        for t in captured["texts"]
+        if t.get_clip_on() is True and t.get_text().strip().isdigit()
+    ]
+    assert inside_count_artists
+    for artist in inside_count_artists:
+        box = artist.get_window_extent(renderer=renderer)
+        assert box.x1 <= long_bar.x1 + 1.0, (
+            f"engagement count {artist.get_text()!r} spills past bar "
+            f"(x1={box.x1:.1f} > bar={long_bar.x1:.1f})"
+        )
+
+
+def test_avg_hbar_mid_bar_ellipsis_keeps_counts_inside(
+    tmp_path: Path | None = None,
+):
+    """Short-ish bars: earlier ellipsis so ≡ N stays inside (Studios lower-rating case)."""
+    import letterboxd_top_charts as charts
+
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-mid-bar-counts")
+    out.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {
+            "name": "21 Laps Entertainment",
+            "avg": 1.50,
+            "rated": 4,
+            "liked_count": 0,
+            "reviewed_count": 1,
+        },
+        {
+            "name": "Revolution Studios",
+            "avg": 2.00,
+            "rated": 5,
+            "liked_count": 0,
+            "reviewed_count": 1,
+        },
+        {
+            "name": "FilmNation Entertainment",
+            "avg": 2.25,
+            "rated": 6,
+            "liked_count": 0,
+            "reviewed_count": 2,
+        },
+        {
+            "name": "Bazelevs",
+            "avg": 1.50,
+            "rated": 5,
+            "liked_count": 0,
+            "reviewed_count": 0,
+        },
+    ]
+    captured: dict = {}
+    real_save = charts.save_dark_figure
+
+    def grab(fig, dest, **kwargs):
+        ax = fig.axes[0]
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        captured["ax"] = ax
+        captured["renderer"] = renderer
+        captured["texts"] = list(ax.texts)
+        captured["bars"] = list(ax.patches)
+        real_save(fig, dest, **kwargs)
+
+    charts.save_dark_figure = grab
+    try:
+        assert chart_rating_hbar(
+            rows,
+            out / "studios-lower-counts-inside.png",
+            title="Studios — lower rating",
+            limit=4,
+            ascending=True,
+            allow_short_worst=True,
+        )
+    finally:
+        charts.save_dark_figure = real_save
+
+    ax = captured["ax"]
+    renderer = captured["renderer"]
+    # Pair each inside-clipped review mark with its following count digit(s).
+    inside_marks = [
+        t
+        for t in captured["texts"]
+        if t.get_text() == REVIEW_NOTE and t.get_clip_on() is True
+    ]
+    assert inside_marks, "expected at least one in-bar ≡"
+    for mark in inside_marks:
+        mark_box = mark.get_window_extent(renderer=renderer)
+        # Nearest bar by vertical center.
+        my = (mark_box.y0 + mark_box.y1) / 2.0
+        bar = min(
+            captured["bars"],
+            key=lambda b: abs(
+                (b.get_window_extent(renderer=renderer).y0
+                 + b.get_window_extent(renderer=renderer).y1)
+                / 2.0
+                - my
+            ),
+        )
+        bar_box = bar.get_window_extent(renderer=renderer)
+        counts = [
+            t
+            for t in captured["texts"]
+            if t.get_clip_on() is True
+            and t.get_text().strip().isdigit()
+            and t.get_window_extent(renderer=renderer).x0 >= mark_box.x0 - 1.0
+            and abs(
+                (t.get_window_extent(renderer=renderer).y0
+                 + t.get_window_extent(renderer=renderer).y1)
+                / 2.0
+                - my
+            )
+            < 8.0
+        ]
+        assert counts, "≡ inside bar must keep its count digit artist"
+        for count in counts:
+            cbox = count.get_window_extent(renderer=renderer)
+            assert cbox.x1 <= bar_box.x1 + 1.0, (
+                f"count {count.get_text()!r} past bar tip "
+                f"({cbox.x1:.1f} > {bar_box.x1:.1f})"
+            )
+
 
 def test_views_count_bars_show_avg_or_dash(tmp_path: Path | None = None):
     """Year and day count bars: white count, bold colored mean, dash if unrated."""
@@ -2304,6 +2431,7 @@ if __name__ == "__main__":
     test_short_bars_overflow_fifteen_chars_long_bars_keep_name_inside()
     test_ellipsis_reaches_the_bar_tip_when_more_than_fifteen_fit()
     test_avg_hbar_engagement_reserves_space_and_short_name_overflows()
+    test_avg_hbar_mid_bar_ellipsis_keeps_counts_inside()
     test_rating_hbar_worst_skips_short_slate()
     test_watches_by_genre_stacked_count()
     test_non_date_count_charts_include_watched_only()
