@@ -1927,7 +1927,6 @@ def chart_top_rewatches(
         left += vals
     ax.set_yticks(y)
     ax.set_yticklabels(labels)
-    recolor_ticklabel_engagement_marks(ax, axis="y")
     ax.set_xlabel("Diary entries")
     ax.set_title("Most often in the diary — color is watch year")
     ax.xaxis.grid(True, color=GRID, linewidth=0.8)
@@ -1951,6 +1950,9 @@ def chart_top_rewatches(
         )
     right_frac = 0.74 if has_reviewed_list else 0.78
     fig.tight_layout(rect=[0, 0, right_frac, 1])
+    # Recolor after layout so ♥/≡ segments keep the reserved left gutter
+    # (pre-layout positions go stale and collide with bars).
+    recolor_ticklabel_engagement_marks(ax, axis="y")
     draw_watch_year_most_liked_panel(
         fig,
         ax,

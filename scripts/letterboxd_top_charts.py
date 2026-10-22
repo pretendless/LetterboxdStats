@@ -341,10 +341,12 @@ def review_mark_fontproperties():
 def recolor_ticklabel_engagement_marks(ax, *, axis: str = "y") -> None:
     """Recolor ♥/≡ inside tick labels to logo orange/blue (axis titles outside bars).
 
-    Hides the original tick Text (``set_visible(False)``) before drawing the
-    colored segments. ``set_text("")`` is not enough: measuring draws inside
-    ``draw_colored_text_segments`` restore FixedFormatter strings and the
-    title appears twice (gutter + near the bar zero-line).
+    Call **after** ``tight_layout`` / final axes sizing. Measuring multi-segment
+    widths before layout leaves stale positions that collide with bars once the
+    axes shrink. Hides the original tick Text (``set_visible(False)``) before
+    drawing the colored segments. ``set_text("")`` is not enough: measuring
+    draws inside ``draw_colored_text_segments`` restore FixedFormatter strings
+    and the title appears twice (gutter + near the bar zero-line).
     """
     axis_obj = ax.yaxis if str(axis).lower().startswith("y") else ax.xaxis
     fig = ax.figure
@@ -1151,6 +1153,27 @@ def _tallest_bar_top_disp(ax, renderer) -> float | None:
     return top
 
 
+def _hbar_band_y_disp(ax, renderer) -> tuple[float | None, float | None]:
+    """Display-space ``(lowest_bar_y0, highest_bar_y1)`` among bar Rectangles.
+
+    Ignores inset FancyBbox / non-bar patches so Top review seating can align
+    to the first/last horizontal bar edges.
+    """
+    y0 = y1 = None
+    for patch in ax.patches:
+        if patch.__class__.__name__ != "Rectangle":
+            continue
+        try:
+            box = patch.get_window_extent(renderer=renderer)
+            lo = float(box.y0)
+            hi = float(box.y1)
+        except Exception:
+            continue
+        y0 = lo if y0 is None else min(y0, lo)
+        y1 = hi if y1 is None else max(y1, hi)
+    return y0, y1
+
+
 def seat_inset_panel_in_axes(
     fig,
     ax,
@@ -1289,23 +1312,57 @@ def seat_inset_panel_top_right(
     fontsize: float = 7,
     max_bumps: int = 4,
 ) -> tuple[float, float, float, float]:
-    """Top-right inset seat aligned with the tallest bar top; raise if needed.
+    """Top-right inset: panel **top** aligns with the top of the first bar.
 
-    Same raise-on-overlap path as ``seat_inset_panel_top_left``, but on the
-    right edge (lower-rating Top review panels).
+    Used by lower-rating Top review panels. Keeps the side edge margin; if the
+    preferred seat overlaps tips/bars, raise slightly (same bump path as
+    top-left legends) until clear.
     """
+    from matplotlib.transforms import Bbox
+
     x0 = y0 = x1 = y1 = 0.0
     for attempt in range(max(0, int(max_bumps)) + 1):
-        x0, y0, x1, y1, clear = seat_inset_panel_in_axes(
-            fig,
-            ax,
-            panel_w_px=panel_w_px,
-            panel_h_px=panel_h_px,
-            fontsize=fontsize,
-            prefer_left=False,
-            vertical="tallest_bar_top",
+        obstacles, renderer = _axes_plot_obstacles(fig, ax)
+        axes_box = ax.get_window_extent(renderer=renderer)
+        edge_pad = max(float(INSET_PANEL_EDGE_PAD_PX), float(fontsize) * 1.25)
+        x1_target = float(axes_box.x1) - edge_pad
+        x0_disp = x1_target - panel_w_px
+        x1_disp = x1_target
+        _bar_lo, bar_hi = _hbar_band_y_disp(ax, renderer)
+        y_high = float(axes_box.y1) - edge_pad - panel_h_px
+        y_low = float(axes_box.y0) + edge_pad
+        if bar_hi is not None:
+            # Panel top ≈ top of the first (topmost) bar.
+            start_y0 = float(bar_hi) - panel_h_px
+        else:
+            start_y0 = y_high
+        start_y0 = min(max(start_y0, y_low), y_high)
+
+        def _panel_box(y0_px: float) -> Bbox:
+            return Bbox.from_extents(
+                x0_disp, y0_px, x1_disp, y0_px + panel_h_px
+            )
+
+        step_px = max(2.0, fontsize * 0.35)
+        chosen_y0 = start_y0
+        found_clear = False
+        y_cursor = start_y0
+        while y_cursor <= y_high + 1e-6:
+            if all(
+                not _bbox_overlaps(_panel_box(y_cursor), obs) for obs in obstacles
+            ):
+                chosen_y0 = y_cursor
+                found_clear = True
+                break
+            y_cursor += step_px
+
+        x0, y0, x1, y1 = (
+            x0_disp,
+            chosen_y0,
+            x1_disp,
+            chosen_y0 + panel_h_px,
         )
-        if clear:
+        if found_clear:
             return x0, y0, x1, y1
         if attempt >= max_bumps:
             break
@@ -1333,11 +1390,11 @@ def seat_inset_panel_bottom_right(
     fontsize: float = 7,
     max_bumps: int = 6,
 ) -> tuple[float, float, float, float]:
-    """Bottom-right inset seat; shift right and widen the x-range on overlap.
+    """Bottom-right inset: panel **bottom** aligns with the last bar bottom.
 
-    Mirrors the raise-on-overlap idea horizontally: keep the panel on the
-    bottom edge, nudge it right (expanding ``xlim`` / figure width) until it
-    clears bars and tip labels.
+    Used by watches/count / Most often / higher-rating Top review panels.
+    Keeps the side edge margin; on overlap, nudge right (expanding ``xlim`` /
+    figure width) until clear of bars and tip labels.
     """
     from matplotlib.transforms import Bbox
 
@@ -1346,7 +1403,15 @@ def seat_inset_panel_bottom_right(
         obstacles, renderer = _axes_plot_obstacles(fig, ax)
         axes_box = ax.get_window_extent(renderer=renderer)
         edge_pad = max(float(INSET_PANEL_EDGE_PAD_PX), float(fontsize) * 1.25)
-        y0_disp = float(axes_box.y0) + edge_pad
+        bar_lo, _bar_hi = _hbar_band_y_disp(ax, renderer)
+        if bar_lo is not None:
+            y0_disp = float(bar_lo)
+        else:
+            y0_disp = float(axes_box.y0) + edge_pad
+        # Keep the panel inside the axes band.
+        y0_min = float(axes_box.y0) + edge_pad
+        y0_max = float(axes_box.y1) - edge_pad - panel_h_px
+        y0_disp = min(max(y0_disp, y0_min), y0_max)
         y1_disp = y0_disp + panel_h_px
         x1_target = float(axes_box.x1) - edge_pad
         x0_disp = x1_target - panel_w_px
@@ -1418,9 +1483,10 @@ def draw_top_review_panel(
     ``review`` is ``{"title", "text", "date", "liked"?, "rating"?}`` from the
     Top review picker. When ``liked`` is True, append ♥ after the title (same
     mark as charts). When ``rating`` is set, draw ``★…½`` on its **own line
-    below the title** (omit the star line entirely when unrated). ``corner``
-    is ``bottom_right`` (watches / higher / count) or ``top_right``
-    (lower-rating charts). Body text is already capped
+    below the title** (omit the star line entirely when unrated).     ``corner``
+    is ``bottom_right`` (watches / higher / count; panel bottom aligns with
+    the last bar bottom) or ``top_right`` (lower-rating; panel top aligns
+    with the first bar top). Body text is already capped
     (``TOP_REVIEW_MAX_CHARS``); layout may wrap and ellipsize further if the
     panel height is tight. Returns True when drawn. Panel fill is the logo
     charcoal gradient (same as No date bars), top→bottom.
@@ -2107,7 +2173,6 @@ def chart_stacked_count_hbar(
         left_stack += vals
     ax.set_yticks(y)
     ax.set_yticklabels(labels)
-    recolor_ticklabel_engagement_marks(ax, axis="y")
     ax.set_xlabel(xlabel)
     ax.set_title(title)
     ax.xaxis.grid(True, color=GRID, linewidth=0.8)
@@ -2142,6 +2207,9 @@ def chart_stacked_count_hbar(
         fig.tight_layout(rect=[0.0, 0.025, right_frac, 1.0])
     else:
         fig.tight_layout(rect=[0.0, 0.0, right_frac, 1.0])
+    # Recolor after layout so ♥/≡ segments keep the reserved left gutter
+    # (pre-layout positions go stale and collide with bars).
+    recolor_ticklabel_engagement_marks(ax, axis="y")
     draw_watch_year_most_liked_panel(
         fig,
         ax,
@@ -2269,13 +2337,13 @@ def _rating_colorbar(fig, ax, *, location: str = "right", size: str = "compact")
     sm = plt.cm.ScalarMappable(cmap=rating_colormap(), norm=rating_norm())
     sm.set_array([])
     if size == "large":
-        # Restore larger colorbar for TMDB deep avg charts (still left + title above).
+        # Left colorbar needs extra pad so in-bar rank/year labels stay clear.
         cbar = fig.colorbar(
             sm,
             ax=ax,
             location=location,
             fraction=0.04,
-            pad=0.05,
+            pad=0.12 if str(location).lower() == "left" else 0.05,
             aspect=18,
             shrink=0.88,
         )
@@ -2349,7 +2417,6 @@ def chart_rating_vbar(
     bars = ax.bar(x, avgs, color=colors, width=0.78, edgecolor="none")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=45, ha="right")
-    recolor_ticklabel_engagement_marks(ax, axis="x")
     ax.set_ylim(0, 5.55)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
@@ -2388,6 +2455,8 @@ def chart_rating_vbar(
         fig.tight_layout(rect=[0, 0.03, 1, 1])
     else:
         fig.tight_layout()
+    # Recolor after layout so ♥/≡ tick segments stay in the reserved gutter.
+    recolor_ticklabel_engagement_marks(ax, axis="x")
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
     return True

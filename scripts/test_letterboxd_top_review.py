@@ -577,6 +577,127 @@ def test_lower_rating_chart_draws_top_review_panel(tmp_path: Path) -> None:
     assert path.is_file() and path.stat().st_size > 0
 
 
+def test_top_review_panel_aligns_to_first_and_last_bar() -> None:
+    """Lower → panel top ≈ first bar top; otherwise panel bottom ≈ last bar bottom."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from letterboxd_top_charts import _hbar_band_y_disp, draw_top_review_panel
+
+    review = {
+        "title": "Align Film (2000)",
+        "text": "Short body for seating checks on both corners.",
+        "date": "2024-01-01",
+        "rating": 2.0,
+    }
+
+    def _panel_box(ax, renderer):
+        # FancyBbox from paint_inset_panel_logo_background.
+        boxes = [
+            p.get_window_extent(renderer=renderer)
+            for p in ax.patches
+            if p.__class__.__name__ == "FancyBboxPatch"
+        ]
+        assert boxes
+        return boxes[-1]
+
+    # Top-right (lower charts): panel top matches first-bar top.
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.barh([0, 1, 2, 3], [2.2, 2.5, 2.8, 3.1], height=0.72, color="#FC7A02")
+    ax.set_xlim(0, 6.15)
+    fig.tight_layout()
+    fig.canvas.draw()
+    assert draw_top_review_panel(fig, ax, review, corner="top_right")
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    bar_lo, bar_hi = _hbar_band_y_disp(ax, renderer)
+    panel = _panel_box(ax, renderer)
+    assert bar_hi is not None
+    assert abs(float(panel.y1) - float(bar_hi)) <= 6.0
+    plt.close(fig)
+
+    # Bottom-right: panel bottom matches last-bar bottom.
+    fig2, ax2 = plt.subplots(figsize=(9, 5))
+    ax2.barh([0, 1, 2, 3], [2.2, 2.5, 2.8, 3.1], height=0.72, color="#3FB7EB")
+    ax2.set_xlim(0, 6.15)
+    fig2.tight_layout()
+    fig2.canvas.draw()
+    assert draw_top_review_panel(fig2, ax2, review, corner="bottom_right")
+    fig2.canvas.draw()
+    renderer2 = fig2.canvas.get_renderer()
+    bar_lo2, _bar_hi2 = _hbar_band_y_disp(ax2, renderer2)
+    panel2 = _panel_box(ax2, renderer2)
+    assert bar_lo2 is not None
+    assert abs(float(panel2.y0) - float(bar_lo2)) <= 6.0
+    plt.close(fig2)
+
+
+def test_left_colorbar_clears_in_bar_labels(tmp_path: Path) -> None:
+    """Left rating colorbar leaves room for in-bar rank/year text."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import letterboxd_top_charts as charts
+
+    rows = [
+        {
+            "name": str(2000 + i),
+            "avg": 2.0 + (i % 5) * 0.15,
+            "rated": 26,
+            "liked_count": 1 if i == 0 else 0,
+            "reviewed_count": 2,
+            "film_keys": (f"F{i}|||{2000 + i}",),
+        }
+        for i in range(12)
+    ]
+    path = tmp_path / "years_lower.png"
+    captured: dict = {}
+    real_save = charts.save_dark_figure
+
+    def grab(fig, dest, **kwargs):
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        ax = fig.axes[0]
+        # Colorbar is a second axes; measure gap to the main axes left edge.
+        caxes = [a for a in fig.axes if a is not ax]
+        assert caxes
+        cbar_box = caxes[0].get_window_extent(renderer=renderer)
+        axes_box = ax.get_window_extent(renderer=renderer)
+        captured["gap"] = float(axes_box.x0) - float(cbar_box.x1)
+        # In-bar labels (rank/year) should sit to the right of the colorbar.
+        in_bar = [
+            t
+            for t in ax.texts
+            if str(t.get_text() or "").startswith("1. ")
+            or str(t.get_text() or "").startswith("2. ")
+        ]
+        assert in_bar
+        nearest = min(
+            float(t.get_window_extent(renderer=renderer).x0) for t in in_bar
+        )
+        captured["label_x0"] = nearest
+        captured["cbar_x1"] = float(cbar_box.x1)
+        real_save(fig, dest, **kwargs)
+
+    charts.save_dark_figure = grab
+    try:
+        assert (
+            chart_rating_hbar(
+                rows,
+                path,
+                title="Release years — lower rating",
+                ascending=True,
+                allow_short_worst=True,
+            )
+            is True
+        )
+    finally:
+        charts.save_dark_figure = real_save
+    assert captured["gap"] >= 8.0
+    assert captured["label_x0"] >= captured["cbar_x1"] + 4.0
+
+
 def test_force_worst_emits_lower_rating_when_short() -> None:
     stats = {
         f"E{i}": {"count": 10, "rating_sum": float(10 + i), "rated": 4 + (i % 2)}
@@ -622,6 +743,8 @@ def main() -> int:
     with TemporaryDirectory() as tmp:
         test_exclude_keyword_suppresses_top_review_panel(Path(tmp))
         test_lower_rating_chart_draws_top_review_panel(Path(tmp))
+        test_left_colorbar_clears_in_bar_labels(Path(tmp))
+    test_top_review_panel_aligns_to_first_and_last_bar()
     test_force_worst_emits_lower_rating_when_short()
     print("test_letterboxd_top_review: ok")
     return 0

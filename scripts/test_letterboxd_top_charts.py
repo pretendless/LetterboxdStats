@@ -194,8 +194,9 @@ def test_recolor_ticklabels_hides_original_to_avoid_duplicate_titles():
     ax.barh([0, 1, 2], [5, 4, 3])
     ax.set_yticks([0, 1, 2])
     ax.set_yticklabels(labels)
-    recolor_ticklabel_engagement_marks(ax, axis="y")
+    # Recolor must run after layout (same order as chart_top_rewatches).
     fig.tight_layout()
+    recolor_ticklabel_engagement_marks(ax, axis="y")
     fig.canvas.draw()
     # Marked tick Texts stay hidden after layout/draw (not restored as a 2nd copy).
     # get_yticklabels() omits invisible labels — read majorTicks.label1 instead.
@@ -212,6 +213,13 @@ def test_recolor_ticklabels_hides_original_to_avoid_duplicate_titles():
     # Title head appears once among custom fragments (not also as a visible tick).
     assert custom.count("Grosse Pointe Blank (1997)") == 1
     assert custom.count("Before Sunrise (1995)") == 1
+    # Colored segments stay left of the bar zero-line (no collision into bars).
+    renderer = fig.canvas.get_renderer()
+    axes_x0 = float(ax.get_window_extent(renderer=renderer).x0)
+    for t in ax.texts:
+        if not str(t.get_text() or "").strip():
+            continue
+        assert float(t.get_window_extent(renderer=renderer).x1) <= axes_x0 + 1.0
     plt.close(fig)
 
 
