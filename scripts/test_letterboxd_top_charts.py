@@ -1234,6 +1234,106 @@ def test_views_count_bars_show_avg_or_dash(tmp_path: Path | None = None):
     assert all("n=" not in t for t in day_text)
 
 
+def test_views_by_year_reviews_follow_review_date_not_watch(
+    tmp_path: Path | None = None,
+):
+    """Film watched in year A with review Date in year B → ❝ under B, not A."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-review-date-year")
+    out.mkdir(parents=True, exist_ok=True)
+    diary = pd.DataFrame(
+        [
+            # Watched only in 2024; review logged in 2026.
+            {"Name": "Cross Year", "Year": 1999, "Rating": 4.0, "Watched Date": "2024-06-01"},
+            # 2026 bar must exist on the chart.
+            {"Name": "Later Watch", "Year": 2001, "Rating": 3.0, "Watched Date": "2026-01-15"},
+        ]
+    )
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+    reviewed_films = pd.DataFrame(
+        [
+            {
+                "Name": "Cross Year",
+                "Year": 1999,
+                "Date": pd.Timestamp("2026-03-10"),
+            }
+        ]
+    )
+    captured: dict = {}
+    import letterboxd_calendar_charts as cal
+
+    real_place = cal._place_count_avg_above_bars
+    real_counts = cal.review_counts_by_date_grain
+    index_years: list = []
+
+    def grab(fig, ax, bars, values, avg_labels, **kwargs):
+        captured["reviewed"] = list(kwargs.get("reviewed_counts") or [])
+        return real_place(fig, ax, bars, values, avg_labels, **kwargs)
+
+    def counts_spy(reviewed, index, grain="year"):
+        index_years[:] = [int(x) for x in index]
+        return real_counts(reviewed, index, grain=grain)
+
+    cal._place_count_avg_above_bars = grab
+    cal.review_counts_by_date_grain = counts_spy
+    try:
+        texts = _texts_on_save(
+            lambda c: c.chart_views_by_year(
+                diary,
+                out / "views_by_year.png",
+                grain="year",
+                reviewed_films=reviewed_films,
+            )
+        )
+    finally:
+        cal._place_count_avg_above_bars = real_place
+        cal.review_counts_by_date_grain = real_counts
+
+    assert index_years == [2024, 2026]
+    assert captured["reviewed"] == [0, 1]
+    tip = f"{REVIEW_NOTE} 1"
+    assert any(t.get_text() == tip for t in texts)
+    # Film-level bug would also put ❝ on 2024; date-bound has a single tip.
+    assert sum(1 for t in texts if t.get_text() == tip) == 1
+
+
+def test_weekday_month_reviews_follow_review_date(tmp_path: Path | None = None):
+    """Most reviewed / tips use review Date weekday, not watch weekday."""
+    out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-review-date-weekday")
+    out.mkdir(parents=True, exist_ok=True)
+    # Watch on Thursday 2020-01-02; review logged Saturday 2026-03-07.
+    diary = pd.DataFrame(
+        [
+            {"Name": "Thu Watch", "Year": 2000, "Rating": 4.0, "Watched Date": "2020-01-02"},
+            {"Name": "Filler", "Year": 2001, "Rating": 3.0, "Watched Date": "2020-01-04"},
+        ]
+    )
+    diary["Watched Date"] = pd.to_datetime(diary["Watched Date"])
+    reviewed_films = pd.DataFrame(
+        [
+            {
+                "Name": "Thu Watch",
+                "Year": 2000,
+                "Date": pd.Timestamp("2026-03-07"),  # Saturday
+            }
+        ]
+    )
+    texts = _texts_on_save(
+        lambda cal: cal.chart_weekday_month(
+            diary,
+            out / "views_by_weekday_month.png",
+            reviewed_films=reviewed_films,
+            top_n=5,
+        )
+    )
+    labels = {t.get_text() for t in texts}
+    assert "Most reviewed weekdays" in labels
+    # Rank head and ❝ are separate text artists; Saturday owns the review.
+    assert any(t.get_text().startswith("1. Sat ") for t in texts)
+    assert any(t.get_text().startswith(f"{REVIEW_NOTE} ") for t in texts)
+    # Thursday was the watch day — must not be Most reviewed #1.
+    assert not any(t.get_text().startswith("1. Thu ") for t in texts)
+
+
 def test_weekday_month_most_liked_is_two_lists(tmp_path: Path | None = None):
     """Combined weekday+month chart: separate Most liked lists, not one mix."""
     out = Path(tmp_path) if tmp_path is not None else Path("/tmp/lb-weekday-month-liked")
@@ -1268,7 +1368,9 @@ def test_weekday_month_most_liked_is_two_lists(tmp_path: Path | None = None):
     assert any(t.get_text().startswith("1. Sat ") for t in texts)
     assert any(t.get_text().startswith("2. Thu ") for t in texts)
     # top_n=2 still allows both liked months when only two have likes.
-    assert any("Oct" in t.get_text() and LIKED_HEART in t.get_text() for t in texts)
+    # Rank head and ♥ are separate artists (same as Most reviewed).
+    assert any(t.get_text().startswith("1. Oct ") or "Oct" in t.get_text() for t in texts)
+    assert any(LIKED_HEART in t.get_text() for t in texts)
 
 
 def test_most_liked_list_is_compact_on_tall_hbar(tmp_path: Path | None = None):
@@ -1435,5 +1537,8 @@ if __name__ == "__main__":
     test_rating_distribution_includes_undated_no_date()
     test_top_rewatches_avg_is_diary_row_mean()
     test_views_count_bars_show_avg_or_dash()
+    test_views_by_year_reviews_follow_review_date_not_watch()
+    test_weekday_month_reviews_follow_review_date()
+    test_weekday_month_most_liked_is_two_lists()
     test_stacked_count_hbar_long_names()
     print("ok")

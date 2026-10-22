@@ -42,6 +42,7 @@ from letterboxd_export import (  # noqa: E402
     load_liked_films,
     load_reviewed_films,
     ratings_for_catalog,
+    review_counts_by_date_grain,
     reviewed_film_keys,
 )
 from letterboxd_options import (  # noqa: E402
@@ -622,16 +623,24 @@ def chart_weekday_month(
     path: Path,
     *,
     liked_keys=None,
+    reviewed_films=None,
     reviewed_keys=None,
     top_n: int = TOP_N_DEFAULT,
 ) -> None:
+    """Weekday + month watches stacked by watch year.
+
+    Likes (♥) stay film-level among diary watches in each weekday/month.
+    Reviews (❝) and Most reviewed use review Date weekday/month — not film
+    presence among watches. ``reviewed_keys`` is ignored (kept for call-site
+    compatibility).
+    """
+    del reviewed_keys
     df = df.copy()
     df["watch_year"] = df["Watched Date"].dt.year.astype(int)
     df["weekday"] = df["Watched Date"].dt.weekday
     df["month"] = df["Watched Date"].dt.month
     df["_film_key"] = film_name_year_key(df)
     liked = set(liked_keys or ())
-    reviewed = set(reviewed_keys or ())
 
     years = sorted(df["watch_year"].unique().tolist())
     colors = year_colors(years)
@@ -664,10 +673,13 @@ def chart_weekday_month(
 
     week_liked = [count_liked_among_keys(week_keys[i], liked) for i in range(7)]
     month_liked = [count_liked_among_keys(month_keys[i], liked) for i in range(12)]
-    week_reviewed = [count_reviewed_among_keys(week_keys[i], reviewed) for i in range(7)]
-    month_reviewed = [
-        count_reviewed_among_keys(month_keys[i], reviewed) for i in range(12)
-    ]
+    # ❝ by review Date weekday / calendar month (not watch-day film presence).
+    week_reviewed = review_counts_by_date_grain(
+        reviewed_films, range(7), grain="weekday"
+    )
+    month_reviewed = review_counts_by_date_grain(
+        reviewed_films, range(1, 13), grain="calendar_month"
+    )
     # Two panels → two lists: all liked weekdays (≤7); months capped by top_n.
     most_liked_weekdays = rank_most_liked(
         {WEEKDAYS[i]: week_liked[i] for i in range(7)},
@@ -985,8 +997,16 @@ def chart_views_by_year(
     span_start=None,
     span_end=None,
     liked_keys=None,
+    reviewed_films=None,
     reviewed_keys=None,
 ) -> None:
+    """Film watches by watch year / month / day.
+
+    Likes (♥) stay unique liked films among diary watches in each bucket.
+    Reviews (❝) use review Date in the same grain — not film presence among
+    watches. ``reviewed_keys`` is ignored (call-site compatibility).
+    """
+    del reviewed_keys
     dates = df["Watched Date"].dropna()
     if dates.empty:
         return
@@ -1043,8 +1063,8 @@ def chart_views_by_year(
         fontsize=fontsize,
         rotation=rotation,
         liked_counts=_liked_counts_by_watch_grain(df, counts.index, grain, liked_keys),
-        reviewed_counts=_engagement_counts_by_watch_grain(
-            df, counts.index, grain, reviewed_keys
+        reviewed_counts=review_counts_by_date_grain(
+            reviewed_films, counts.index, grain=grain
         ),
     )
     save_dark_figure(fig, path, dpi=160)
@@ -1921,7 +1941,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
         liked_keys = liked_film_keys(load_liked_films(zip_path))
-        reviewed_keys = reviewed_film_keys(load_reviewed_films(zip_path))
+        reviewed_films = load_reviewed_films(zip_path)
+        reviewed_keys = reviewed_film_keys(reviewed_films)
         # Date-sensitive charts: diary only (need Watched Date).
         span_start, span_end = resolve_watch_bounds(diary, opts.date_from, opts.date_to)
         grain = watch_time_grain(span_start, span_end)
@@ -1929,7 +1950,7 @@ def main(argv: list[str] | None = None) -> int:
             diary,
             Path("views_by_weekday_month.png"),
             liked_keys=liked_keys,
-            reviewed_keys=reviewed_keys,
+            reviewed_films=reviewed_films,
             top_n=opts.top_n,
         )
         chart_views_by_year(
@@ -1939,7 +1960,7 @@ def main(argv: list[str] | None = None) -> int:
             span_start=span_start,
             span_end=span_end,
             liked_keys=liked_keys,
-            reviewed_keys=reviewed_keys,
+            reviewed_films=reviewed_films,
         )
         chart_decade_rating(
             diary,

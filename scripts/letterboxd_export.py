@@ -23,9 +23,12 @@ liked (often a bulk-like day), not a reliable match to Watched Date / diary
 Date, so per-view likes are not recoverable from this export shape.
 likes/reviews.csv is review-URI only and is not mapped to films here.
 
-Film reviews: top-level reviews.csv (Name+Year; diary-entry URI). One unique
-film key per Name+Year even when multiple review rows exist. Prefer reviews.csv
-over deleted/orphaned copies; never use likes/reviews.csv for film identity.
+Film reviews: top-level reviews.csv (Name+Year; diary-entry URI; Date = when
+the review was logged). Prefer reviews.csv; never use likes/reviews.csv,
+deleted/, or orphaned/ copies. Film-level presence (non-date charts, titles,
+search) uses unique Name+Year via reviewed_film_keys. Watch-date chart tips /
+Most reviewed use review Date buckets via review_counts_by_date_grain (not
+diary Watched Date, and not “film watched then has any review”).
 """
 
 from __future__ import annotations
@@ -244,12 +247,13 @@ def liked_film_keys(liked_films: pd.DataFrame | None) -> set[str]:
 def load_reviewed_films(zip_path: Path | str) -> pd.DataFrame:
     """Parse top-level reviews.csv if present. Empty frame when missing (not an error).
 
-    Film-level reviews: unique Name+Year (one key even with multiple review rows).
+    Keeps every review row with Name + Year + Date (review logged date). Multiple
+    rows for the same film are retained so watch-date charts can bucket by Date.
     Prefer reviews.csv; never pick deleted/orphaned copies or likes/reviews.csv
     (that file is review-URI likes, not film reviews).
     """
     path = Path(zip_path)
-    empty_cols = ["Name", "Year"]
+    empty_cols = ["Name", "Year", "Date"]
     if not path.is_file():
         return pd.DataFrame(columns=empty_cols)
     try:
@@ -285,17 +289,80 @@ def load_reviewed_films(zip_path: Path | str) -> pd.DataFrame:
     df = df[df["Name"].astype(str).str.strip() != ""].copy()
     if df.empty:
         return pd.DataFrame(columns=empty_cols)
-    df = df.copy()
-    df["_film_key"] = film_name_year_key(df)
-    df = df.groupby("_film_key", dropna=False, as_index=False).head(1)
-    return df[["Name", "Year"]].copy()
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    else:
+        df["Date"] = pd.NaT
+    return df[["Name", "Year", "Date"]].copy()
 
 
 def reviewed_film_keys(reviewed_films: pd.DataFrame | None) -> set[str]:
-    """Name|||Year keys from a reviews.csv frame."""
+    """Unique Name|||Year keys from a reviews.csv frame (film-level presence)."""
     if reviewed_films is None or getattr(reviewed_films, "empty", True):
         return set()
     return set(film_name_year_key(reviewed_films).tolist())
+
+
+def _review_date_bucket_key(value, grain: str):
+    """Normalize a review Date (or chart index value) to a comparable bucket key."""
+    if grain == "year":
+        return int(value)
+    if grain == "month":
+        return value if isinstance(value, pd.Period) else pd.Period(value, freq="M")
+    if grain == "weekday":
+        return int(value)
+    if grain == "calendar_month":
+        return int(value)
+    return pd.Timestamp(value).normalize()
+
+
+def review_counts_by_date_grain(
+    reviewed_films: pd.DataFrame | None,
+    index,
+    grain: str = "year",
+) -> list[int]:
+    """Unique films with a review Date in each time bucket.
+
+    For watch-year / month / day chart tips: ``grain`` is year|month|day and
+    ``index`` is the chart's watch-time bucket labels. Rows without a parseable
+    Date are ignored. Counts are unique Name+Year per bucket (a film reviewed
+    twice in the same year still counts once).
+
+    For weekday / calendar-month panels: pass ``grain="weekday"`` with
+    ``index=range(7)`` (Mon=0) or ``grain="calendar_month"`` with
+    ``index=range(1, 13)``.
+    """
+    n = len(index)
+    if reviewed_films is None or getattr(reviewed_films, "empty", True) or n == 0:
+        return [0] * n
+    if "Date" not in reviewed_films.columns:
+        return [0] * n
+    work = reviewed_films.copy()
+    work["Date"] = pd.to_datetime(work["Date"], errors="coerce")
+    work = work[work["Date"].notna()].copy()
+    if work.empty:
+        return [0] * n
+    work["_film_key"] = film_name_year_key(work)
+    if grain == "year":
+        work["_bucket"] = work["Date"].dt.year.astype(int)
+    elif grain == "month":
+        work["_bucket"] = work["Date"].dt.to_period("M")
+    elif grain == "weekday":
+        work["_bucket"] = work["Date"].dt.weekday.astype(int)
+    elif grain == "calendar_month":
+        work["_bucket"] = work["Date"].dt.month.astype(int)
+    else:
+        work["_bucket"] = work["Date"].dt.normalize()
+    grouped = (
+        work.groupby("_bucket", dropna=False)["_film_key"]
+        .apply(lambda s: set(str(k) for k in s.tolist()))
+        .to_dict()
+    )
+    out: list[int] = []
+    for key in index:
+        bucket = _review_date_bucket_key(key, grain)
+        out.append(len(grouped.get(bucket) or ()))
+    return out
 
 
 def watched_only_films(diary: pd.DataFrame, watched: pd.DataFrame) -> pd.DataFrame:
