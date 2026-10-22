@@ -362,7 +362,7 @@ function formatExcludeSummaryList(opts) {
 
 /** Footnote under the Tops/…/Period paragraph (English bot copy). */
 export const LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE =
-  "You can paste this summary into Paste settings on a later run.";
+  "Paste this into Paste settings on a later run.";
 
 /** Compact settings paragraph used in the ZIP ack and Paste settings mode. */
 export function formatLetterboxdSettingsSummary(options) {
@@ -628,12 +628,11 @@ export function parseLetterboxdSettingsSummary(text) {
 }
 
 export const LETTERBOXD_PASTE_SETTINGS_RETRY =
-  'Could not find or parse a settings summary in that message. Paste the paragraph that starts with Tops: and ends with Period:. The report has not started.';
+  "Could not parse that settings summary. Paste the Tops: … Period: paragraph. Charts have not started.";
 
 export function letterboxdAckText(jobId, options) {
   return (
-    "ZIP received. Building Letterboxd charts with GitHub Actions — PNGs will arrive in this chat " +
-    "(calendar, extra stats, genres).\n\n" +
+    "ZIP received. Building charts — PNGs will arrive here (calendar, extra stats, genres).\n\n" +
     formatLetterboxdSettingsSummary(options) +
     `\n\nid: ${jobId}`
   );
@@ -880,10 +879,40 @@ function withDefaultButton(rows, label, data) {
   return { inline_keyboard: [...rows, [button(label, data)]] };
 }
 
+/** Neutral object/symbol emojis only — no hand or face glyphs. */
+export const WIZARD_EMOJI_YES = "✅";
+export const WIZARD_EMOJI_NO = "❌";
+export const WIZARD_EMOJI_DEFAULT_MODE = "✅";
+export const WIZARD_EMOJI_CUSTOMIZE = "⚙️";
+export const WIZARD_EMOJI_PASTE = "📋";
+export const WIZARD_EMOJI_TOP_10 = "🔟";
+export const WIZARD_EMOJI_TOP_20 = "2️⃣0️⃣";
+export const WIZARD_EMOJI_TOP_30 = "3️⃣0️⃣";
+export const WIZARD_EMOJI_TOP_50 = "5️⃣0️⃣";
+export const WIZARD_EMOJI_MIN_1 = "1️⃣";
+export const WIZARD_EMOJI_MIN_3 = "3️⃣";
+export const WIZARD_EMOJI_MIN_4 = "4️⃣";
+export const WIZARD_EMOJI_MIN_5 = "5️⃣";
+export const WIZARD_EMOJI_FULL_PERIOD = "📅";
+export const WIZARD_EMOJI_CUSTOM_RANGE = "✏️";
+export const WIZARD_EMOJI_LAST_3Y = "🕒";
+export const WIZARD_EMOJI_LAST_5Y = "🕔";
+export const WIZARD_EMOJI_DONE = "✔️";
+export const WIZARD_EMOJI_NONE = "🚫";
+export const WIZARD_EMOJI_YEAR = "📆";
+
+function defaultButtonLabel(emoji, detail = "") {
+  const tail = detail ? ` (${detail})` : "";
+  return `Default ${emoji}${tail}`;
+}
+
 export function letterboxdModeKeyboard() {
   return withDefaultButton(
-    [[button("Customize", "lb:cus"), button("Paste settings", "lb:paste")]],
-    "✅ Default",
+    [[
+      button(`${WIZARD_EMOJI_CUSTOMIZE} Customize`, "lb:cus"),
+      button(`${WIZARD_EMOJI_PASTE} Paste settings`, "lb:paste"),
+    ]],
+    defaultButtonLabel(WIZARD_EMOJI_DEFAULT_MODE),
     "lb:def",
   );
 }
@@ -891,20 +920,24 @@ export function letterboxdModeKeyboard() {
 export function letterboxdTopKeyboard() {
   return withDefaultButton(
     [[
-      button("10", "lb:n:10"),
-      button("20", "lb:n:20"),
-      button("30", "lb:n:30"),
-      button("50", "lb:n:50"),
+      button(`${WIZARD_EMOJI_TOP_10} 10`, "lb:n:10"),
+      button(`${WIZARD_EMOJI_TOP_20} 20`, "lb:n:20"),
+      button(`${WIZARD_EMOJI_TOP_30} 30`, "lb:n:30"),
+      button(`${WIZARD_EMOJI_TOP_50} 50`, "lb:n:50"),
     ]],
-    "✅ Default (20)",
+    defaultButtonLabel(WIZARD_EMOJI_TOP_20, "20"),
     "lb:n:20",
   );
 }
 
 export function letterboxdMinKeyboard() {
   return withDefaultButton(
-    [[button("1", "lb:m:1"), button("3", "lb:m:3"), button("5", "lb:m:5")]],
-    "✅ Default (4)",
+    [[
+      button(`${WIZARD_EMOJI_MIN_1} 1`, "lb:m:1"),
+      button(`${WIZARD_EMOJI_MIN_3} 3`, "lb:m:3"),
+      button(`${WIZARD_EMOJI_MIN_5} 5`, "lb:m:5"),
+    ]],
+    defaultButtonLabel(WIZARD_EMOJI_MIN_4, "4"),
     "lb:m:4",
   );
 }
@@ -913,16 +946,22 @@ export function letterboxdYesNoKeyboard(prefix, fallback = "yes") {
   const no = fallback === "no" || fallback === "нет";
   const data = no ? `${prefix}:0` : `${prefix}:1`;
   return withDefaultButton(
-    [[button("Yes", `${prefix}:1`), button("No", `${prefix}:0`)]],
-    `Default: ${no ? "no" : "yes"}`,
+    [[
+      button(`${WIZARD_EMOJI_YES} Yes`, `${prefix}:1`),
+      button(`${WIZARD_EMOJI_NO} No`, `${prefix}:0`),
+    ]],
+    defaultButtonLabel(no ? WIZARD_EMOJI_NO : WIZARD_EMOJI_YES),
     data,
   );
 }
 
 export function letterboxdPeriodKeyboard() {
   return withDefaultButton(
-    [[button("Full period", "lb:span"), button("Custom range", "lb:rng")]],
-    "Default: full period",
+    [[
+      button(`${WIZARD_EMOJI_FULL_PERIOD} Full period`, "lb:span"),
+      button(`${WIZARD_EMOJI_CUSTOM_RANGE} Custom range`, "lb:rng"),
+    ]],
+    defaultButtonLabel(WIZARD_EMOJI_FULL_PERIOD, "full"),
     "lb:span",
   );
 }
@@ -935,37 +974,45 @@ export function recentWatchYears(now = new Date(), count = 5) {
 }
 
 export function letterboxdRangeKeyboard(now = new Date()) {
-  const years = recentWatchYears(now, 5).map((year) => button(String(year), `lb:yr:${year}`));
+  const years = recentWatchYears(now, 5).map((year) =>
+    button(`${WIZARD_EMOJI_YEAR} ${year}`, `lb:yr:${year}`),
+  );
   return {
     inline_keyboard: [
       years.slice(0, 3),
       years.slice(3),
-      [button("Last 3 years", "lb:y:3"), button("Last 5 years", "lb:y:5")],
-      [button("Default: full period", "lb:full")],
+      [
+        button(`${WIZARD_EMOJI_LAST_3Y} Last 3 years`, "lb:y:3"),
+        button(`${WIZARD_EMOJI_LAST_5Y} Last 5 years`, "lb:y:5"),
+      ],
+      [button(defaultButtonLabel(WIZARD_EMOJI_FULL_PERIOD, "full"), "lb:full")],
     ],
   };
 }
 
 export function letterboxdUndatedKeyboard() {
   return withDefaultButton(
-    [[button("No", "lb:und:0"), button("Yes", "lb:und:1")]],
-    "Default: no",
+    [[
+      button(`${WIZARD_EMOJI_NO} No`, "lb:und:0"),
+      button(`${WIZARD_EMOJI_YES} Yes`, "lb:und:1"),
+    ]],
+    defaultButtonLabel(WIZARD_EMOJI_NO),
     "lb:und:0",
   );
 }
 
 export function letterboxdKeywordsKeyboard(hasWords = false) {
-  const rows = [[button("Done", "lb:kw:done")]];
+  const rows = [[button(`${WIZARD_EMOJI_DONE} Done`, "lb:kw:done")]];
   if (!hasWords) {
-    rows.push([button("Default: none", "lb:kw:done")]);
+    rows.push([button(defaultButtonLabel(WIZARD_EMOJI_NONE, "none"), "lb:kw:done")]);
   }
   return { inline_keyboard: rows };
 }
 
 export function letterboxdSearchKeywordsKeyboard(hasWords = false) {
-  const rows = [[button("Done", "lb:sk:done")]];
+  const rows = [[button(`${WIZARD_EMOJI_DONE} Done`, "lb:sk:done")]];
   if (!hasWords) {
-    rows.push([button("Default: none", "lb:sk:done")]);
+    rows.push([button(defaultButtonLabel(WIZARD_EMOJI_NONE, "none"), "lb:sk:done")]);
   }
   return { inline_keyboard: rows };
 }
@@ -990,9 +1037,9 @@ export function letterboxdModePrompt() {
     text: [
       "<b>How should the charts be built?</b>",
       "",
-      "ZIP received. Default builds the usual set right away. Customize sets the top size, threshold, whether rewatches count in averages, whether to show likes (♥) and reviews (≡), optional exclusions, optional search keywords, and dates. Paste settings reuses a previous Tops: … Period: summary.",
+      "ZIP received. Default runs the usual charts now. Customize walks through size, threshold, likes, reviews, filters, and dates. Paste settings reuses a previous Tops: … Period: summary.",
       "",
-      "Buttons below, or reply with text. Cancel with /stop.",
+      "Tap a button, or reply with text. Cancel with /stop.",
     ].join("\n"),
     reply_markup: letterboxdModeKeyboard(),
   };
@@ -1003,7 +1050,7 @@ export function letterboxdPasteSettingsPrompt() {
     text: [
       "<b>Paste your settings summary</b>",
       "",
-      "Paste a previous settings paragraph — the one that starts with Tops: and ends with Period: (and No diary date: when the period is a range). Extra text around it is fine.",
+      "Paste a Tops: … Period: paragraph from a previous run (include No diary date: when you used a date range). Extra text around it is fine.",
       "",
       "Cancel with /stop.",
     ].join("\n"),
@@ -1017,7 +1064,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: wizardPrompt(
         "How many rows in each top?",
-        "How many rows to show in each top. Buttons, or your own number from 1 to 100.",
+        "Rows per ranking chart. Tap a button, or type a number from 1 to 100.",
         "20, 7, 100",
         "20",
       ),
@@ -1028,7 +1075,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: wizardPrompt(
         "Threshold",
-        "Average-rating tops include a row only when it has this many unique rated films or more: directors, actors, genres, countries, and the rest. At 4, a director with two rated films is left out. Director, actor, and studio watch-count charts use the same threshold: a row needs that many catalog hits or more (each diary view plus one for a film that is only in watched, with no diary date). Buttons, or a number from 1 to 50.",
+        "Minimum rated films (or catalog hits) before a row appears on average-rating and people/studio watch-count charts. At 4, a director with only two rated films is skipped. Tap a button, or type 1–50.",
         "1, 3, 5",
         "4",
       ),
@@ -1039,7 +1086,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Count rewatches in averages?",
-        "By default averages use each film’s last set rating, even if you watched it several times. Choose Yes if every rated diary entry should affect the average.",
+        "Off: each film’s last rating only. On: every rated diary entry counts. Default is off.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:rew", "no"),
     };
@@ -1048,7 +1095,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Show likes (♥)?",
-        "Hearts mark liked films on chart tips, titles, Most liked lists, and search lines. Default is yes (same as today).",
+        "Orange ♥ on tips, titles, Most liked lists, and search lines. Default is on.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:likes"),
     };
@@ -1057,7 +1104,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Show reviews (≡)?",
-        "The ≡ mark shows reviewed films on chart tips, titles, Most reviewed lists, and search lines. Default is yes (same as today).",
+        "Blue ≡ on tips, titles, Most reviewed lists, and search lines. Off also skips Top review. Default is on.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:revs"),
     };
@@ -1066,7 +1113,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Show top review?",
-        "When yes, ranking charts get a bottom-right panel from the highest-ranked row that has a review (title with ♥ when liked, text up to 280 characters, date). Count tops and higher-rating charts prefer the highest-rated review; lower-rating charts prefer the lowest; when all candidates are unrated, liked films first; then latest review date. Also unlocks lower-rating charts even when there are fewer qualifying rows than the top size. Default is yes.",
+        "When on, ranking charts show a small review panel: film title (♥ if liked), up to 280 characters, and the date. Picks the highest-ranked film that has a review — highest rating on count/higher charts, lowest on lower charts; if none are rated, prefer liked, then the newest date. Also unlocks lower-rating charts when there aren’t enough films for a full top. Default is off.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:toprev", "no"),
     };
@@ -1074,8 +1121,8 @@ function promptFor(step, state, now = new Date()) {
   if (step === "exclusions") {
     return {
       text: choicePrompt(
-        "Remove some rows from the watch-count tops?",
-        "Yes opens USA, English, Drama, Comedy, and custom keyword exclusions for count / watches charts only. Average-rating tops stay as they are. No keeps every row (same as including USA, English, Drama, and Comedy and adding no keywords).",
+        "Exclude some rows from watch-count tops?",
+        "Yes asks about USA, English, Drama, Comedy, and custom keywords (count charts only). No keeps every row. Default is no.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:excl", "no"),
     };
@@ -1084,7 +1131,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Show USA in the country top?",
-        "The United States often takes the first row. No removes it from the country top.",
+        "No hides USA from the country chart. Default is on.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:usa"),
     };
@@ -1093,7 +1140,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Show English in the language top?",
-        "English is often first. No removes it from the language top.",
+        "No hides English from the language chart. Default is on.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:en"),
     };
@@ -1102,7 +1149,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Show Drama in the genre tops?",
-        "Drama often takes the first rows. No removes it from the genre charts.",
+        "No hides Drama from genre charts. Default is on.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:drama"),
     };
@@ -1111,7 +1158,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Show Comedy in the genre tops?",
-        "Comedy is often near the top. No removes it from the genre charts.",
+        "No hides Comedy from genre charts. Default is on.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:com"),
     };
@@ -1119,19 +1166,19 @@ function promptFor(step, state, now = new Date()) {
   if (step === "keywords") {
     const words = normalizeExcludeKeywords(state.excludeKeywords);
     const listed = words.length
-      ? `Already added (${words.length}/${LETTERBOXD_EXCLUDE_KEYWORDS_MAX}): ${words
+      ? `Added (${words.length}/${LETTERBOXD_EXCLUDE_KEYWORDS_MAX}): ${words
           .map((word) => htmlEscape(word))
           .join(", ")}.`
       : `None yet. Up to ${LETTERBOXD_EXCLUDE_KEYWORDS_MAX} words, ${LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN} characters each.`;
     return {
       text: [
-        "<b>Exclude keywords from watch-count tops?</b>",
+        "<b>Exclude keywords</b>",
         "",
-        "Send one keyword per message: an actor, director, studio, genre, language, country, or release year (for example 2001). Matching is case-insensitive against the row name on the chart. Watch-year / period filtering stays on the date step. This is not the same as search keywords (asked next).",
+        "Send one word per message (actor, director, studio, genre, language, country, or year). Case-insensitive match on chart row names. Count charts only.",
         "",
         listed,
         "",
-        'When finished, tap Done. Or send "done".',
+        'Tap Done when finished, or send "done".',
       ].join("\n"),
       reply_markup: letterboxdKeywordsKeyboard(words.length > 0),
     };
@@ -1140,7 +1187,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Add search keywords?",
-        "Optional. After all chart PNGs, each search keyword gets a text list of every catalog film where it matches film metadata (genre, director, actor, studio, country, language, or release year). Default is no lists.",
+        "Optional text lists after the charts — films whose metadata match each keyword. Default is off.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:search", "no"),
     };
@@ -1148,19 +1195,19 @@ function promptFor(step, state, now = new Date()) {
   if (step === "search_keywords") {
     const words = normalizeSearchKeywords(state.searchKeywords);
     const listed = words.length
-      ? `Already added (${words.length}/${LETTERBOXD_SEARCH_KEYWORDS_MAX}): ${words
+      ? `Added (${words.length}/${LETTERBOXD_SEARCH_KEYWORDS_MAX}): ${words
           .map((word) => htmlEscape(word))
           .join(", ")}.`
       : `None yet. Up to ${LETTERBOXD_SEARCH_KEYWORDS_MAX} words, ${LETTERBOXD_SEARCH_KEYWORD_MAX_LEN} characters each.`;
     return {
       text: [
-        "<b>Search keywords for film lists?</b>",
+        "<b>Search keywords</b>",
         "",
-        "Send one search keyword per message (actor, director, studio, genre, language, country, or release year). Matching is case-insensitive against each film’s metadata — not chart row labels. Lists arrive in chat after every chart PNG. Exclude keywords (previous step) only remove rows from watch-count tops.",
+        "Send one word per message (actor, director, studio, genre, language, country, or year). Matches film metadata; lists arrive after every chart PNG.",
         "",
         listed,
         "",
-        'When finished, tap Done. Or send "done".',
+        'Tap Done when finished, or send "done".',
       ].join("\n"),
       reply_markup: letterboxdSearchKeywordsKeyboard(words.length > 0),
     };
@@ -1169,7 +1216,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Full period or a custom range?",
-        "Full period runs from the first watch to the last. A custom range keeps only the dates you choose, inclusive.",
+        "Full: first watch through last. Custom: only the dates you pick (inclusive). Default is full.",
       ),
       reply_markup: letterboxdPeriodKeyboard(),
     };
@@ -1178,7 +1225,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: wizardPrompt(
         "Which period?",
-        "One line, dates inclusive. One value is that whole slice. Two edges are the start and the end. The month is written before the year. The buttons below are ready-made ranges.",
+        "Type inclusive dates (month before year), or tap a ready-made range. One value = that whole slice; two values = start and end.",
         "2012, 06-2012, 15-06-2012, 2021-06.2022, 15.06.2021 - 20.08.2022",
         "full period",
       ),
@@ -1189,12 +1236,14 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: wizardPrompt(
         "End of the range",
-        `The start is already ${htmlEscape(state.dateFrom)}. The end is inclusive, and the precision can differ: year, month, or day.`,
+        `Start is ${htmlEscape(state.dateFrom)}. End is inclusive (year, month, or day).`,
         "2012, 06-2012, 15-06-2012",
         "full period",
       ),
       reply_markup: {
-        inline_keyboard: [[button("Default: full period", "lb:endfull")]],
+        inline_keyboard: [[
+          button(defaultButtonLabel(WIZARD_EMOJI_FULL_PERIOD, "full"), "lb:endfull"),
+        ]],
       },
     };
   }
@@ -1202,7 +1251,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: choicePrompt(
         "Add films with no diary date?",
-        "No — only entries with a date inside the period. Yes — also films from watched and ratings that have no date in the diary. They are not included in the calendar charts.",
+        "No: only dated diary rows in the period. Yes: also undated watched/ratings films (not on calendar charts). Default is no.",
       ),
       reply_markup: letterboxdUndatedKeyboard(),
     };

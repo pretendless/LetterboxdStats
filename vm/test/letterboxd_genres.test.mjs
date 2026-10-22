@@ -160,17 +160,17 @@ test("top size is any integer from 1 to 100", () => {
 test("wizard prompts are html, with a default line and examples", () => {
   const mode = letterboxdModePrompt();
   assert.match(mode.text, /<b>How should the charts be built\?<\/b>/);
-  assert.match(mode.text, /Default builds the usual set/);
+  assert.match(mode.text, /Default runs the usual charts/);
   assert.match(mode.text, /Paste settings reuses/);
-  assert.match(mode.text, /Buttons below, or reply with text/);
+  assert.match(mode.text, /Tap a button, or reply with text/);
   assert.doesNotMatch(mode.text, /For example:/);
   assert.doesNotMatch(mode.text, /Default: default/);
   assert.equal(mode.reply_markup.inline_keyboard[0][0].callback_data, "lb:cus");
-  assert.equal(mode.reply_markup.inline_keyboard[0][0].text, "Customize");
+  assert.equal(mode.reply_markup.inline_keyboard[0][0].text, "⚙️ Customize");
   assert.equal(mode.reply_markup.inline_keyboard[0][1].callback_data, "lb:paste");
-  assert.equal(mode.reply_markup.inline_keyboard[0][1].text, "Paste settings");
+  assert.equal(mode.reply_markup.inline_keyboard[0][1].text, "📋 Paste settings");
   assert.equal(mode.reply_markup.inline_keyboard[1][0].callback_data, "lb:def");
-  assert.equal(mode.reply_markup.inline_keyboard[1][0].text, "✅ Default");
+  assert.equal(mode.reply_markup.inline_keyboard[1][0].text, "Default ✅");
   assert.equal(mode.reply_markup.inline_keyboard[1].length, 1);
   const now = new Date("2026-10-20T00:00:00Z");
   const range = advanceLetterboxdWizard(
@@ -184,14 +184,14 @@ test("wizard prompts are html, with a default line and examples", () => {
   assert.match(range.messages[0].text, /Default: full period/);
   const labels = range.messages[0].reply_markup.inline_keyboard.flat().map((button) => button.text);
   assert.deepEqual(labels, [
-    "2026",
-    "2025",
-    "2024",
-    "2023",
-    "2022",
-    "Last 3 years",
-    "Last 5 years",
-    "Default: full period",
+    "📆 2026",
+    "📆 2025",
+    "📆 2024",
+    "📆 2023",
+    "📆 2022",
+    "🕒 Last 3 years",
+    "🕔 Last 5 years",
+    "Default 📅 (full)",
   ]);
   const top = advanceLetterboxdWizard(
     { step: "top_n", fileId: "BQACAgIAAxkBAAI1234567890" },
@@ -200,21 +200,19 @@ test("wizard prompts are html, with a default line and examples", () => {
   );
   assert.equal(top.state.topN, 20);
   assert.equal(top.state.step, "min_rated");
-  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "✅ Default (4)");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default 4️⃣ (4)");
   const minText = top.messages[0].text;
   assert.match(minText, /<b>Threshold<\/b>/);
-  assert.match(minText, /unique rated films/);
-  assert.match(minText, /a director with two rated films is left out/);
-  assert.match(minText, /Director, actor, and studio watch-count charts/);
+  assert.match(minText, /Minimum rated films/);
   assert.match(minText, /catalog hits/);
-  assert.match(minText, /only in watched/);
+  assert.match(minText, /director with only two rated films/);
   assert.doesNotMatch(minText, /Watch-count charts ignore this threshold/);
   assert.doesNotMatch(minText, /minimum ratings/i);
   assert.match(minText, /For example: 1, 3, 5/);
   assert.match(minText, /Default: 4/);
   assert.deepEqual(
     top.messages[0].reply_markup.inline_keyboard[0].map((button) => button.text),
-    ["1", "3", "5"],
+    ["1️⃣ 1", "3️⃣ 3", "5️⃣ 5"],
   );
   assert.equal(top.messages[0].reply_markup.inline_keyboard[0][0].callback_data, "lb:m:1");
   assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].callback_data, "lb:m:4");
@@ -309,8 +307,8 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   }
   assert.equal(rewatch.state.step, "rewatch_avg");
   assert.match(rewatch.messages[0].text, /<b>Count rewatches in averages\?<\/b>/);
-  assert.match(rewatch.messages[0].text, /By default averages use each film’s last set rating/);
-  assert.match(rewatch.messages[0].text, /every rated diary entry should affect the average/);
+  assert.match(rewatch.messages[0].text, /each film’s last rating only/);
+  assert.match(rewatch.messages[0].text, /every rated diary entry counts/);
   assert.equal(showLikes.state.includeRewatchInAverages, false);
   assert.equal(showLikes.state.step, "show_likes");
   assert.match(showLikes.messages[0].text, /<b>Show likes \(♥\)\?<\/b>/);
@@ -320,6 +318,9 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(showTopReview.state.showReviews, true);
   assert.equal(showTopReview.state.step, "show_top_review");
   assert.match(showTopReview.messages[0].text, /<b>Show top review\?<\/b>/);
+  assert.match(showTopReview.messages[0].text, /small review panel/);
+  assert.match(showTopReview.messages[0].text, /Default is off/);
+  assert.doesNotMatch(showTopReview.messages[0].text, /Default is yes/);
   assert.equal(exclusions.state.showTopReview, false);
   // Reviews off → skip Top review and force top_review=false.
   const skipTopReview = advanceLetterboxdWizard(
@@ -329,15 +330,15 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(skipTopReview.state.showReviews, false);
   assert.equal(skipTopReview.state.showTopReview, false);
   assert.equal(skipTopReview.state.step, "exclusions");
-  assert.match(skipTopReview.messages[0].text, /<b>Remove some rows from the watch-count tops\?<\/b>/);
-  assert.match(exclusions.messages[0].text, /<b>Remove some rows from the watch-count tops\?<\/b>/);
+  assert.match(skipTopReview.messages[0].text, /<b>Exclude some rows from watch-count tops\?<\/b>/);
+  assert.match(exclusions.messages[0].text, /<b>Exclude some rows from watch-count tops\?<\/b>/);
   assert.match(usa.messages[0].text, /<b>Show USA in the country top\?<\/b>/);
   assert.match(english.messages[0].text, /<b>Show English in the language top\?<\/b>/);
   assert.match(drama.messages[0].text, /<b>Show Drama in the genre tops\?<\/b>/);
   assert.match(comedy.messages[0].text, /<b>Show Comedy in the genre tops\?<\/b>/);
-  assert.match(keywords.messages[0].text, /<b>Exclude keywords from watch-count tops\?<\/b>/);
+  assert.match(keywords.messages[0].text, /<b>Exclude keywords<\/b>/);
   assert.match(search.messages[0].text, /<b>Add search keywords\?<\/b>/);
-  assert.match(search.messages[0].text, /Default is no lists/);
+  assert.match(search.messages[0].text, /Default is off/);
   assert.doesNotMatch(search.messages[0].text, /Not the same as exclude/);
   assert.match(period.messages[0].text, /<b>Full period or a custom range\?<\/b>/);
   assert.equal(skip.state.step, "search");
@@ -347,19 +348,19 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(skip.state.includeComedy, true);
   assert.deepEqual(skip.state.excludeKeywords, []);
   assert.match(undated.messages[0].text, /<b>Add films with no diary date\?<\/b>/);
-  assert.equal(rewatch.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
-  assert.equal(showLikes.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
-  assert.equal(showReviews.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
-  assert.equal(showTopReview.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
-  assert.equal(exclusions.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
-  assert.equal(usa.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
-  assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
-  assert.equal(drama.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
-  assert.equal(comedy.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: yes");
-  assert.equal(search.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
-  assert.equal(period.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: full period");
-  assert.equal(undated.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default: no");
-  assert.match(period.messages[0].text, /Full period runs from the first watch/);
+  assert.equal(rewatch.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
+  assert.equal(showLikes.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
+  assert.equal(showReviews.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
+  assert.equal(showTopReview.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
+  assert.equal(exclusions.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
+  assert.equal(usa.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
+  assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
+  assert.equal(drama.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
+  assert.equal(comedy.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
+  assert.equal(search.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
+  assert.equal(period.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default 📅 (full)");
+  assert.equal(undated.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
+  assert.match(period.messages[0].text, /Full: first watch through last/);
   assert.equal(parseLetterboxdCallback("lb:rew:0").step, "rewatch_avg");
   assert.equal(parseLetterboxdCallback("lb:rew:0").value, false);
   assert.equal(parseLetterboxdCallback("lb:rew:1").value, true);
@@ -388,7 +389,7 @@ test("keyword step accumulates words until Done", () => {
   const first = advanceLetterboxdWizard(start, { kind: "text", text: "Elijah Wood" });
   assert.equal(first.state.step, "keywords");
   assert.deepEqual(first.state.excludeKeywords, ["Elijah Wood"]);
-  assert.match(first.messages[0].text, /Already added \(1\/20\): Elijah Wood/);
+  assert.match(first.messages[0].text, /Added \(1\/20\): Elijah Wood/);
   const second = advanceLetterboxdWizard(first.state, { kind: "text", text: "2001" });
   assert.deepEqual(second.state.excludeKeywords, ["Elijah Wood", "2001"]);
   const done = advanceLetterboxdWizard(second.state, { kind: "callback", step: "keywords", choice: "done" });
@@ -403,11 +404,11 @@ test("search keyword step accumulates words until Done", () => {
     { kind: "callback", step: "search", value: true },
   );
   assert.equal(gate.state.step, "search_keywords");
-  assert.match(gate.messages[0].text, /<b>Search keywords for film lists\?<\/b>/);
+  assert.match(gate.messages[0].text, /<b>Search keywords<\/b>/);
   const first = advanceLetterboxdWizard(gate.state, { kind: "text", text: "Elijah Wood" });
   assert.equal(first.state.step, "search_keywords");
   assert.deepEqual(first.state.searchKeywords, ["Elijah Wood"]);
-  assert.match(first.messages[0].text, /Already added \(1\/20\): Elijah Wood/);
+  assert.match(first.messages[0].text, /Added \(1\/20\): Elijah Wood/);
   const second = advanceLetterboxdWizard(first.state, { kind: "text", text: "2001" });
   assert.deepEqual(second.state.searchKeywords, ["Elijah Wood", "2001"]);
   const done = advanceLetterboxdWizard(
@@ -428,35 +429,44 @@ test("every wizard keyboard has a one-tap default button alone on the bottom row
   const lastRow = (keyboard) => keyboard.inline_keyboard.at(-1);
   const last = (keyboard) => lastRow(keyboard)[0].text;
   const mode = letterboxdModeKeyboard();
-  assert.equal(mode.inline_keyboard[0][0].text, "Customize");
-  assert.equal(mode.inline_keyboard[0][1].text, "Paste settings");
-  assert.equal(last(mode), "✅ Default");
+  assert.equal(mode.inline_keyboard[0][0].text, "⚙️ Customize");
+  assert.equal(mode.inline_keyboard[0][1].text, "📋 Paste settings");
+  assert.equal(last(mode), "Default ✅");
   assert.equal(lastRow(mode).length, 1);
-  assert.equal(last(letterboxdTopKeyboard()), "✅ Default (20)");
+  assert.equal(last(letterboxdTopKeyboard()), "Default 2️⃣0️⃣ (20)");
   assert.equal(lastRow(letterboxdTopKeyboard()).length, 1);
   assert.deepEqual(
     letterboxdMinKeyboard().inline_keyboard[0].map((button) => button.text),
-    ["1", "3", "5"],
+    ["1️⃣ 1", "3️⃣ 3", "5️⃣ 5"],
   );
-  assert.equal(last(letterboxdMinKeyboard()), "✅ Default (4)");
+  assert.equal(last(letterboxdMinKeyboard()), "Default 4️⃣ (4)");
   assert.equal(letterboxdMinKeyboard().inline_keyboard.at(-1)[0].callback_data, "lb:m:4");
   assert.equal(lastRow(letterboxdMinKeyboard()).length, 1);
-  assert.equal(last(letterboxdYesNoKeyboard("lb:rew", "no")), "Default: no");
-  assert.equal(last(letterboxdYesNoKeyboard("lb:excl", "no")), "Default: no");
-  assert.equal(last(letterboxdYesNoKeyboard("lb:usa")), "Default: yes");
-  assert.equal(last(letterboxdYesNoKeyboard("lb:en")), "Default: yes");
-  assert.equal(last(letterboxdYesNoKeyboard("lb:drama")), "Default: yes");
-  assert.equal(last(letterboxdYesNoKeyboard("lb:com")), "Default: yes");
-  assert.equal(last(letterboxdKeywordsKeyboard(false)), "Default: none");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:rew", "no")), "Default ❌");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:excl", "no")), "Default ❌");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:usa")), "Default ✅");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:en")), "Default ✅");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:drama")), "Default ✅");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:com")), "Default ✅");
+  assert.equal(last(letterboxdKeywordsKeyboard(false)), "Default 🚫 (none)");
   assert.equal(lastRow(letterboxdKeywordsKeyboard(false)).length, 1);
-  assert.equal(letterboxdKeywordsKeyboard(true).inline_keyboard[0][0].text, "Done");
-  assert.equal(last(letterboxdYesNoKeyboard("lb:search", "no")), "Default: no");
-  assert.equal(last(letterboxdSearchKeywordsKeyboard(false)), "Default: none");
-  assert.equal(letterboxdSearchKeywordsKeyboard(true).inline_keyboard[0][0].text, "Done");
-  assert.equal(last(letterboxdPeriodKeyboard()), "Default: full period");
+  assert.equal(letterboxdKeywordsKeyboard(true).inline_keyboard[0][0].text, "✔️ Done");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:search", "no")), "Default ❌");
+  assert.equal(last(letterboxdSearchKeywordsKeyboard(false)), "Default 🚫 (none)");
+  assert.equal(letterboxdSearchKeywordsKeyboard(true).inline_keyboard[0][0].text, "✔️ Done");
+  assert.equal(last(letterboxdPeriodKeyboard()), "Default 📅 (full)");
   assert.equal(lastRow(letterboxdPeriodKeyboard()).length, 1);
-  assert.equal(last(letterboxdUndatedKeyboard()), "Default: no");
-  assert.equal(last(letterboxdYesNoKeyboard("lb:und", "нет")), "Default: no");
+  assert.equal(last(letterboxdUndatedKeyboard()), "Default ❌");
+  assert.equal(last(letterboxdYesNoKeyboard("lb:und", "нет")), "Default ❌");
+  // Choice buttons: context symbols (no hands/faces); Yes/No capitalized; Default shows default emoji.
+  assert.deepEqual(
+    letterboxdYesNoKeyboard("lb:likes").inline_keyboard[0].map((b) => b.text),
+    ["✅ Yes", "❌ No"],
+  );
+  assert.deepEqual(
+    letterboxdTopKeyboard().inline_keyboard[0].map((b) => b.text),
+    ["🔟 10", "2️⃣0️⃣ 20", "3️⃣0️⃣ 30", "5️⃣0️⃣ 50"],
+  );
 });
 
 test("isZipDocument and file_id", () => {
