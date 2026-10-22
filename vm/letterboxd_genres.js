@@ -1071,7 +1071,7 @@ function promptFor(step, state, now = new Date()) {
     return {
       text: wizardPrompt(
         "Threshold",
-        "Minimum rated films (or catalog hits) before a row appears on average-rating and people/studio watch-count charts. At 4, a director with only two rated films is skipped. Tap a button, or type 1–50.",
+        "Minimum rated films (or catalog hits) before a row appears on average-rating and people/studio watch-count charts. At 4, a director with only three rated films is skipped. Tap a button, or type 1–50.",
         "1, 3, 5",
         "4",
       ),
