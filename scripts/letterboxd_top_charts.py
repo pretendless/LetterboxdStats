@@ -66,27 +66,290 @@ from letterboxd_palette import (
 )
 from letterboxd_ratings import MIN_RATED_FOR_TOP
 
+# ISO 639-1 (+ common 639-2 / TMDB aliases) → one English chart label.
+# `cn`: TMDB often uses this for Chinese-language originals (incl. Cantonese);
+# we show the single English name "Chinese" (same as `zh`). Never slash/dual forms.
 LANG_LABELS = {
-    "en": "English",
-    "ru": "Russian",
-    "fr": "French",
-    "de": "German",
-    "it": "Italian",
-    "es": "Spanish",
-    "ja": "Japanese",
-    "ko": "Korean",
-    "zh": "Chinese",
-    "sv": "Swedish",
-    "pl": "Polish",
-    "pt": "Portuguese",
-    "hi": "Hindi",
-    "tr": "Turkish",
-    "uk": "Ukrainian",
-    "da": "Danish",
-    "no": "Norwegian",
-    "nl": "Dutch",
+    # ISO 639-1
+    "aa": "Afar",
+    "ab": "Abkhazian",
+    "ae": "Avestan",
+    "af": "Afrikaans",
+    "ak": "Akan",
+    "am": "Amharic",
+    "an": "Aragonese",
+    "ar": "Arabic",
+    "as": "Assamese",
+    "av": "Avaric",
+    "ay": "Aymara",
+    "az": "Azerbaijani",
+    "ba": "Bashkir",
+    "be": "Belarusian",
+    "bg": "Bulgarian",
+    "bi": "Bislama",
+    "bm": "Bambara",
+    "bn": "Bengali",
+    "bo": "Tibetan",
+    "br": "Breton",
+    "bs": "Bosnian",
+    "ca": "Catalan",
+    "ce": "Chechen",
+    "ch": "Chamorro",
+    "co": "Corsican",
+    "cr": "Cree",
     "cs": "Czech",
+    "cu": "Church Slavic",
+    "cv": "Chuvash",
+    "cy": "Welsh",
+    "da": "Danish",
+    "de": "German",
+    "dv": "Divehi",
+    "dz": "Dzongkha",
+    "ee": "Ewe",
+    "el": "Greek",
+    "en": "English",
+    "eo": "Esperanto",
+    "es": "Spanish",
+    "et": "Estonian",
+    "eu": "Basque",
+    "fa": "Persian",
+    "ff": "Fulah",
+    "fi": "Finnish",
+    "fj": "Fijian",
+    "fo": "Faroese",
+    "fr": "French",
+    "fy": "Western Frisian",
+    "ga": "Irish",
+    "gd": "Scottish Gaelic",
+    "gl": "Galician",
+    "gn": "Guarani",
+    "gu": "Gujarati",
+    "gv": "Manx",
+    "ha": "Hausa",
+    "he": "Hebrew",
+    "hi": "Hindi",
+    "ho": "Hiri Motu",
+    "hr": "Croatian",
+    "ht": "Haitian",
     "hu": "Hungarian",
+    "hy": "Armenian",
+    "hz": "Herero",
+    "ia": "Interlingua",
+    "id": "Indonesian",
+    "ie": "Interlingue",
+    "ig": "Igbo",
+    "ii": "Sichuan Yi",
+    "ik": "Inupiaq",
+    "io": "Ido",
+    "is": "Icelandic",
+    "it": "Italian",
+    "iu": "Inuktitut",
+    "ja": "Japanese",
+    "jv": "Javanese",
+    "ka": "Georgian",
+    "kg": "Kongo",
+    "ki": "Kikuyu",
+    "kj": "Kuanyama",
+    "kk": "Kazakh",
+    "kl": "Kalaallisut",
+    "km": "Khmer",
+    "kn": "Kannada",
+    "ko": "Korean",
+    "kr": "Kanuri",
+    "ks": "Kashmiri",
+    "ku": "Kurdish",
+    "kv": "Komi",
+    "kw": "Cornish",
+    "ky": "Kirghiz",
+    "la": "Latin",
+    "lb": "Luxembourgish",
+    "lg": "Ganda",
+    "li": "Limburgan",
+    "ln": "Lingala",
+    "lo": "Lao",
+    "lt": "Lithuanian",
+    "lu": "Luba-Katanga",
+    "lv": "Latvian",
+    "mg": "Malagasy",
+    "mh": "Marshallese",
+    "mi": "Maori",
+    "mk": "Macedonian",
+    "ml": "Malayalam",
+    "mn": "Mongolian",
+    "mr": "Marathi",
+    "ms": "Malay",
+    "mt": "Maltese",
+    "my": "Burmese",
+    "na": "Nauru",
+    "nb": "Norwegian Bokmål",
+    "nd": "North Ndebele",
+    "ne": "Nepali",
+    "ng": "Ndonga",
+    "nl": "Dutch",
+    "nn": "Norwegian Nynorsk",
+    "no": "Norwegian",
+    "nr": "South Ndebele",
+    "nv": "Navajo",
+    "ny": "Chichewa",
+    "oc": "Occitan",
+    "oj": "Ojibwa",
+    "om": "Oromo",
+    "or": "Oriya",
+    "os": "Ossetian",
+    "pa": "Punjabi",
+    "pi": "Pali",
+    "pl": "Polish",
+    "ps": "Pashto",
+    "pt": "Portuguese",
+    "qu": "Quechua",
+    "rm": "Romansh",
+    "rn": "Rundi",
+    "ro": "Romanian",
+    "ru": "Russian",
+    "rw": "Kinyarwanda",
+    "sa": "Sanskrit",
+    "sc": "Sardinian",
+    "sd": "Sindhi",
+    "se": "Northern Sami",
+    "sg": "Sango",
+    "si": "Sinhala",
+    "sk": "Slovak",
+    "sl": "Slovenian",
+    "sm": "Samoan",
+    "sn": "Shona",
+    "so": "Somali",
+    "sq": "Albanian",
+    "sr": "Serbian",
+    "ss": "Swati",
+    "st": "Southern Sotho",
+    "su": "Sundanese",
+    "sv": "Swedish",
+    "sw": "Swahili",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "tg": "Tajik",
+    "th": "Thai",
+    "ti": "Tigrinya",
+    "tk": "Turkmen",
+    "tl": "Tagalog",
+    "tn": "Tswana",
+    "to": "Tonga",
+    "tr": "Turkish",
+    "ts": "Tsonga",
+    "tt": "Tatar",
+    "tw": "Twi",
+    "ty": "Tahitian",
+    "ug": "Uighur",
+    "uk": "Ukrainian",
+    "ur": "Urdu",
+    "uz": "Uzbek",
+    "ve": "Venda",
+    "vi": "Vietnamese",
+    "vo": "Volapük",
+    "wa": "Walloon",
+    "wo": "Wolof",
+    "xh": "Xhosa",
+    "yi": "Yiddish",
+    "yo": "Yoruba",
+    "za": "Zhuang",
+    "zh": "Chinese",
+    "zu": "Zulu",
+    # Common ISO 639-2 / biblio / TMDB aliases (still one English label each).
+    "cn": "Chinese",  # TMDB Chinese / Cantonese-region code → Chinese
+    "eng": "English",
+    "fre": "French",
+    "fra": "French",
+    "ger": "German",
+    "deu": "German",
+    "spa": "Spanish",
+    "ita": "Italian",
+    "por": "Portuguese",
+    "rus": "Russian",
+    "jpn": "Japanese",
+    "kor": "Korean",
+    "chi": "Chinese",
+    "zho": "Chinese",
+    "yue": "Cantonese",
+    "cmn": "Mandarin",
+    "ara": "Arabic",
+    "per": "Persian",
+    "fas": "Persian",
+    "fin": "Finnish",
+    "swe": "Swedish",
+    "dan": "Danish",
+    "nor": "Norwegian",
+    "nld": "Dutch",
+    "dut": "Dutch",
+    "pol": "Polish",
+    "cze": "Czech",
+    "ces": "Czech",
+    "hun": "Hungarian",
+    "tur": "Turkish",
+    "ukr": "Ukrainian",
+    "hin": "Hindi",
+    "ben": "Bengali",
+    "tha": "Thai",
+    "vie": "Vietnamese",
+    "ind": "Indonesian",
+    "may": "Malay",
+    "msa": "Malay",
+    "heb": "Hebrew",
+    "iw": "Hebrew",  # legacy Hebrew code
+    "ell": "Greek",
+    "gre": "Greek",
+    "lat": "Latin",
+    "ron": "Romanian",
+    "rum": "Romanian",
+    "srp": "Serbian",
+    "hrv": "Croatian",
+    "bos": "Bosnian",
+    "slk": "Slovak",
+    "slo": "Slovak",
+    "slv": "Slovenian",
+    "bul": "Bulgarian",
+    "lit": "Lithuanian",
+    "lav": "Latvian",
+    "est": "Estonian",
+    "kat": "Georgian",
+    "geo": "Georgian",
+    "arm": "Armenian",
+    "hye": "Armenian",
+    "aze": "Azerbaijani",
+    "kaz": "Kazakh",
+    "uzb": "Uzbek",
+    "mon": "Mongolian",
+    "tib": "Tibetan",
+    "bod": "Tibetan",
+    "bur": "Burmese",
+    "mya": "Burmese",
+    "lao": "Lao",
+    "khm": "Khmer",
+    "tam": "Tamil",
+    "tel": "Telugu",
+    "kan": "Kannada",
+    "mal": "Malayalam",
+    "mar": "Marathi",
+    "guj": "Gujarati",
+    "pan": "Punjabi",
+    "urd": "Urdu",
+    "pus": "Pashto",
+    "kur": "Kurdish",
+    "amh": "Amharic",
+    "swa": "Swahili",
+    "afr": "Afrikaans",
+    "alb": "Albanian",
+    "sqi": "Albanian",
+    "ice": "Icelandic",
+    "isl": "Icelandic",
+    "gle": "Irish",
+    "wel": "Welsh",
+    "cym": "Welsh",
+    "glg": "Galician",
+    "cat": "Catalan",
+    "baq": "Basque",
+    "eus": "Basque",
+    "fil": "Filipino",
+    "tgl": "Tagalog",
 }
 
 
@@ -943,8 +1206,27 @@ rank_most_reviewed = rank_most_liked
 
 
 def display_lang(code) -> str:
-    key = str(code or "").strip().lower()
-    return LANG_LABELS.get(key) or key or "?"
+    """Map a TMDB/ISO language code to one English chart label.
+
+    Known codes (639-1 / common 639-2 / TMDB aliases) → a single English name
+    (never slash/dual forms). Values that are already a full name are kept.
+    Unknown short codes are returned as the lowercase code (not invented).
+    """
+    raw = str(code or "").strip()
+    if not raw:
+        return "?"
+    key = raw.casefold().replace("_", "-")
+    # Region tags like zh-cn / pt-BR → primary subtag for lookup.
+    primary = key.split("-", 1)[0]
+    if primary in LANG_LABELS:
+        return LANG_LABELS[primary]
+    if key in LANG_LABELS:
+        return LANG_LABELS[key]
+    # Already a human label (not an ISO-looking code): keep as given.
+    if not (2 <= len(primary) <= 3 and primary.isalpha()):
+        return raw
+    # Unknown ISO-like code: keep the code (lowercase primary).
+    return primary
 
 
 def _short_label(text: str, limit: int = 36) -> str:
@@ -1290,13 +1572,14 @@ def _count_avg_stroke():
     ]
 
 
-def count_avg_text_style(label: str, *, ten_point: bool = False) -> dict:
+def count_avg_text_style(label: str, *, scale: int = 5) -> dict:
     """Style for the mean beside a count bar.
 
     A numeric mean is bold and colored with the shared palette
     (full 0–1 range on the fixed 0.5–5 scale). «—» stays regular white.
-    When ``ten_point`` is on, the label is a ×2 display value — divide back
-    before coloring so the palette stays on the internal Letterboxd scale.
+    When ``scale`` is not 5, the label is a display value — divide back
+    by scale/5 before coloring so the palette stays on the internal
+    Letterboxd scale.
     """
     text = str(label or "").strip()
     try:
@@ -1305,8 +1588,9 @@ def count_avg_text_style(label: str, *, ten_point: bool = False) -> dict:
         avg = None
     if avg is None or not (avg > 0):
         return {"color": FG, "fontweight": "normal", "path_effects": None}
-    if ten_point:
-        avg = avg / 2.0
+    scale_n = int(scale) if scale in (5, 10, 100) else 5
+    if scale_n != 5:
+        avg = avg * 5.0 / scale_n
     return {
         "color": rating_color(avg),
         "fontweight": "bold",
@@ -1314,22 +1598,19 @@ def count_avg_text_style(label: str, *, ten_point: bool = False) -> dict:
     }
 
 
-def rating_tick_formatter(*, ten_point: bool = False):
-    """Axis/colorbar tick labels; ×2 when ten-point display is on."""
+def rating_tick_formatter(*, scale: int = 5):
+    """Axis/colorbar tick labels; scale then round by display_rating_decimals."""
     from matplotlib.ticker import FuncFormatter
 
     def _fmt(x, _pos):
-        shown = display_rating_value(x, ten_point=ten_point)
-        if abs(shown - round(shown)) < 1e-9:
-            return str(int(round(shown)))
-        return f"{shown:g}"
+        return format_rating_number(x, scale=scale)
 
     return FuncFormatter(_fmt)
 
 
-def apply_rating_axis_formatter(ax, *, axis: str = "x", ten_point: bool = False) -> None:
+def apply_rating_axis_formatter(ax, *, axis: str = "x", scale: int = 5) -> None:
     """Format rating-scale ticks on an axis (data stays 0.5–5 internally)."""
-    formatter = rating_tick_formatter(ten_point=ten_point)
+    formatter = rating_tick_formatter(scale=scale)
     if str(axis).lower() == "y":
         ax.yaxis.set_major_formatter(formatter)
     else:
@@ -2522,7 +2803,7 @@ def chart_stacked_count_hbar(
     reviewed_counts: list[int] | None = None,
     most_reviewed: list[tuple[str, int]] | None = None,
     top_review: dict | None = None,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> bool:
     """matrix shape (len(years), len(labels)); labels ordered bottom→top.
 
@@ -2632,7 +2913,7 @@ def chart_stacked_count_hbar(
             continue
         bbox = artist.get_window_extent(renderer=renderer)
         x_data, _y = ax.transData.inverted().transform((bbox.x1 + 10, bbox.y1))
-        style = count_avg_text_style(label, ten_point=ten_point_display)
+        style = count_avg_text_style(label, scale=rating_scale)
         mean_artist = ax.text(
             x_data,
             artist.get_position()[1],
@@ -2730,13 +3011,13 @@ def _prepare_rating_rows(
 
 
 def _rating_colorbar(
-    fig, ax, *, location: str = "right", size: str = "compact", ten_point: bool = False
+    fig, ax, *, location: str = "right", size: str = "compact", scale: int = 5
 ) -> None:
     """Rating colorbar; «оценка» title sits above (not a sideways label).
 
     size='compact' — calendar line charts (year/decade).
     size='large' — TMDB horizontal avg tops (roomier, pre-compact scale).
-    Tick numbers follow ``ten_point`` (×2) while the norm stays 0.5–5.
+    Tick numbers follow ``scale`` (× scale/5) while the norm stays 0.5–5.
     """
     sm = plt.cm.ScalarMappable(cmap=rating_colormap(), norm=rating_norm())
     sm.set_array([])
@@ -2768,7 +3049,7 @@ def _rating_colorbar(
     cbar.set_label("")
     cbar.ax.set_title(RATING_COLORBAR_LABEL, color=FG, fontsize=title_size, pad=6)
     cbar.ax.tick_params(labelsize=tick_size, colors=FG, length=2.5, width=0.6)
-    cbar.ax.yaxis.set_major_formatter(rating_tick_formatter(ten_point=ten_point))
+    cbar.ax.yaxis.set_major_formatter(rating_tick_formatter(scale=scale))
     plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color=FG)
     return cbar
 
@@ -2786,14 +3067,14 @@ def chart_rating_vbar(
     ylabel: str | None = None,
     limit: int = TOP_N_DEFAULT,
     ascending: bool = False,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> bool:
     """Vertical bars: X = category, Y = mean rating; color blue→green→red.
 
     Used for calendar release-year avg tops. ascending=True → worst first.
     """
     if ylabel is None:
-        ylabel = average_rating_axis_label(ten_point=ten_point_display)
+        ylabel = average_rating_axis_label(scale=rating_scale)
     usable = _prepare_rating_rows(
         rows,
         label_key=label_key,
@@ -2827,15 +3108,15 @@ def chart_rating_vbar(
     ax.set_xticklabels(labels, rotation=45, ha="right")
     ax.set_ylim(0, 5.55)
     ax.set_ylabel(ylabel)
-    apply_rating_axis_formatter(ax, axis="y", ten_point=ten_point_display)
+    apply_rating_axis_formatter(ax, axis="y", scale=rating_scale)
     ax.set_title(title)
     ax.yaxis.grid(True, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     style_axes(ax)
     for bar, avg, rated in zip(bars, avgs, [n for _, _, n, _, _, _, _, _ in usable]):
         x = bar.get_x() + bar.get_width() / 2
-        label = format_rating_number(avg, ten_point=ten_point_display)
-        style = count_avg_text_style(label, ten_point=ten_point_display)
+        label = format_rating_number(avg, scale=rating_scale)
+        style = count_avg_text_style(label, scale=rating_scale)
         rated_n = int(rated) if rated is not None else 0
         ax.text(
             x,
@@ -2858,7 +3139,7 @@ def chart_rating_vbar(
             color=FG,
             fontweight="normal",
         )
-    _rating_colorbar(fig, ax, ten_point=ten_point_display)
+    _rating_colorbar(fig, ax, scale=rating_scale)
     if footer:
         fig.text(0.01, 0.01, footer, fontsize=7, color=FG)
         fig.tight_layout(rect=[0, 0.03, 1, 1])
@@ -2890,7 +3171,7 @@ def chart_rating_hbar(
     top_review: dict | None = None,
     film_ratings: pd.DataFrame | dict | None = None,
     liked_keys: set[str] | frozenset | None = None,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> bool:
     """Horizontal bars for TMDB avg tops.
 
@@ -2920,7 +3201,7 @@ def chart_rating_hbar(
     import matplotlib.patheffects as path_effects
 
     if xlabel is None:
-        xlabel = average_rating_axis_label(ten_point=ten_point_display)
+        xlabel = average_rating_axis_label(scale=rating_scale)
     usable = _prepare_rating_rows(
         rows,
         label_key=label_key,
@@ -2971,14 +3252,14 @@ def chart_rating_hbar(
     # Extra room on the right for the colored mean and the light ``(k)``.
     ax.set_xlim(0, 6.15)
     ax.set_xlabel(xlabel)
-    apply_rating_axis_formatter(ax, axis="x", ten_point=ten_point_display)
+    apply_rating_axis_formatter(ax, axis="x", scale=rating_scale)
     ax.set_title(title)
     ax.xaxis.grid(True, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     style_axes(ax)
 
     # Layout must be finalized before measuring text against data coordinates.
-    _rating_colorbar(fig, ax, location="left", size="large", ten_point=ten_point_display)
+    _rating_colorbar(fig, ax, location="left", size="large", scale=rating_scale)
     if footer:
         fig.text(0.01, 0.01, footer, fontsize=7, color=FG)
         fig.tight_layout(rect=[0.02, 0.03, 1, 1])
@@ -3181,8 +3462,8 @@ def chart_rating_hbar(
                 float(ax.transData.inverted().transform((label_end, 0))[0]),
             )
         # Mean is bold and rating-colored; ``(k)`` stays regular light text beside it.
-        mean_label = format_rating_number(avg, ten_point=ten_point_display)
-        style = count_avg_text_style(mean_label, ten_point=ten_point_display)
+        mean_label = format_rating_number(avg, scale=rating_scale)
+        style = count_avg_text_style(mean_label, scale=rating_scale)
         mean_artist = ax.text(
             mean_x,
             yi,
@@ -3245,7 +3526,7 @@ def chart_diary_entity_stacked(
     names_for_row_unfiltered: Callable[[pd.Series], list[str]] | None = None,
     reviewed_films: pd.DataFrame | None = None,
     show_top_review: bool = False,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> bool:
     """Top entities by catalog hits; stack segments by watch year.
 
@@ -3364,12 +3645,12 @@ def chart_diary_entity_stacked(
         pair = (avg_by_name or {}).get(n)
         if pair is None:
             avg_labels.append(
-                format_count_avg_label(None, 0, min_rated, ten_point=ten_point_display)
+                format_count_avg_label(None, 0, min_rated, scale=rating_scale)
             )
         else:
             avg_labels.append(
                 format_count_avg_label(
-                    pair[0], pair[1], min_rated, ten_point=ten_point_display
+                    pair[0], pair[1], min_rated, scale=rating_scale
                 )
             )
         liked_counts.append(liked_by_display.get(str(raw), 0))
@@ -3400,7 +3681,7 @@ def chart_diary_entity_stacked(
         reviewed_counts=reviewed_counts,
         most_reviewed=most_reviewed,
         top_review=panel_review,
-        ten_point_display=ten_point_display,
+        rating_scale=rating_scale,
     )
 
 
@@ -3417,7 +3698,7 @@ def chart_release_years_by_count(
     reviewed_keys: set[str] | frozenset | None = None,
     reviewed_films: pd.DataFrame | None = None,
     show_top_review: bool = False,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> bool:
     """Release-year count top stacked by watch year (catalog hits)."""
 
@@ -3445,7 +3726,7 @@ def chart_release_years_by_count(
         catalog=catalog,
         reviewed_films=reviewed_films,
         show_top_review=show_top_review,
-        ten_point_display=ten_point_display,
+        rating_scale=rating_scale,
     )
 
 
@@ -3462,7 +3743,7 @@ def chart_release_years_by_rating(
     show_top_review: bool = False,
     film_ratings: pd.DataFrame | dict | None = None,
     liked_keys: set[str] | frozenset | None = None,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> bool:
     """«Годы выхода — выше/ниже оценка» as TMDB-style horizontal avg bars.
 
@@ -3515,7 +3796,7 @@ def chart_release_years_by_rating(
         show_top_review=show_top_review,
         film_ratings=film_ratings,
         liked_keys=liked_keys,
-        ten_point_display=ten_point_display,
+        rating_scale=rating_scale,
     )
 
 
@@ -3529,11 +3810,11 @@ def single_rating_bar_color(avg: float) -> tuple:
 
 
 def add_rating_colorbar(
-    fig, ax, *, location: str = "right", size: str = "compact", ten_point: bool = False
+    fig, ax, *, location: str = "right", size: str = "compact", scale: int = 5
 ) -> None:
     """Shared colorbar for avg-rating charts (logo palette, 0.5–5).
 
     Calendar year/decade line charts use size='compact' (default).
-    Tick labels follow ``ten_point`` (×2) while the norm stays internal.
+    Tick labels follow ``scale`` (× scale/5) while the norm stays internal.
     """
-    _rating_colorbar(fig, ax, location=location, size=size, ten_point=ten_point)
+    _rating_colorbar(fig, ax, location=location, size=size, scale=scale)

@@ -1,11 +1,12 @@
-"""Chart options for /letterboxd: top size, rating gate, exclusions, search, watch window.
+"""Chart options for /letterboxd: top size, rating scale, rating gate, exclusions, search, watch window.
 
 Wizard defaults (also the GitHub Actions defaults):
-  top_n=20 (allowed 1–100), min_rated=4 (allowed 1–50),
+  top_n=20 (allowed 1–100),
+  rating_scale=10 (allowed 5, 10, 100 — display × scale/5; internal 0.5–5),
+  min_rated=4 (allowed 1–50),
   include_rewatch_in_averages=False (unique-film means),
   show_likes=True, show_reviews=True (♥ / ≡ on charts and search),
   show_top_review=True (in-plot review panel; Customize can disable),
-  ten_point_display=False (show rating/average numbers ×2; internal 0.5–5),
   include USA, include English, include Drama, include Comedy,
   no custom keyword exclusions, no search keywords,
   full diary span, undated films only on the full span.
@@ -31,11 +32,11 @@ films first; then latest Date; then Name/Year. Liked films get ♥ after the
 panel title. When True it also lifts the full-slate gate so lower-rating
 charts still emit. Customize can turn it off.
 
-ten_point_display (default False) multiplies **displayed** rating / average
-numbers by 2 (tips, axes, colorbar ticks, HTML, search slots). Internal
-Letterboxd 0.5–5 values stay unchanged for color, ranking, thresholds, and
-fractional steps. Top review ★/½ glyphs still use the 5-point value. Counts,
-♥/≡ totals, percentages, ranks, and years are not multiplied.
+rating_scale (default 10; choices 5 / 10 / 100) multiplies **displayed**
+rating / average numbers by scale/5 (tips, axes, colorbar ticks, HTML, search
+slots). Internal Letterboxd 0.5–5 values stay unchanged for color, ranking,
+thresholds, and fractional steps. Top review ★/½ glyphs still use the 5-point
+value. Counts, ♥/≡ totals, percentages, ranks, and years are not multiplied.
 
 Optional search keywords are separate: after all chart PNGs, each keyword
 gets a Telegram film list where the substring matches film metadata
@@ -60,6 +61,8 @@ TOP_N_DEFAULT = 20
 MIN_RATED_MIN = 1
 MIN_RATED_MAX = 50
 MIN_RATED_DEFAULT = 4
+RATING_SCALES = (5, 10, 100)
+RATING_SCALE_DEFAULT = 10
 EXCLUDE_KEYWORDS_MAX = 20
 EXCLUDE_KEYWORD_MAX_LEN = 40
 SEARCH_KEYWORDS_MAX = EXCLUDE_KEYWORDS_MAX
@@ -105,6 +108,22 @@ def clamp_top_n(value, default: int = TOP_N_DEFAULT) -> int:
 
 def clamp_min_rated(value, default: int = MIN_RATED_DEFAULT) -> int:
     return _clamp_int(value, MIN_RATED_MIN, MIN_RATED_MAX, default)
+
+
+def clamp_rating_scale(value, default: int = RATING_SCALE_DEFAULT) -> int:
+    """Allowed display scales: 5, 10, 100. Invalid → default."""
+    if value is None:
+        return default
+    text = str(value).strip()
+    if not text:
+        return default
+    try:
+        n = int(text)
+    except (TypeError, ValueError):
+        return default
+    if n in RATING_SCALES:
+        return n
+    return default
 
 
 def _clamp_int(value, lo: int, hi: int, default: int) -> int:
@@ -154,33 +173,78 @@ def is_comedy_genre(name) -> bool:
     return _norm_name(name) in _COMEDY_NAMES
 
 
-def display_rating_value(value, *, ten_point: bool = False) -> float:
-    """Map an internal Letterboxd rating (0.5–5) to the displayed number."""
+def coerce_display_scale(scale, default: float = 5) -> float:
+    """Positive finite scale for display math (not limited to wizard 5/10/100)."""
+    try:
+        s = float(scale)
+    except (TypeError, ValueError):
+        return float(default)
+    if not (s > 0) or s != s:  # NaN check
+        return float(default)
+    return s
+
+
+def display_rating_decimals(scale) -> int:
+    """Decimal places after ``raw * (scale/5)`` (first match wins).
+
+    - scale ≥ 100 → integer (0)
+    - scale > 10 → tenths (1)
+    - scale < 5 → thousandths (3)
+    - else (5 ≤ scale ≤ 10) → hundredths (2)
+
+    Wizard choices: 5→2dp, 10→2dp, 100→integer.
+    """
+    s = coerce_display_scale(scale, 5)
+    if s >= 100:
+        return 0
+    if s > 10:
+        return 1
+    if s < 5:
+        return 3
+    return 2
+
+
+def display_rating_value(value, *, scale: int = 5) -> float:
+    """Map a full-precision internal Letterboxd rating (0.5–5) to display units.
+
+    Always ``raw * (scale/5)``. Callers must not round/truncate the 5-point
+    value before this — rounding/formatting happens afterward via
+    ``display_rating_decimals``.
+    """
     num = float(value)
-    return num * 2.0 if ten_point else num
+    return num * (coerce_display_scale(scale, 5) / 5.0)
 
 
-def format_rating_number(value, *, ten_point: bool = False, decimals: int = 2) -> str:
-    """Fixed-decimal rating/average for chart tips (internal value ×2 when on)."""
-    shown = display_rating_value(value, ten_point=ten_point)
-    return f"{shown:.{int(decimals)}f}"
+def format_rating_number(value, *, scale: int = 5, decimals: int | None = None) -> str:
+    """Scale a full-precision 0.5–5 value, then round/format by scale rules."""
+    shown = display_rating_value(value, scale=scale)
+    dp = display_rating_decimals(scale) if decimals is None else int(decimals)
+    rounded = round(shown, dp)
+    if dp <= 0:
+        return str(int(round(rounded)))
+    return f"{rounded:.{dp}f}"
 
 
-def format_rating_compact(value, *, ten_point: bool = False) -> str:
-    """Compact rating for search slots: strip trailing zeros (3.5 → 7 when on)."""
-    shown = display_rating_value(value, ten_point=ten_point)
-    if float(shown).is_integer():
-        return str(int(shown))
-    text = f"{shown:.2f}".rstrip("0").rstrip(".")
+def format_rating_compact(value, *, scale: int = 5) -> str:
+    """Compact rating for search slots: scale, round by scale rules, strip zeros."""
+    shown = display_rating_value(value, scale=scale)
+    dp = display_rating_decimals(scale)
+    rounded = round(shown, dp)
+    if dp <= 0 or float(rounded).is_integer():
+        return str(int(round(rounded)))
+    text = f"{rounded:.{dp}f}".rstrip("0").rstrip(".")
     return text or "—"
 
 
-def average_rating_axis_label(*, ten_point: bool = False) -> str:
+def average_rating_axis_label(*, scale: int = 5) -> str:
     """X/Y label for average-rating charts."""
-    return f"Average rating (out of {10 if ten_point else 5})"
+    scale_n = coerce_display_scale(scale, 5)
+    if scale_n == int(scale_n):
+        return f"Average rating (out of {int(scale_n)})"
+    return f"Average rating (out of {scale_n:g})"
 
 
-def format_count_avg_label(avg, rated, min_rated: int, *, ten_point: bool = False) -> str:
+def format_count_avg_label(avg, rated, min_rated: int, *, scale: int = 5) -> str:
     """Avg annotation for a quantitative bar: the mean only.
 
     Same gate as avg charts (unique rated films ≥ min_rated). Below the gate,
@@ -199,10 +263,10 @@ def format_count_avg_label(avg, rated, min_rated: int, *, ten_point: bool = Fals
         return "—"
     if not (avg_f > 0):
         return "—"
-    return format_rating_number(avg_f, ten_point=ten_point)
+    return format_rating_number(avg_f, scale=scale)
 
 
-def format_single_rating_label(avg, *, ten_point: bool = False) -> str:
+def format_single_rating_label(avg, *, scale: int = 5) -> str:
     """Avg for a single-film bar (Most often in the diary): no rated-count gate."""
     try:
         avg_f = float(avg)
@@ -210,7 +274,7 @@ def format_single_rating_label(avg, *, ten_point: bool = False) -> str:
         return "—"
     if not (avg_f > 0):
         return "—"
-    return format_rating_number(avg_f, ten_point=ten_point)
+    return format_rating_number(avg_f, scale=scale)
 
 
 def _parse_keyword_list(value, *, max_words: int, max_len: int) -> tuple[str, ...]:
@@ -302,7 +366,7 @@ class ChartOptions:
     show_likes: bool = True
     show_reviews: bool = True
     show_top_review: bool = True
-    ten_point_display: bool = False
+    rating_scale: int = RATING_SCALE_DEFAULT
     include_usa: bool = True
     include_english: bool = True
     include_drama: bool = True
@@ -331,6 +395,16 @@ def _day(value: str) -> str | None:
     return text
 
 
+def _rating_scale_from_env(src) -> int:
+    """Prefer LETTERBOXD_RATING_SCALE; legacy TEN_POINT_DISPLAY yes→10 / no→5."""
+    raw = src.get("LETTERBOXD_RATING_SCALE")
+    if raw is not None and str(raw).strip() != "":
+        return clamp_rating_scale(raw, RATING_SCALE_DEFAULT)
+    if "LETTERBOXD_TEN_POINT_DISPLAY" in src:
+        return 10 if parse_bool_flag(src.get("LETTERBOXD_TEN_POINT_DISPLAY"), False) else 5
+    return RATING_SCALE_DEFAULT
+
+
 def read_chart_options(env: dict | None = None) -> ChartOptions:
     src = os.environ if env is None else env
     date_from = _day(src.get("LETTERBOXD_DATE_FROM", ""))
@@ -356,9 +430,7 @@ def read_chart_options(env: dict | None = None) -> ChartOptions:
         show_likes=show_likes,
         show_reviews=show_reviews,
         show_top_review=show_top_review,
-        ten_point_display=parse_bool_flag(
-            src.get("LETTERBOXD_TEN_POINT_DISPLAY"), False
-        ),
+        rating_scale=_rating_scale_from_env(src),
         include_usa=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_USA"), True),
         include_english=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_ENGLISH"), True),
         include_drama=parse_bool_flag(src.get("LETTERBOXD_INCLUDE_DRAMA"), True),

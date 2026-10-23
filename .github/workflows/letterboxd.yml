@@ -48,10 +48,10 @@ on:
         required: false
         default: "true"
         type: string
-      ten_point_display:
-        description: Show rating/average numbers on a 10-point scale (×2; true/false; default false)
+      rating_scale:
+        description: Display scale for rating/average numbers (5, 10, or 100; default 10). Internal values stay 0.5–5.
         required: false
-        default: "false"
+        default: "10"
         type: string
       include_usa:
         description: Include USA in country tops (true/false)
@@ -126,7 +126,7 @@ jobs:
           LETTERBOXD_SHOW_LIKES: ${{ inputs.show_likes }}
           LETTERBOXD_SHOW_REVIEWS: ${{ inputs.show_reviews }}
           LETTERBOXD_SHOW_TOP_REVIEW: ${{ inputs.show_top_review }}
-          LETTERBOXD_TEN_POINT_DISPLAY: ${{ inputs.ten_point_display }}
+          LETTERBOXD_RATING_SCALE: ${{ inputs.rating_scale }}
           LETTERBOXD_INCLUDE_USA: ${{ inputs.include_usa }}
           LETTERBOXD_INCLUDE_ENGLISH: ${{ inputs.include_english }}
           LETTERBOXD_INCLUDE_DRAMA: ${{ inputs.include_drama }}

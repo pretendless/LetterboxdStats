@@ -310,7 +310,7 @@ def test_rewatch_in_averages_mean_and_unique_threshold() -> None:
     assert opts_off.show_likes is True
     assert opts_off.show_reviews is True
     assert opts_off.show_top_review is True
-    assert opts_off.ten_point_display is False
+    assert opts_off.rating_scale == 10
     likes_off = read_chart_options(
         {"LETTERBOXD_SHOW_LIKES": "false", "LETTERBOXD_SHOW_REVIEWS": "no"}
     )
@@ -319,8 +319,15 @@ def test_rewatch_in_averages_mean_and_unique_threshold() -> None:
     assert likes_off.show_top_review is False
     top_off = read_chart_options({"LETTERBOXD_SHOW_TOP_REVIEW": "no"})
     assert top_off.show_top_review is False
+    scale_100 = read_chart_options({"LETTERBOXD_RATING_SCALE": "100"})
+    assert scale_100.rating_scale == 100
+    scale_5 = read_chart_options({"LETTERBOXD_RATING_SCALE": "5"})
+    assert scale_5.rating_scale == 5
+    # Legacy env: yes → 10, no → 5.
     ten_on = read_chart_options({"LETTERBOXD_TEN_POINT_DISPLAY": "true"})
-    assert ten_on.ten_point_display is True
+    assert ten_on.rating_scale == 10
+    ten_off = read_chart_options({"LETTERBOXD_TEN_POINT_DISPLAY": "false"})
+    assert ten_off.rating_scale == 5
 
 
 def test_diary_wins_over_ratings_csv() -> None:
@@ -431,8 +438,8 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert format_count_avg_label(1.94, 17, 3) == "1.94"
     assert format_count_avg_label(4.25, 2, 3) == "—"
     assert format_count_avg_label(None, 5, 3) == "—"
-    assert format_count_avg_label(4.25, 3, 3, ten_point=True) == "8.50"
-    assert format_count_avg_label(3.5, 5, 3, ten_point=True) == "7.00"
+    assert format_count_avg_label(4.25, 3, 3, scale=10) == "8.50"
+    assert format_count_avg_label(3.5, 5, 3, scale=10) == "7.00"
     assert is_usa_country("U.S.A.")
     assert is_usa_country("United States")
     assert not is_usa_country("France")
@@ -506,9 +513,9 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert format_search_rating_slot(5) == "5"
     assert format_search_rating_slot(3.5) == "3.5"
     assert format_search_rating_slot(None) == "—"
-    assert format_search_rating_slot(3.5, ten_point=True) == "7"
-    assert format_search_rating_slot(4.25, ten_point=True) == "8.5"
-    assert format_search_rating_slot(5, ten_point=True) == "10"
+    assert format_search_rating_slot(3.5, scale=10) == "7"
+    assert format_search_rating_slot(4.25, scale=10) == "8.5"
+    assert format_search_rating_slot(5, scale=10) == "10"
     diary_slots = pd.DataFrame(
         [
             {
@@ -579,18 +586,37 @@ def test_count_avg_label_and_usa_english_filter() -> None:
     assert opts.search_keywords == ("Wood", "2001")
     assert format_single_rating_label(4.5) == "4.50"
     assert format_single_rating_label(None) == "—"
-    assert format_single_rating_label(4.5, ten_point=True) == "9.00"
-    assert display_rating_value(3.5, ten_point=True) == 7.0
-    assert format_rating_number(4.25, ten_point=True) == "8.50"
-    assert format_rating_compact(4.25, ten_point=True) == "8.5"
-    assert average_rating_axis_label(ten_point=False) == "Average rating (out of 5)"
-    assert average_rating_axis_label(ten_point=True) == "Average rating (out of 10)"
+    assert format_single_rating_label(4.5, scale=10) == "9.00"
+    assert display_rating_value(3.5, scale=10) == 7.0
+    assert format_rating_number(4.25, scale=10) == "8.50"
+    assert format_rating_compact(4.25, scale=10) == "8.5"
+    assert average_rating_axis_label(scale=5) == "Average rating (out of 5)"
+    assert average_rating_axis_label(scale=10) == "Average rating (out of 10)"
+    assert average_rating_axis_label(scale=100) == "Average rating (out of 100)"
+    # Scale full-precision means, then round — not round-to-2dp then ×(scale/5).
+    # 10/3 ≈ 3.333… → ×2 = 6.666… → "6.67"; round(10/3, 2)*2 would be "6.66".
+    assert format_rating_number(10 / 3, scale=10) == "6.67"
+    assert format_rating_number(10 / 3, scale=5) == "3.33"
+    # scale ≥ 100 → integer after ×(scale/5): 10/3 × 20 ≈ 66.67 → 67
+    assert format_rating_number(10 / 3, scale=100) == "67"
+    assert format_count_avg_label(10 / 3, 5, 3, scale=10) == "6.67"
+    assert format_count_avg_label(10 / 3, 5, 3, scale=100) == "67"
+    # General scale rules (beyond wizard 5/10/100): >10 → 1dp, <5 → 3dp.
+    assert format_rating_number(10 / 3, scale=20) == "13.3"
+    assert format_rating_number(10 / 3, scale=2) == "1.333"
+    from letterboxd_options import display_rating_decimals
+
+    assert display_rating_decimals(100) == 0
+    assert display_rating_decimals(20) == 1
+    assert display_rating_decimals(10) == 2
+    assert display_rating_decimals(5) == 2
+    assert display_rating_decimals(2) == 3
     ten_slots = watch_rating_slots_for_film(
         "The Fellowship of the Ring",
         2001,
         diary_slots,
         {"The Fellowship of the Ring|||2001": 4.0},
-        ten_point=True,
+        scale=10,
     )
     assert ten_slots == ["10", "8", "7"]
 

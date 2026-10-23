@@ -244,16 +244,18 @@ export async function handleLetterboxdDocument(env, message, deps = {}) {
     return true;
   }
 
+  const prompt = letterboxdModePrompt();
+  const sent = await send(env, chatId, prompt.text, { reply_markup: prompt.reply_markup });
+  const promptMessageId = sent && sent.message_id != null ? Number(sent.message_id) : null;
   await kv.put(
     awaitLetterboxdKey(chatId),
     encodeAwaitLetterboxd({
       since: awaiting.since,
       step: "mode",
       fileId,
+      promptMessageId: Number.isFinite(promptMessageId) && promptMessageId > 0 ? promptMessageId : null,
     }),
   );
-  const prompt = letterboxdModePrompt();
-  await send(env, chatId, prompt.text, { reply_markup: prompt.reply_markup });
 
   const notify = () =>
     notifyLoginChatsOfUpload(
@@ -268,8 +270,9 @@ export async function handleLetterboxdDocument(env, message, deps = {}) {
   return true;
 }
 
-async function beginLetterboxdJob(env, chatId, fileId, options, deps) {
+async function beginLetterboxdJob(env, chatId, fileId, options, deps, promptMessageId = null) {
   const send = deps.send;
+  const edit = deps.edit;
   const kv = env.BOT_KV;
   const jobId = newLetterboxdJobId(deps.now);
   const createdAt = typeof deps.now === "function" ? deps.now().toISOString() : new Date().toISOString();
@@ -297,7 +300,18 @@ async function beginLetterboxdJob(env, chatId, fileId, options, deps) {
   );
   await kv.delete(awaitLetterboxdKey(chatId));
   if (await jobCancelled(env, jobId)) return;
-  await send(env, chatId, letterboxdAckText(jobId, options));
+  const ack = letterboxdAckText(jobId, options);
+  // Prefer editing the wizard bubble into the ack so step prompts leave no trail.
+  let ackEdited = false;
+  if (edit && promptMessageId) {
+    try {
+      await edit(env, chatId, promptMessageId, ack, { reply_markup: { inline_keyboard: [] } });
+      ackEdited = true;
+    } catch (err) {
+      console.error("letterboxd ack edit", err && err.message);
+    }
+  }
+  if (!ackEdited) await send(env, chatId, ack);
   await send(env, chatId, letterboxdStartingText());
   const background = async () => {
     if (await jobCancelled(env, jobId)) return;
@@ -314,17 +328,53 @@ async function beginLetterboxdJob(env, chatId, fileId, options, deps) {
   else await background();
 }
 
+async function deliverWizardMessage(env, chatId, msg, promptMessageId, deps) {
+  const send = deps.send;
+  const edit = deps.edit;
+  const extra = msg.reply_markup
+    ? { reply_markup: msg.reply_markup }
+    : { reply_markup: { inline_keyboard: [] } };
+  if (edit && promptMessageId) {
+    try {
+      await edit(env, chatId, promptMessageId, msg.text, extra);
+      return promptMessageId;
+    } catch (err) {
+      console.error("letterboxd wizard edit", err && err.message);
+    }
+  }
+  const sent = await send(env, chatId, msg.text, msg.reply_markup ? { reply_markup: msg.reply_markup } : undefined);
+  const mid = sent && sent.message_id != null ? Number(sent.message_id) : null;
+  return Number.isFinite(mid) && mid > 0 ? mid : promptMessageId;
+}
+
 async function applyLetterboxdWizard(env, chatId, outcome, deps) {
   const kv = env.BOT_KV;
-  const send = deps.send;
-  if (outcome.state && !outcome.clear) {
-    await kv.put(awaitLetterboxdKey(chatId), encodeAwaitLetterboxd(outcome.state));
-  }
+  let promptMessageId =
+    outcome.state && outcome.state.promptMessageId != null
+      ? Number(outcome.state.promptMessageId)
+      : deps.promptMessageId != null
+        ? Number(deps.promptMessageId)
+        : null;
+  if (!Number.isFinite(promptMessageId) || promptMessageId <= 0) promptMessageId = null;
+
   for (const msg of outcome.messages || []) {
-    await send(env, chatId, msg.text, msg.reply_markup ? { reply_markup: msg.reply_markup } : undefined);
+    promptMessageId = await deliverWizardMessage(env, chatId, msg, promptMessageId, deps);
+  }
+
+  if (outcome.state && !outcome.clear) {
+    const next = { ...outcome.state };
+    if (promptMessageId) next.promptMessageId = promptMessageId;
+    await kv.put(awaitLetterboxdKey(chatId), encodeAwaitLetterboxd(next));
   }
   if (outcome.dispatch) {
-    await beginLetterboxdJob(env, chatId, outcome.dispatch.fileId, outcome.dispatch.options, deps);
+    await beginLetterboxdJob(
+      env,
+      chatId,
+      outcome.dispatch.fileId,
+      outcome.dispatch.options,
+      deps,
+      promptMessageId,
+    );
   } else if (outcome.clear) {
     await kv.delete(awaitLetterboxdKey(chatId));
   }
@@ -340,7 +390,10 @@ export async function handleLetterboxdText(env, message, deps = {}) {
   if (!state || state.step === "zip") return false;
   const now = typeof deps.now === "function" ? deps.now() : new Date();
   const outcome = advanceLetterboxdWizard(state, { kind: "text", text: message.text }, now);
-  await applyLetterboxdWizard(env, chatId, outcome, deps);
+  await applyLetterboxdWizard(env, chatId, outcome, {
+    ...deps,
+    promptMessageId: state.promptMessageId,
+  });
   return true;
 }
 
@@ -374,12 +427,23 @@ export async function handleLetterboxdCallback(env, callback, deps = {}) {
     return true;
   }
   await replyCallback(answer, env, callbackId, "");
-  if (deps.clearKeyboard && message.message_id) {
-    await deps.clearKeyboard(env, chatId, message.message_id);
-  }
+  // Edit the same wizard message in place — do not clear markup then send a new bubble.
+  const callbackMessageId = message && message.message_id != null ? Number(message.message_id) : null;
   const now = typeof deps.now === "function" ? deps.now() : new Date();
   const outcome = advanceLetterboxdWizard(state, { kind: "callback", ...parsed }, now);
-  await applyLetterboxdWizard(env, chatId, outcome, deps);
+  if (
+    outcome.state &&
+    !outcome.clear &&
+    Number.isFinite(callbackMessageId) &&
+    callbackMessageId > 0 &&
+    outcome.state.promptMessageId == null
+  ) {
+    outcome.state = { ...outcome.state, promptMessageId: callbackMessageId };
+  }
+  await applyLetterboxdWizard(env, chatId, outcome, {
+    ...deps,
+    promptMessageId: state.promptMessageId || callbackMessageId,
+  });
   return true;
 }
 

@@ -64,7 +64,7 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 | Command | What it does |
 | --- | --- |
-| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), the rating-count threshold for average-rating tops, whether rewatches count in averages, whether to show likes (♥) and reviews (≡), optional Top review (default on), optional 10-point rating numbers (default off), optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. Paste settings reuses a previous `Tops: … Period:` summary from an earlier run. |
+| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), Scale (5 / 10 / 100, default 10), the rating-count threshold for average-rating tops, whether rewatches count in averages, whether to show likes (♥) and reviews (≡), optional Top review (default on), optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. Paste settings reuses a previous `Tops: Scale: … Period:` summary from an earlier run. Wizard steps edit one bot message in place. |
 | `/start letterboxd` | The same wizard. This is what `https://t.me/lebxdbot?start=letterboxd` opens. |
 | `/stop` | Clears the wizard. If a chart run is already in GitHub Actions, it stops that run. |
 
@@ -74,7 +74,9 @@ Dates are month before year. `2021-06.2022` means 2021-01-01 through 2022-06-30.
 
 After the ZIP, the mode step offers **Default**, **Customize**, and **Paste settings**. Paste settings asks for a previous settings paragraph (the line that starts with `Tops:` and ends with `Period:`; when the period is a date range it may also include `No diary date:`). Extra text around that paragraph is fine. A bad paste stays on that step and asks again. The bot’s own summary puts count-top filters and keywords under `Exclude:` (e.g. `Exclude: USA, Drama, "Wood".` when those are filtered out; `Exclude: none.` when nothing is), uses short `Search:` for film-list keywords, and ends with a one-line note that you can paste the summary into Paste settings later. Older summaries with separate `USA: yes/no` fields still parse.
 
-On **Customize**, after top size and the rating-count threshold, the wizard asks whether **previous / rewatch diary views** should count in average ratings.
+On **Customize**, after top size comes **Scale** (5 / 10 / 100, default **10**): tip and axis numbers use `value × (scale/5)` on full-precision 0.5–5 means, then round (scale ≥ 100 → integer; > 10 → 1dp; < 5 → 3dp; else 2dp). Colors, ranking, and thresholds stay on the internal scale. Top review ★/½ stay 5-point. Settings summary: `Scale: 5|10|100.` right after `Tops:` (no `10-point ratings:` line). Paste accepts `Scale:`; older `10-point ratings: yes/no` maps yes→10, no→5; when both appear, Scale wins. Invalid Scale stays on the paste step with an error.
+
+After Scale and the rating-count threshold, the wizard asks whether **previous / rewatch diary views** should count in average ratings.
 
 | Choice | What happens |
 | --- | --- |
@@ -88,8 +90,6 @@ The rating-count **threshold** still needs that many **unique rated films** (Nam
 Next, two yes/no questions: **Show likes (♥)?** and **Show reviews (≡)?** Both default to **yes** (same as Default mode and when unset). **No** on likes omits ♥ everywhere — tips, titles, Most liked panels, Top review panel titles, search hearts, and inside-bar ♥. **No** on reviews omits ≡ everywhere — tips, Most reviewed, search ≡, and inside-bar ≡ — and skips **Show top review?** (forces Top review off). The settings summary records `Likes: yes/no.` and, when Top review is off, `Reviews: yes/no.`; Paste settings accepts those fields (older summaries without them keep both on).
 
 When reviews are on, **Show top review?** (default **yes**; Customize can disable). **Yes** draws an in-plot panel on listed ranking charts (Most often in the diary; release years / genres / countries / directors / actors / languages / studios — watches and higher/lower rating). Corner: bottom-right on watches/count / higher-rating; top-right on lower-rating. The panel walks the drawn top for the highest-ranked row that has a review, then picks among that row’s reviews: highest review/film rating on watches/count tops (and Most often) and on higher-rating charts; lowest on lower-rating charts; when every candidate is unrated, liked films first; then latest review Date (then Name/Year). Text is truncated to 280 characters; the panel shows film title (year), ♥ when that film is liked, pick rating as ★/½ on the next line when rated (omitted when unrated), and review date. If Exclude removes the true top on a count chart, the panel is omitted. **Yes** also lifts the full-slate gate so lower-rating charts still emit. Settings summary: when Top review is on, only `Top review: yes.` (implies reviews on); when off, only `Reviews: yes/no.` — never both lines. Paste: `Top review: yes` turns both on; `Reviews: no` turns both off; legacy dual lines still parse. Missing Top review in older summaries → on (same as Default).
-
-**Show ratings on a 10-point scale?** (default **no**). **Yes** multiplies displayed rating and average numbers by 2 on tips, axes, colorbar ticks, HTML summary averages, and search-keyword rating slots (3.5 → 7.0). Internal Letterboxd 0.5–5 values stay unchanged for colors, ranking, thresholds, and fractional steps. Top review ★/½ glyphs still use the 5-point value. Counts, ♥/≡ totals, percentages, ranks, and years are not multiplied. Settings summary: `10-point ratings: yes/no.`; Paste settings accepts it (missing → no).
 
 Next, the wizard asks whether to remove some rows from the **watch-count** tops.
 
@@ -134,7 +134,7 @@ Description (what Telegram shows on an unused/empty chat, and “What can this b
 
 > Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export ZIP.
 >
-> /start, then the ZIP. Default, Customize, or paste settings. Customize: tops 1–100, threshold, rewatches in averages, likes (♥), reviews (≡), Top review (on by default; panel from highest reviewed rank; unlocks lower-rating charts), 10-point ratings (off by default), Exclude on count tops, Search keywords, watch period. /stop leaves the questions. A started chart run stops too.
+> /start, then the ZIP. Default, Customize, or paste settings. Customize edits one message: tops 1–100, scale 5/10/100 (default 10), threshold, rewatches in averages, likes (♥), reviews (≡), Top review (on by default), Exclude on count tops, Search keywords, watch period. /stop leaves the questions. A started chart run stops too.
 >
 > Author:
 > https://www.last.fm/user/pretendless
