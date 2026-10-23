@@ -378,9 +378,12 @@ function formatExcludeSummaryList(opts) {
   return parts.length ? parts.join(", ") : "none";
 }
 
-/** Footnote under the Tops/…/Period paragraph (English bot copy). */
+/** Footnote under the Tops/…/Period paragraph (HTML italic; ack uses parse_mode HTML). */
 export const LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE =
-  "Paste this into Paste settings on a later run.";
+  "<i>Paste this into Paste settings on a later run.</i>";
+
+/** Accept `Rewatches:` (current) or legacy `Rewatches in averages:`. */
+const REWATCHES_SUMMARY_LABEL = String.raw`Rewatches(?: in averages)?:`;
 
 /** Compact settings paragraph used in the ZIP ack and Paste settings mode. */
 export function formatLetterboxdSettingsSummary(options) {
@@ -396,7 +399,7 @@ export function formatLetterboxdSettingsSummary(options) {
     : `Reviews: ${opts.showReviews ? "yes" : "no"}. `;
   return (
     `Tops: ${opts.topN}. Scale: ${opts.ratingScale}. Threshold: ${opts.minRated}. ` +
-    `Rewatches in averages: ${opts.includeRewatchInAverages ? "yes" : "no"}. ` +
+    `Rewatches: ${opts.includeRewatchInAverages ? "yes" : "no"}. ` +
     `Likes: ${opts.showLikes ? "yes" : "no"}. ` +
     reviewsOrTop +
     `Exclude: ${formatExcludeSummaryList(opts)}. ` +
@@ -437,7 +440,8 @@ const EXCLUDE_SEARCH_PERIOD = String.raw`(?:Keyword exclusions|Exclude):\s*(none
 // Optional trailing legacy `10-point ratings:` is ignored (Scale wins).
 const SETTINGS_SUMMARY_SCALE_TOP_REVIEW_ON_RE = new RegExp(
   SCALE_AFTER_TOPS +
-    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*` +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*` +
     TEN_POINT_SUMMARY_OPT +
     EXCLUDE_SEARCH_PERIOD,
   "i",
@@ -446,7 +450,8 @@ const SETTINGS_SUMMARY_SCALE_TOP_REVIEW_ON_RE = new RegExp(
 // Current emit: Tops + Scale + Threshold … Reviews only (Top review off).
 const SETTINGS_SUMMARY_SCALE_RE = new RegExp(
   SCALE_AFTER_TOPS +
-    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*` +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*` +
     TEN_POINT_SUMMARY_OPT +
     EXCLUDE_SEARCH_PERIOD,
   "i",
@@ -455,7 +460,8 @@ const SETTINGS_SUMMARY_SCALE_RE = new RegExp(
 // Legacy (pre-Scale): Threshold after Tops; optional 10-point ratings after reviews/top.
 const SETTINGS_SUMMARY_TOP_REVIEW_ON_RE = new RegExp(
   TOPS_THRESHOLD +
-    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*` +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*` +
     TEN_POINT_SUMMARY_OPT +
     EXCLUDE_SEARCH_PERIOD,
   "i",
@@ -463,7 +469,8 @@ const SETTINGS_SUMMARY_TOP_REVIEW_ON_RE = new RegExp(
 
 const SETTINGS_SUMMARY_RE = new RegExp(
   TOPS_THRESHOLD +
-    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*` +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*` +
     TEN_POINT_SUMMARY_OPT +
     EXCLUDE_SEARCH_PERIOD,
   "i",
@@ -472,19 +479,28 @@ const SETTINGS_SUMMARY_RE = new RegExp(
 // Legacy dual lines: Reviews + Top review both present (PR #49 emit shape).
 const SETTINGS_SUMMARY_LEGACY_BOTH_RE = new RegExp(
   TOPS_THRESHOLD +
-    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*Top review:\s*(yes|no)\.\s*` +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*Top review:\s*(yes|no)\.\s*` +
     TEN_POINT_SUMMARY_OPT +
     EXCLUDE_SEARCH_PERIOD,
   "i",
 );
 
 // Pre-Likes/Reviews: same Exclude shape, no Likes:/Reviews: fields (default likes/reviews/Top review yes).
-const SETTINGS_SUMMARY_PRE_LIKES_RE =
-  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
+const SETTINGS_SUMMARY_PRE_LIKES_RE = new RegExp(
+  TOPS_THRESHOLD +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\.`,
+  "i",
+);
 
 // Legacy: separate USA/English/Drama/Comedy yes/no fields + keyword-only Exclude.
-const SETTINGS_SUMMARY_LEGACY_RE =
-  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*USA:\s*(yes|no)\.\s*English:\s*(yes|no)\.\s*Drama:\s*(yes|no)\.\s*Comedy:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
+const SETTINGS_SUMMARY_LEGACY_RE = new RegExp(
+  TOPS_THRESHOLD +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*USA:\s*(yes|no)\.\s*English:\s*(yes|no)\.\s*Drama:\s*(yes|no)\.\s*Comedy:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\.`,
+  "i",
+);
 
 const NO_DIARY_DATE_RE = /No diary date:\s*(yes|no)\./i;
 

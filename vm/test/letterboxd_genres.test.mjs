@@ -527,7 +527,8 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
     excludeKeywords: ["Wood", "2001"],
     searchKeywords: ["Elijah Wood"],
   });
-  assert.match(text, /Rewatches in averages: yes/);
+  assert.match(text, /Rewatches: yes/);
+  assert.doesNotMatch(text, /Rewatches in averages:/);
   assert.match(text, /Likes: no/);
   assert.match(text, /Reviews: yes/);
   assert.doesNotMatch(text, /Top review:/);
@@ -536,15 +537,16 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
   assert.match(text, /Search: "Elijah Wood"/);
   assert.doesNotMatch(text, /USA:\s*(yes|no)/);
   assert.doesNotMatch(text, /English:\s*(yes|no)/);
-  assert.match(text, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
+  assert.match(text, /<i>Paste this into Paste settings on a later run\.<\/i>/);
+  assert.equal(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE, "<i>Paste this into Paste settings on a later run.</i>");
   const defaults = letterboxdAckText("lb-2", {});
-  assert.match(defaults, /Rewatches in averages: no/);
+  assert.match(defaults, /Rewatches: no/);
   assert.match(defaults, /Likes: yes/);
   assert.match(defaults, /Top review: yes/);
   assert.doesNotMatch(defaults, /Reviews:/);
   assert.match(defaults, /Scale: 5/);
   assert.match(defaults, /Exclude: none/);
-  assert.match(defaults, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
+  assert.match(defaults, /<i>Paste this into Paste settings on a later run\.<\/i>/);
   const topOn = letterboxdAckText("lb-3", { showTopReview: true });
   assert.match(topOn, /Top review: yes/);
   assert.doesNotMatch(topOn, /Reviews:/);
@@ -571,13 +573,15 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   };
   const summary = formatLetterboxdSettingsSummary(options);
   assert.match(summary, /^Tops: 30\. Scale: 10\. Threshold: 5\./);
+  assert.match(summary, /Rewatches: yes/);
+  assert.doesNotMatch(summary, /Rewatches in averages:/);
   assert.match(summary, /Likes: no/);
   assert.match(summary, /Top review: yes/);
   assert.doesNotMatch(summary, /Reviews:/);
   assert.match(summary, /Exclude: USA, Drama, "Wood", "2001"/);
   assert.match(summary, /Period: 2021-01-01 — 2022-06-30\./);
   assert.match(summary, /No diary date: yes\./);
-  assert.match(summary, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
+  assert.match(summary, /<i>Paste this into Paste settings on a later run\.<\/i>/);
   const noisy =
     "Here is my old ack:\n\nZIP received. Building…\n\n" +
     summary +
@@ -633,6 +637,16 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   assert.equal(parseLetterboxdSettingsSummary(both).ratingScale, 100);
   assert.equal(letterboxdSettingsSummaryHasInvalidScale("Tops: 20. Scale: 7. Threshold: 3."), true);
   assert.equal(letterboxdSettingsSummaryHasInvalidScale(both), false);
+
+  // Compact Rewatches: emit; paste accepts short label and legacy Rewatches in averages:.
+  const shortRew =
+    "Tops: 20. Scale: 5. Threshold: 3. Rewatches: yes. Likes: yes. Top review: yes. " +
+    "Exclude: none. Search: none. Period: full.";
+  assert.equal(parseLetterboxdSettingsSummary(shortRew).includeRewatchInAverages, true);
+  const legacyRew =
+    "Tops: 20. Scale: 5. Threshold: 3. Rewatches in averages: no. Likes: yes. Top review: yes. " +
+    "Exclude: none. Search: none. Period: full.";
+  assert.equal(parseLetterboxdSettingsSummary(legacyRew).includeRewatchInAverages, false);
 
   // Top review off → Reviews line only (no Top review line).
   const fullLine =

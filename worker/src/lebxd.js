@@ -41,7 +41,9 @@ function commandOf(text) {
 }
 
 function telegramParseMode(text) {
-  if (/<b>[\s\S]*<\/b>/.test(String(text ?? ""))) return "HTML";
+  const value = String(text ?? "");
+  // Wizard prompts use <b>; settings-summary footnote uses <i>.
+  if (/<b>[\s\S]*<\/b>/.test(value) || /<i>[\s\S]*<\/i>/.test(value)) return "HTML";
   return undefined;
 }
 
