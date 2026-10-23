@@ -310,7 +310,7 @@ def test_rewatch_in_averages_mean_and_unique_threshold() -> None:
     assert opts_off.show_likes is True
     assert opts_off.show_reviews is True
     assert opts_off.show_top_review is True
-    assert opts_off.rating_scale == 10
+    assert opts_off.rating_scale == 5
     likes_off = read_chart_options(
         {"LETTERBOXD_SHOW_LIKES": "false", "LETTERBOXD_SHOW_REVIEWS": "no"}
     )

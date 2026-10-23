@@ -41,7 +41,16 @@ function commandOf(text) {
 }
 
 function telegramParseMode(text) {
-  if (/<b>[\s\S]*<\/b>/.test(String(text ?? ""))) return "HTML";
+  const value = String(text ?? "");
+  // Wizard prompts use <b>; ZIP ack uses <pre> settings + <i> footnote.
+  if (
+    /<b>[\s\S]*<\/b>/.test(value) ||
+    /<i>[\s\S]*<\/i>/.test(value) ||
+    /<pre>[\s\S]*<\/pre>/.test(value) ||
+    /<code>[\s\S]*<\/code>/.test(value)
+  ) {
+    return "HTML";
+  }
   return undefined;
 }
 

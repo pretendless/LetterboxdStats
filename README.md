@@ -64,7 +64,7 @@ You send the ZIP from Letterboxd → Settings → Import & Export → Export You
 
 | Command | What it does |
 | --- | --- |
-| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), Scale (5 / 10 / 100, default 10), the rating-count threshold for average-rating tops, whether rewatches count in averages, whether to show likes (♥) and reviews (≡), optional Top review (default on), optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. Paste settings reuses a previous `Tops: Scale: … Period:` summary from an earlier run. Wizard steps edit one bot message in place. |
+| `/start` | Asks for the Letterboxd export ZIP, then builds the charts. Default uses the usual set. Customize sets the top size (1–100), Scale (5 / 10 / 100, default 5), the rating-count threshold for average-rating tops, whether rewatches count in averages, whether to show likes (♥) and reviews (≡), optional Top review (default on), optional exclusions from watch-count tops (USA, English, Drama, Comedy, custom exclude keywords), optional search keywords (film lists after charts), the watch period, and films with no diary date. Paste settings reuses a previous `Tops: Scale: … Period:` summary from an earlier run. Wizard steps edit one bot message in place. |
 | `/start letterboxd` | The same wizard. This is what `https://t.me/lebxdbot?start=letterboxd` opens. |
 | `/stop` | Clears the wizard. If a chart run is already in GitHub Actions, it stops that run. |
 
@@ -72,9 +72,9 @@ Dates are month before year. `2021-06.2022` means 2021-01-01 through 2022-06-30.
 
 ## Customize averages and which rows appear
 
-After the ZIP, the mode step offers **Default**, **Customize**, and **Paste settings**. Paste settings asks for a previous settings paragraph (the line that starts with `Tops:` and ends with `Period:`; when the period is a date range it may also include `No diary date:`). Extra text around that paragraph is fine. A bad paste stays on that step and asks again. The bot’s own summary puts count-top filters and keywords under `Exclude:` (e.g. `Exclude: USA, Drama, "Wood".` when those are filtered out; `Exclude: none.` when nothing is), uses short `Search:` for film-list keywords, and ends with a one-line note that you can paste the summary into Paste settings later. Older summaries with separate `USA: yes/no` fields still parse.
+After the ZIP, the mode step offers **Default**, **Customize**, and **Paste settings**. Paste settings asks for a previous settings paragraph (the line that starts with `Tops:` and ends with `Period:`; when the period is a date range it may also include `No diary date:`). Extra text around that paragraph is fine. A bad paste stays on that step and asks again. The bot’s own summary is compact (`Tops: Scale: Threshold: Rewatches: Likes: … Exclude: Search: Period:`), shown as a monospace copyable block in Telegram, puts count-top filters and keywords under `Exclude:` (e.g. `Exclude: USA, Drama, "Wood".` when those are filtered out; `Exclude: none.` when nothing is), uses short `Search:` for film-list keywords, and ends with an italic note (outside the code block) that you can paste the summary into Paste settings later. Paste accepts `Rewatches:` and older `Rewatches in averages:`. Older summaries with separate `USA: yes/no` fields still parse.
 
-On **Customize**, after top size comes **Scale** (5 / 10 / 100, default **10**): tip and axis numbers use `value × (scale/5)` on full-precision 0.5–5 means, then round (scale ≥ 100 → integer; > 10 → 1dp; < 5 → 3dp; else 2dp). Colors, ranking, and thresholds stay on the internal scale. Top review ★/½ stay 5-point. Settings summary: `Scale: 5|10|100.` right after `Tops:` (no `10-point ratings:` line). Paste accepts `Scale:`; older `10-point ratings: yes/no` maps yes→10, no→5; when both appear, Scale wins. Invalid Scale stays on the paste step with an error.
+On **Customize**, after top size comes **Scale** (5 / 10 / 100, default **5**): tip and axis numbers use `value × (scale/5)` on full-precision 0.5–5 means, then round (scale ≥ 100 → integer; > 10 → 1dp; < 5 → 3dp; else 2dp). Colors, ranking, and thresholds stay on the internal scale. Top review ★/½ stay 5-point. Settings summary: `Scale: 5|10|100.` right after `Tops:` (no `10-point ratings:` line). Paste accepts `Scale:`; older `10-point ratings: yes/no` maps yes→10, no→5; when both appear, Scale wins. Invalid Scale stays on the paste step with an error.
 
 After Scale and the rating-count threshold, the wizard asks whether **previous / rewatch diary views** should count in average ratings.
 
@@ -134,7 +134,7 @@ Description (what Telegram shows on an unused/empty chat, and “What can this b
 
 > Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export ZIP.
 >
-> /start, then the ZIP. Default, Customize, or paste settings. Customize edits one message: tops 1–100, scale 5/10/100 (default 10), threshold, rewatches in averages, likes (♥), reviews (≡), Top review (on by default), Exclude on count tops, Search keywords, watch period. /stop leaves the questions. A started chart run stops too.
+> /start, then the ZIP. Default, Customize, or paste settings. Customize edits one message: tops 1–100, scale 5/10/100, threshold, rewatches in averages, likes (♥), reviews (≡), Top review, Exclude on count tops, Search keywords, watch period. /stop leaves the questions. A started chart run stops too.
 >
 > Author:
 > https://www.last.fm/user/pretendless

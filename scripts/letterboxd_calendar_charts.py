@@ -513,7 +513,7 @@ def _place_count_avg_above_totals(
     percent_count=False,
     liked_counts=None,
     reviewed_counts=None,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> None:
     """Count + mean centered above each stacked column total.
 
@@ -650,7 +650,7 @@ def chart_weekday_month(
     reviewed_films=None,
     reviewed_keys=None,
     top_n: int = TOP_N_DEFAULT,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> None:
     """Weekday + month watches stacked by watch year.
 
@@ -888,7 +888,7 @@ def _watch_bucket_key(value, grain: str):
 
 
 def _avg_labels_for_watch_counts(
-    df: pd.DataFrame, index, grain: str, *, rating_scale: int = 10
+    df: pd.DataFrame, index, grain: str, *, rating_scale: int = 5
 ) -> list[str]:
     """Mean beside each watch-count bar. «—» when the bucket has no rating.
 
@@ -922,7 +922,7 @@ def _place_count_avg_above_bars(
     rotation,
     liked_counts=None,
     reviewed_counts=None,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> None:
     """Count in regular white, mean beside it, pair centered on the bar.
 
@@ -1038,7 +1038,7 @@ def chart_views_by_year(
     reviewed_films=None,
     reviewed_keys=None,
     top_n: int = TOP_N_DEFAULT,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> None:
     """Film watches by watch year / month / day.
 
@@ -1174,7 +1174,7 @@ def chart_decade_rating(
     liked_keys=None,
     reviewed_keys=None,
     top_n: int = TOP_N_DEFAULT,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> None:
     """Extra stats: release-decade catalog counts + rating distribution.
 
@@ -1445,7 +1445,7 @@ def _chart_average_rating_line(
     title: str,
     xlabel: str,
     ylabel: str | None = None,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> bool:
     """Line + markers: points colored on the shared rating palette.
 
@@ -1715,7 +1715,7 @@ def chart_average_rating_by_year(
     film_ratings: pd.DataFrame | None = None,
     *,
     grain: str = "year",
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> bool:
     """Mean diary Rating per watch bucket — each rated diary row in its Watched Date bucket.
 
@@ -1750,7 +1750,7 @@ def chart_average_rating_by_release_decade(
     film_ratings: pd.DataFrame | None = None,
     catalog: pd.DataFrame | None = None,
     *,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> bool:
     """Mean Letterboxd Rating per film release decade (ratings.csv ∪ diary).
 
@@ -1837,7 +1837,7 @@ def chart_top_rewatches(
     reviewed_films: pd.DataFrame | None = None,
     show_top_review: bool = False,
     top_review_films: pd.DataFrame | None = None,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> bool:
     """Horizontal stacked bars of rewatched films, colored by watch year.
 

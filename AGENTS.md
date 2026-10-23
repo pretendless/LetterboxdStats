@@ -9,7 +9,7 @@ This file is for Cursor agents working in this repository. It is not user-facing
 - Webhook: `POST https://t2t-box.prtndz.workers.dev/lebxd`
 - Workflow **Set webhook** registers that URL
 - Workflow **Setup bot** writes the English description (empty-chat card), short description (profile), and `/start` `/stop` menu. It does not set the webhook, the display name, or the Start button. The Start button is Telegram's own control on an empty chat; a tap sends `/start`.
-- Description copy lives in `worker/bot_profile.mjs`. `DESCRIPTION` (≤ 512) is the empty-chat / “What can this bot do?” card and ends with an `Author:` block of full https links (not labeled contact). `ABOUT` (≤ 120) is the short profile / share line: product sentence plus `Contact: @prtdz` only. After merge, the user must run **Setup bot** for Telegram to pick up the text.
+- Description copy lives in `worker/bot_profile.mjs`. `DESCRIPTION` (≤ 512) is the empty-chat / “What can this bot do?” card and ends with an `Author:` block of full https links (not labeled contact). Feature copy only — do not list default values (no “Default is …”, no “default 20/4/10”). Keep the Author block unchanged when refreshing. `ABOUT` (≤ 120) is the short profile / share line: product sentence plus `Contact: @prtdz` only. After merge, the user must run **Setup bot** for Telegram to pick up the text.
 
 ## Cloudflare worker
 
@@ -113,11 +113,11 @@ Wizard / Actions / `ChartOptions.show_top_review` (env `LETTERBOXD_SHOW_TOP_REVI
 
 ## Rating scale display
 
-Wizard / Actions / `ChartOptions.rating_scale` (env `LETTERBOXD_RATING_SCALE`). Choices **5**, **10**, **100**; default **10**. Wizard step is 2nd after Tops (Tops → Scale → Threshold → …). Every **displayed** rating / average number is `value × (scale/5)` on full-precision 0.5–5 means (never round-then-scale). After scaling, round by first match: scale ≥ 100 → integer; scale > 10 → 1dp; scale < 5 → 3dp; else (5–10) → 2dp. Tips/HTML/axes use that consistently. Internal ratings stay Letterboxd 0.5–5 for color mapping, ranking, thresholds, and fractional steps. Top review ★/½ stay on the 5-point value. Counts, ♥/≡, percentages, ranks, years are not scaled. Settings summary: `Scale: 5|10|100` (second after `Tops:`). Paste accepts it; legacy `10-point ratings: yes/no` maps yes→10, no→5 (missing legacy → 5).
+Wizard / Actions / `ChartOptions.rating_scale` (env `LETTERBOXD_RATING_SCALE`). Choices **5**, **10**, **100**; default **5**. Wizard step is 2nd after Tops (Tops → Scale → Threshold → …). Every **displayed** rating / average number is `value × (scale/5)` on full-precision 0.5–5 means (never round-then-scale). After scaling, round by first match: scale ≥ 100 → integer; scale > 10 → 1dp; scale < 5 → 3dp; else (5–10) → 2dp. Tips/HTML/axes use that consistently. Internal ratings stay Letterboxd 0.5–5 for color mapping, ranking, thresholds, and fractional steps. Top review ★/½ stay on the 5-point value. Counts, ♥/≡, percentages, ranks, years are not scaled. Settings summary: `Scale: 5|10|100` (second after `Tops:`). Paste accepts it; legacy `10-point ratings: yes/no` maps yes→10, no→5 (missing legacy → 5).
 
 ## Single-message wizard
 
-Customize / mode / step prompts edit **one** Telegram message in place (`editMessageText` + reply markup). Do not send a new bubble per step. Final “ZIP received. Building charts…” + settings summary may edit that same message (preferred) or stay a new message; prefer not leaving a trail of step bubbles.
+Customize / mode / step prompts edit **one** Telegram message in place (`editMessageText` + reply markup). Do not send a new bubble per step. Final “ZIP received. Building charts…” + settings summary may edit that same message (preferred) or stay a new message; prefer not leaving a trail of step bubbles. Copyable summary uses short labels (`Rewatches:`, `Exclude:`, `Search:`); paste accepts legacy `Rewatches in averages:`. The Tops…Period (+ optional No diary date) block is HTML `<pre>…</pre>` for tap-copy; the paste-settings footnote is `<i>…</i>` outside that block; `id:` stays outside. Same HTML `parse_mode` as wizard `<b>` prompts.
 
 
 ## Non-date quantitative count charts

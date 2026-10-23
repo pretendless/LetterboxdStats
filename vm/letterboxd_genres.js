@@ -100,7 +100,7 @@ export const LETTERBOXD_TOP_N_MAX = 100;
 export const LETTERBOXD_MIN_RATED_DEFAULT = 4;
 export const LETTERBOXD_MIN_RATED_MIN = 1;
 export const LETTERBOXD_MIN_RATED_MAX = 50;
-export const LETTERBOXD_RATING_SCALE_DEFAULT = 10;
+export const LETTERBOXD_RATING_SCALE_DEFAULT = 5;
 export const LETTERBOXD_RATING_SCALES = [5, 10, 100];
 export const LETTERBOXD_EXCLUDE_KEYWORDS_MAX = 20;
 export const LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN = 40;
@@ -378,12 +378,35 @@ function formatExcludeSummaryList(opts) {
   return parts.length ? parts.join(", ") : "none";
 }
 
-/** Footnote under the Tops/…/Period paragraph (English bot copy). */
+/** Footnote under the Tops/…/Period paragraph (HTML italic; outside the `<pre>` block). */
 export const LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE =
-  "Paste this into Paste settings on a later run.";
+  "<i>Paste this into Paste settings on a later run.</i>";
 
-/** Compact settings paragraph used in the ZIP ack and Paste settings mode. */
-export function formatLetterboxdSettingsSummary(options) {
+/** Accept `Rewatches:` (current) or legacy `Rewatches in averages:`. */
+const REWATCHES_SUMMARY_LABEL = String.raw`Rewatches(?: in averages)?:`;
+
+function escapeTelegramHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/** Strip Telegram HTML wrappers/entities so paste can reuse an ack bubble. */
+function plainTextForSettingsPaste(text) {
+  let s = String(text || "");
+  s = s.replace(/<\/?(?:pre|code|i|b|em|strong)(?:\s[^>]*)?>/gi, "");
+  s = s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+  return s;
+}
+
+/** Plain Tops…Period (+ optional No diary date) for the copyable block. */
+export function formatLetterboxdSettingsBody(options) {
   const opts = normalizeLetterboxdOptions(options);
   const period = opts.dateFrom ? `${opts.dateFrom} — ${opts.dateTo}` : "full";
   const undated = opts.dateFrom
@@ -396,15 +419,20 @@ export function formatLetterboxdSettingsSummary(options) {
     : `Reviews: ${opts.showReviews ? "yes" : "no"}. `;
   return (
     `Tops: ${opts.topN}. Scale: ${opts.ratingScale}. Threshold: ${opts.minRated}. ` +
-    `Rewatches in averages: ${opts.includeRewatchInAverages ? "yes" : "no"}. ` +
+    `Rewatches: ${opts.includeRewatchInAverages ? "yes" : "no"}. ` +
     `Likes: ${opts.showLikes ? "yes" : "no"}. ` +
     reviewsOrTop +
     `Exclude: ${formatExcludeSummaryList(opts)}. ` +
     `Search: ${formatKeywordSummaryList(opts.searchKeywords)}. ` +
     `Period: ${period}.` +
-    undated +
-    `\n${LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE}`
+    undated
   );
+}
+
+/** Compact settings block for the ZIP ack: `<pre>` copyable body + italic footnote. */
+export function formatLetterboxdSettingsSummary(options) {
+  const body = formatLetterboxdSettingsBody(options);
+  return `<pre>${escapeTelegramHtml(body)}</pre>\n${LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE}`;
 }
 
 function ratingScaleFromTenPointField(raw) {
@@ -422,7 +450,7 @@ function ratingScaleFromSummaryText(src, tenPointRaw) {
 
 /** True when a Scale: field is present but not 5, 10, or 100. */
 export function letterboxdSettingsSummaryHasInvalidScale(text) {
-  const m = String(text || "").match(/Scale:\s*([^\s.]+)\./i);
+  const m = plainTextForSettingsPaste(text).match(/Scale:\s*([^\s.]+)\./i);
   if (!m) return false;
   const n = Number(m[1]);
   return !(Number.isInteger(n) && LETTERBOXD_RATING_SCALES.includes(n));
@@ -437,7 +465,8 @@ const EXCLUDE_SEARCH_PERIOD = String.raw`(?:Keyword exclusions|Exclude):\s*(none
 // Optional trailing legacy `10-point ratings:` is ignored (Scale wins).
 const SETTINGS_SUMMARY_SCALE_TOP_REVIEW_ON_RE = new RegExp(
   SCALE_AFTER_TOPS +
-    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*` +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*` +
     TEN_POINT_SUMMARY_OPT +
     EXCLUDE_SEARCH_PERIOD,
   "i",
@@ -446,7 +475,8 @@ const SETTINGS_SUMMARY_SCALE_TOP_REVIEW_ON_RE = new RegExp(
 // Current emit: Tops + Scale + Threshold … Reviews only (Top review off).
 const SETTINGS_SUMMARY_SCALE_RE = new RegExp(
   SCALE_AFTER_TOPS +
-    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*` +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*` +
     TEN_POINT_SUMMARY_OPT +
     EXCLUDE_SEARCH_PERIOD,
   "i",
@@ -455,7 +485,8 @@ const SETTINGS_SUMMARY_SCALE_RE = new RegExp(
 // Legacy (pre-Scale): Threshold after Tops; optional 10-point ratings after reviews/top.
 const SETTINGS_SUMMARY_TOP_REVIEW_ON_RE = new RegExp(
   TOPS_THRESHOLD +
-    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*` +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*` +
     TEN_POINT_SUMMARY_OPT +
     EXCLUDE_SEARCH_PERIOD,
   "i",
@@ -463,7 +494,8 @@ const SETTINGS_SUMMARY_TOP_REVIEW_ON_RE = new RegExp(
 
 const SETTINGS_SUMMARY_RE = new RegExp(
   TOPS_THRESHOLD +
-    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*` +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*` +
     TEN_POINT_SUMMARY_OPT +
     EXCLUDE_SEARCH_PERIOD,
   "i",
@@ -472,19 +504,28 @@ const SETTINGS_SUMMARY_RE = new RegExp(
 // Legacy dual lines: Reviews + Top review both present (PR #49 emit shape).
 const SETTINGS_SUMMARY_LEGACY_BOTH_RE = new RegExp(
   TOPS_THRESHOLD +
-    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*Top review:\s*(yes|no)\.\s*` +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*Top review:\s*(yes|no)\.\s*` +
     TEN_POINT_SUMMARY_OPT +
     EXCLUDE_SEARCH_PERIOD,
   "i",
 );
 
 // Pre-Likes/Reviews: same Exclude shape, no Likes:/Reviews: fields (default likes/reviews/Top review yes).
-const SETTINGS_SUMMARY_PRE_LIKES_RE =
-  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
+const SETTINGS_SUMMARY_PRE_LIKES_RE = new RegExp(
+  TOPS_THRESHOLD +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\.`,
+  "i",
+);
 
 // Legacy: separate USA/English/Drama/Comedy yes/no fields + keyword-only Exclude.
-const SETTINGS_SUMMARY_LEGACY_RE =
-  /Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*USA:\s*(yes|no)\.\s*English:\s*(yes|no)\.\s*Drama:\s*(yes|no)\.\s*Comedy:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\./i;
+const SETTINGS_SUMMARY_LEGACY_RE = new RegExp(
+  TOPS_THRESHOLD +
+    REWATCHES_SUMMARY_LABEL +
+    String.raw`\s*(yes|no)\.\s*USA:\s*(yes|no)\.\s*English:\s*(yes|no)\.\s*Drama:\s*(yes|no)\.\s*Comedy:\s*(yes|no)\.\s*(?:Keyword exclusions|Exclude):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\.`,
+  "i",
+);
 
 const NO_DIARY_DATE_RE = /No diary date:\s*(yes|no)\./i;
 
@@ -558,7 +599,7 @@ function parsePeriodAndUndated(src, match, periodGroupIndex, yesNo) {
  * Accepts current Tops/Scale/… shape, legacy 10-point ratings, and older forms.
  */
 export function parseLetterboxdSettingsSummary(text) {
-  const src = String(text || "");
+  const src = plainTextForSettingsPaste(text);
   const yesNo = (value) => String(value).toLowerCase() === "yes";
 
   // Current: Tops + Scale + Threshold … Top review: yes.
@@ -1096,8 +1137,8 @@ export function letterboxdScaleKeyboard() {
       button("10", "lb:scale:10"),
       button("100", "lb:scale:100"),
     ]],
-    defaultButtonLabel("", "10"),
-    "lb:scale:10",
+    defaultButtonLabel("", "5"),
+    "lb:scale:5",
   );
 }
 
@@ -1237,7 +1278,7 @@ function promptFor(step, state, now = new Date()) {
         "Scale",
         "Displayed rating and average numbers use this scale (Letterboxd 0.5–5 × scale/5). Colors and ranking stay the same. Tap a button, or type 5, 10, or 100.",
         "5, 10, 100",
-        "10",
+        "5",
       ),
       reply_markup: letterboxdScaleKeyboard(),
     };

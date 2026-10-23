@@ -2803,7 +2803,7 @@ def chart_stacked_count_hbar(
     reviewed_counts: list[int] | None = None,
     most_reviewed: list[tuple[str, int]] | None = None,
     top_review: dict | None = None,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> bool:
     """matrix shape (len(years), len(labels)); labels ordered bottom→top.
 
@@ -3067,7 +3067,7 @@ def chart_rating_vbar(
     ylabel: str | None = None,
     limit: int = TOP_N_DEFAULT,
     ascending: bool = False,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> bool:
     """Vertical bars: X = category, Y = mean rating; color blue→green→red.
 
@@ -3171,7 +3171,7 @@ def chart_rating_hbar(
     top_review: dict | None = None,
     film_ratings: pd.DataFrame | dict | None = None,
     liked_keys: set[str] | frozenset | None = None,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> bool:
     """Horizontal bars for TMDB avg tops.
 
@@ -3526,7 +3526,7 @@ def chart_diary_entity_stacked(
     names_for_row_unfiltered: Callable[[pd.Series], list[str]] | None = None,
     reviewed_films: pd.DataFrame | None = None,
     show_top_review: bool = False,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> bool:
     """Top entities by catalog hits; stack segments by watch year.
 
@@ -3698,7 +3698,7 @@ def chart_release_years_by_count(
     reviewed_keys: set[str] | frozenset | None = None,
     reviewed_films: pd.DataFrame | None = None,
     show_top_review: bool = False,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> bool:
     """Release-year count top stacked by watch year (catalog hits)."""
 
@@ -3743,7 +3743,7 @@ def chart_release_years_by_rating(
     show_top_review: bool = False,
     film_ratings: pd.DataFrame | dict | None = None,
     liked_keys: set[str] | frozenset | None = None,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> bool:
     """«Годы выхода — выше/ниже оценка» as TMDB-style horizontal avg bars.
 

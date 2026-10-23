@@ -2,7 +2,7 @@
 
 Wizard defaults (also the GitHub Actions defaults):
   top_n=20 (allowed 1–100),
-  rating_scale=10 (allowed 5, 10, 100 — display × scale/5; internal 0.5–5),
+  rating_scale=5 (allowed 5, 10, 100 — display × scale/5; internal 0.5–5),
   min_rated=4 (allowed 1–50),
   include_rewatch_in_averages=False (unique-film means),
   show_likes=True, show_reviews=True (♥ / ≡ on charts and search),
@@ -32,7 +32,7 @@ films first; then latest Date; then Name/Year. Liked films get ♥ after the
 panel title. When True it also lifts the full-slate gate so lower-rating
 charts still emit. Customize can turn it off.
 
-rating_scale (default 10; choices 5 / 10 / 100) multiplies **displayed**
+rating_scale (default 5; choices 5 / 10 / 100) multiplies **displayed**
 rating / average numbers by scale/5 (tips, axes, colorbar ticks, HTML, search
 slots). Internal Letterboxd 0.5–5 values stay unchanged for color, ranking,
 thresholds, and fractional steps. Top review ★/½ glyphs still use the 5-point
@@ -62,7 +62,7 @@ MIN_RATED_MIN = 1
 MIN_RATED_MAX = 50
 MIN_RATED_DEFAULT = 4
 RATING_SCALES = (5, 10, 100)
-RATING_SCALE_DEFAULT = 10
+RATING_SCALE_DEFAULT = 5
 EXCLUDE_KEYWORDS_MAX = 20
 EXCLUDE_KEYWORD_MAX_LEN = 40
 SEARCH_KEYWORDS_MAX = EXCLUDE_KEYWORDS_MAX

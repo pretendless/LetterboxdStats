@@ -204,24 +204,24 @@ test("wizard prompts are html, with a default line and examples", () => {
   );
   assert.equal(top.state.topN, 20);
   assert.equal(top.state.step, "scale");
-  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default (10)");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default (5)");
   const scaleText = top.messages[0].text;
   assert.match(scaleText, /<b>Scale<\/b>/);
   assert.match(scaleText, /scale\/5/);
   assert.match(scaleText, /For example: 5, 10, 100/);
-  assert.match(scaleText, /Default: 10/);
+  assert.match(scaleText, /Default: 5/);
   assert.deepEqual(
     top.messages[0].reply_markup.inline_keyboard[0].map((button) => button.text),
     ["5", "10", "100"],
   );
   assert.equal(top.messages[0].reply_markup.inline_keyboard[0][0].callback_data, "lb:scale:5");
-  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].callback_data, "lb:scale:10");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].callback_data, "lb:scale:5");
   const afterScale = advanceLetterboxdWizard(
     top.state,
-    { kind: "callback", step: "scale", value: 10 },
+    { kind: "callback", step: "scale", value: 5 },
     now,
   );
-  assert.equal(afterScale.state.ratingScale, 10);
+  assert.equal(afterScale.state.ratingScale, 5);
   assert.equal(afterScale.state.step, "min_rated");
   assert.equal(afterScale.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default (4)");
   const minText = afterScale.messages[0].text;
@@ -466,8 +466,8 @@ test("every wizard keyboard has a one-tap default button alone on the bottom row
     letterboxdScaleKeyboard().inline_keyboard[0].map((button) => button.text),
     ["5", "10", "100"],
   );
-  assert.equal(last(letterboxdScaleKeyboard()), "Default (10)");
-  assert.equal(letterboxdScaleKeyboard().inline_keyboard.at(-1)[0].callback_data, "lb:scale:10");
+  assert.equal(last(letterboxdScaleKeyboard()), "Default (5)");
+  assert.equal(letterboxdScaleKeyboard().inline_keyboard.at(-1)[0].callback_data, "lb:scale:5");
   assert.equal(lastRow(letterboxdScaleKeyboard()).length, 1);
   assert.deepEqual(
     letterboxdMinKeyboard().inline_keyboard[0].map((button) => button.text),
@@ -527,7 +527,9 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
     excludeKeywords: ["Wood", "2001"],
     searchKeywords: ["Elijah Wood"],
   });
-  assert.match(text, /Rewatches in averages: yes/);
+  assert.match(text, /<pre>Tops:[\s\S]*Period: full\.<\/pre>/);
+  assert.match(text, /Rewatches: yes/);
+  assert.doesNotMatch(text, /Rewatches in averages:/);
   assert.match(text, /Likes: no/);
   assert.match(text, /Reviews: yes/);
   assert.doesNotMatch(text, /Top review:/);
@@ -536,15 +538,18 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
   assert.match(text, /Search: "Elijah Wood"/);
   assert.doesNotMatch(text, /USA:\s*(yes|no)/);
   assert.doesNotMatch(text, /English:\s*(yes|no)/);
-  assert.match(text, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
+  assert.match(text, /<\/pre>\n<i>Paste this into Paste settings on a later run\.<\/i>\n\nid: lb-1$/);
+  assert.doesNotMatch(text, /<pre>[^<]*id:/);
+  assert.equal(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE, "<i>Paste this into Paste settings on a later run.</i>");
   const defaults = letterboxdAckText("lb-2", {});
-  assert.match(defaults, /Rewatches in averages: no/);
+  assert.match(defaults, /<pre>Tops:[\s\S]*Period: full\.<\/pre>/);
+  assert.match(defaults, /Rewatches: no/);
   assert.match(defaults, /Likes: yes/);
   assert.match(defaults, /Top review: yes/);
   assert.doesNotMatch(defaults, /Reviews:/);
-  assert.match(defaults, /Scale: 10/);
+  assert.match(defaults, /Scale: 5/);
   assert.match(defaults, /Exclude: none/);
-  assert.match(defaults, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
+  assert.match(defaults, /<\/pre>\n<i>Paste this into Paste settings on a later run\.<\/i>/);
   const topOn = letterboxdAckText("lb-3", { showTopReview: true });
   assert.match(topOn, /Top review: yes/);
   assert.doesNotMatch(topOn, /Reviews:/);
@@ -570,14 +575,17 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     includeUndated: true,
   };
   const summary = formatLetterboxdSettingsSummary(options);
-  assert.match(summary, /^Tops: 30\. Scale: 10\. Threshold: 5\./);
+  assert.match(summary, /^<pre>Tops: 30\. Scale: 10\. Threshold: 5\./);
+  assert.match(summary, /Rewatches: yes/);
+  assert.doesNotMatch(summary, /Rewatches in averages:/);
   assert.match(summary, /Likes: no/);
   assert.match(summary, /Top review: yes/);
   assert.doesNotMatch(summary, /Reviews:/);
   assert.match(summary, /Exclude: USA, Drama, "Wood", "2001"/);
   assert.match(summary, /Period: 2021-01-01 — 2022-06-30\./);
   assert.match(summary, /No diary date: yes\./);
-  assert.match(summary, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
+  assert.match(summary, /<\/pre>\n<i>Paste this into Paste settings on a later run\.<\/i>$/);
+  assert.doesNotMatch(summary, /<pre>[^<]*<i>/);
   const noisy =
     "Here is my old ack:\n\nZIP received. Building…\n\n" +
     summary +
@@ -607,7 +615,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   for (const scale of [5, 10, 100]) {
     const scaleOptions = { ...options, ratingScale: scale };
     const scaleSummary = formatLetterboxdSettingsSummary(scaleOptions);
-    assert.match(scaleSummary, new RegExp(`^Tops: 30\\. Scale: ${scale}\\. Threshold: 5\\.`));
+    assert.match(scaleSummary, new RegExp(`^<pre>Tops: 30\\. Scale: ${scale}\\. Threshold: 5\\.`));
     assert.doesNotMatch(scaleSummary, /10-point ratings:/);
     assert.deepEqual(parseLetterboxdSettingsSummary(scaleSummary), {
       ...normalizeLetterboxdOptions(scaleOptions),
@@ -633,6 +641,33 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   assert.equal(parseLetterboxdSettingsSummary(both).ratingScale, 100);
   assert.equal(letterboxdSettingsSummaryHasInvalidScale("Tops: 20. Scale: 7. Threshold: 3."), true);
   assert.equal(letterboxdSettingsSummaryHasInvalidScale(both), false);
+
+  // Compact Rewatches: emit; paste accepts short label and legacy Rewatches in averages:.
+  const shortRew =
+    "Tops: 20. Scale: 5. Threshold: 3. Rewatches: yes. Likes: yes. Top review: yes. " +
+    "Exclude: none. Search: none. Period: full.";
+  assert.equal(parseLetterboxdSettingsSummary(shortRew).includeRewatchInAverages, true);
+  const legacyRew =
+    "Tops: 20. Scale: 5. Threshold: 3. Rewatches in averages: no. Likes: yes. Top review: yes. " +
+    "Exclude: none. Search: none. Period: full.";
+  assert.equal(parseLetterboxdSettingsSummary(legacyRew).includeRewatchInAverages, false);
+
+  // `<pre>` wrap + HTML entities round-trip through paste (ampersand in keyword).
+  const ampOpts = {
+    topN: 20,
+    ratingScale: 5,
+    minRated: 4,
+    includeRewatchInAverages: false,
+    showLikes: true,
+    showReviews: true,
+    showTopReview: true,
+    excludeKeywords: ["A & B"],
+    searchKeywords: [],
+  };
+  const ampSummary = formatLetterboxdSettingsSummary(ampOpts);
+  assert.match(ampSummary, /<pre>[\s\S]*A &amp; B[\s\S]*<\/pre>/);
+  assert.deepEqual(parseLetterboxdSettingsSummary(ampSummary).excludeKeywords, ["A & B"]);
+  assert.equal(formatLetterboxdSettingsSummary(parseLetterboxdSettingsSummary(ampSummary)), ampSummary);
 
   // Top review off → Reviews line only (no Top review line).
   const fullLine =
@@ -871,7 +906,7 @@ test("paste settings mode asks for summary then finishes with parsed options", (
     dateFrom: "",
     dateTo: "",
   });
-  assert.match(summary, /^Tops: 10\. Scale: 100\. Threshold: 10\./);
+  assert.match(summary, /^<pre>Tops: 10\. Scale: 100\. Threshold: 10\./);
   assert.doesNotMatch(summary, /10-point ratings:/);
   const ok = advanceLetterboxdWizard(
     ask.state,
@@ -944,7 +979,7 @@ test("buildLetterboxdDispatch", () => {
       show_likes: "true",
       show_reviews: "true",
       show_top_review: "true",
-      rating_scale: "10",
+      rating_scale: "5",
       include_usa: "true",
       include_english: "true",
       include_drama: "true",
