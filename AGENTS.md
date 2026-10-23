@@ -117,7 +117,7 @@ Wizard / Actions / `ChartOptions.rating_scale` (env `LETTERBOXD_RATING_SCALE`). 
 
 ## Single-message wizard
 
-Customize / mode / step prompts edit **one** Telegram message in place (`editMessageText` + reply markup). Do not send a new bubble per step. Final “ZIP received. Building charts…” + settings summary may edit that same message (preferred) or stay a new message; prefer not leaving a trail of step bubbles.
+Customize / mode / step prompts edit **one** Telegram message in place (`editMessageText` + reply markup). Do not send a new bubble per step. Final “ZIP received. Building charts…” + settings summary may edit that same message (preferred) or stay a new message; prefer not leaving a trail of step bubbles. Copyable summary uses short labels (`Rewatches:`, `Exclude:`, `Search:`); paste accepts legacy `Rewatches in averages:`. The paste-settings footnote is HTML `<i>…</i>` (same HTML `parse_mode` as wizard `<b>` prompts).
 
 
 ## Non-date quantitative count charts
