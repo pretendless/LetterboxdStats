@@ -527,6 +527,7 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
     excludeKeywords: ["Wood", "2001"],
     searchKeywords: ["Elijah Wood"],
   });
+  assert.match(text, /<pre>Tops:[\s\S]*Period: full\.<\/pre>/);
   assert.match(text, /Rewatches: yes/);
   assert.doesNotMatch(text, /Rewatches in averages:/);
   assert.match(text, /Likes: no/);
@@ -537,16 +538,18 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
   assert.match(text, /Search: "Elijah Wood"/);
   assert.doesNotMatch(text, /USA:\s*(yes|no)/);
   assert.doesNotMatch(text, /English:\s*(yes|no)/);
-  assert.match(text, /<i>Paste this into Paste settings on a later run\.<\/i>/);
+  assert.match(text, /<\/pre>\n<i>Paste this into Paste settings on a later run\.<\/i>\n\nid: lb-1$/);
+  assert.doesNotMatch(text, /<pre>[^<]*id:/);
   assert.equal(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE, "<i>Paste this into Paste settings on a later run.</i>");
   const defaults = letterboxdAckText("lb-2", {});
+  assert.match(defaults, /<pre>Tops:[\s\S]*Period: full\.<\/pre>/);
   assert.match(defaults, /Rewatches: no/);
   assert.match(defaults, /Likes: yes/);
   assert.match(defaults, /Top review: yes/);
   assert.doesNotMatch(defaults, /Reviews:/);
   assert.match(defaults, /Scale: 5/);
   assert.match(defaults, /Exclude: none/);
-  assert.match(defaults, /<i>Paste this into Paste settings on a later run\.<\/i>/);
+  assert.match(defaults, /<\/pre>\n<i>Paste this into Paste settings on a later run\.<\/i>/);
   const topOn = letterboxdAckText("lb-3", { showTopReview: true });
   assert.match(topOn, /Top review: yes/);
   assert.doesNotMatch(topOn, /Reviews:/);
@@ -572,7 +575,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     includeUndated: true,
   };
   const summary = formatLetterboxdSettingsSummary(options);
-  assert.match(summary, /^Tops: 30\. Scale: 10\. Threshold: 5\./);
+  assert.match(summary, /^<pre>Tops: 30\. Scale: 10\. Threshold: 5\./);
   assert.match(summary, /Rewatches: yes/);
   assert.doesNotMatch(summary, /Rewatches in averages:/);
   assert.match(summary, /Likes: no/);
@@ -581,7 +584,8 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   assert.match(summary, /Exclude: USA, Drama, "Wood", "2001"/);
   assert.match(summary, /Period: 2021-01-01 — 2022-06-30\./);
   assert.match(summary, /No diary date: yes\./);
-  assert.match(summary, /<i>Paste this into Paste settings on a later run\.<\/i>/);
+  assert.match(summary, /<\/pre>\n<i>Paste this into Paste settings on a later run\.<\/i>$/);
+  assert.doesNotMatch(summary, /<pre>[^<]*<i>/);
   const noisy =
     "Here is my old ack:\n\nZIP received. Building…\n\n" +
     summary +
@@ -611,7 +615,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   for (const scale of [5, 10, 100]) {
     const scaleOptions = { ...options, ratingScale: scale };
     const scaleSummary = formatLetterboxdSettingsSummary(scaleOptions);
-    assert.match(scaleSummary, new RegExp(`^Tops: 30\\. Scale: ${scale}\\. Threshold: 5\\.`));
+    assert.match(scaleSummary, new RegExp(`^<pre>Tops: 30\\. Scale: ${scale}\\. Threshold: 5\\.`));
     assert.doesNotMatch(scaleSummary, /10-point ratings:/);
     assert.deepEqual(parseLetterboxdSettingsSummary(scaleSummary), {
       ...normalizeLetterboxdOptions(scaleOptions),
@@ -647,6 +651,23 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     "Tops: 20. Scale: 5. Threshold: 3. Rewatches in averages: no. Likes: yes. Top review: yes. " +
     "Exclude: none. Search: none. Period: full.";
   assert.equal(parseLetterboxdSettingsSummary(legacyRew).includeRewatchInAverages, false);
+
+  // `<pre>` wrap + HTML entities round-trip through paste (ampersand in keyword).
+  const ampOpts = {
+    topN: 20,
+    ratingScale: 5,
+    minRated: 4,
+    includeRewatchInAverages: false,
+    showLikes: true,
+    showReviews: true,
+    showTopReview: true,
+    excludeKeywords: ["A & B"],
+    searchKeywords: [],
+  };
+  const ampSummary = formatLetterboxdSettingsSummary(ampOpts);
+  assert.match(ampSummary, /<pre>[\s\S]*A &amp; B[\s\S]*<\/pre>/);
+  assert.deepEqual(parseLetterboxdSettingsSummary(ampSummary).excludeKeywords, ["A & B"]);
+  assert.equal(formatLetterboxdSettingsSummary(parseLetterboxdSettingsSummary(ampSummary)), ampSummary);
 
   // Top review off → Reviews line only (no Top review line).
   const fullLine =
@@ -885,7 +906,7 @@ test("paste settings mode asks for summary then finishes with parsed options", (
     dateFrom: "",
     dateTo: "",
   });
-  assert.match(summary, /^Tops: 10\. Scale: 100\. Threshold: 10\./);
+  assert.match(summary, /^<pre>Tops: 10\. Scale: 100\. Threshold: 10\./);
   assert.doesNotMatch(summary, /10-point ratings:/);
   const ok = advanceLetterboxdWizard(
     ask.state,

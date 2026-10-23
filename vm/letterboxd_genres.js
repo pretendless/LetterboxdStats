@@ -378,15 +378,35 @@ function formatExcludeSummaryList(opts) {
   return parts.length ? parts.join(", ") : "none";
 }
 
-/** Footnote under the Tops/…/Period paragraph (HTML italic; ack uses parse_mode HTML). */
+/** Footnote under the Tops/…/Period paragraph (HTML italic; outside the `<pre>` block). */
 export const LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE =
   "<i>Paste this into Paste settings on a later run.</i>";
 
 /** Accept `Rewatches:` (current) or legacy `Rewatches in averages:`. */
 const REWATCHES_SUMMARY_LABEL = String.raw`Rewatches(?: in averages)?:`;
 
-/** Compact settings paragraph used in the ZIP ack and Paste settings mode. */
-export function formatLetterboxdSettingsSummary(options) {
+function escapeTelegramHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/** Strip Telegram HTML wrappers/entities so paste can reuse an ack bubble. */
+function plainTextForSettingsPaste(text) {
+  let s = String(text || "");
+  s = s.replace(/<\/?(?:pre|code|i|b|em|strong)(?:\s[^>]*)?>/gi, "");
+  s = s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+  return s;
+}
+
+/** Plain Tops…Period (+ optional No diary date) for the copyable block. */
+export function formatLetterboxdSettingsBody(options) {
   const opts = normalizeLetterboxdOptions(options);
   const period = opts.dateFrom ? `${opts.dateFrom} — ${opts.dateTo}` : "full";
   const undated = opts.dateFrom
@@ -405,9 +425,14 @@ export function formatLetterboxdSettingsSummary(options) {
     `Exclude: ${formatExcludeSummaryList(opts)}. ` +
     `Search: ${formatKeywordSummaryList(opts.searchKeywords)}. ` +
     `Period: ${period}.` +
-    undated +
-    `\n${LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE}`
+    undated
   );
+}
+
+/** Compact settings block for the ZIP ack: `<pre>` copyable body + italic footnote. */
+export function formatLetterboxdSettingsSummary(options) {
+  const body = formatLetterboxdSettingsBody(options);
+  return `<pre>${escapeTelegramHtml(body)}</pre>\n${LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE}`;
 }
 
 function ratingScaleFromTenPointField(raw) {
@@ -425,7 +450,7 @@ function ratingScaleFromSummaryText(src, tenPointRaw) {
 
 /** True when a Scale: field is present but not 5, 10, or 100. */
 export function letterboxdSettingsSummaryHasInvalidScale(text) {
-  const m = String(text || "").match(/Scale:\s*([^\s.]+)\./i);
+  const m = plainTextForSettingsPaste(text).match(/Scale:\s*([^\s.]+)\./i);
   if (!m) return false;
   const n = Number(m[1]);
   return !(Number.isInteger(n) && LETTERBOXD_RATING_SCALES.includes(n));
@@ -574,7 +599,7 @@ function parsePeriodAndUndated(src, match, periodGroupIndex, yesNo) {
  * Accepts current Tops/Scale/… shape, legacy 10-point ratings, and older forms.
  */
 export function parseLetterboxdSettingsSummary(text) {
-  const src = String(text || "");
+  const src = plainTextForSettingsPaste(text);
   const yesNo = (value) => String(value).toLowerCase() === "yes";
 
   // Current: Tops + Scale + Threshold … Top review: yes.
