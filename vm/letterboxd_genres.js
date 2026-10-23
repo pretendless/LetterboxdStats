@@ -100,6 +100,8 @@ export const LETTERBOXD_TOP_N_MAX = 100;
 export const LETTERBOXD_MIN_RATED_DEFAULT = 4;
 export const LETTERBOXD_MIN_RATED_MIN = 1;
 export const LETTERBOXD_MIN_RATED_MAX = 50;
+export const LETTERBOXD_RATING_SCALE_DEFAULT = 10;
+export const LETTERBOXD_RATING_SCALES = [5, 10, 100];
 export const LETTERBOXD_EXCLUDE_KEYWORDS_MAX = 20;
 export const LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN = 40;
 export const LETTERBOXD_SEARCH_KEYWORDS_MAX = LETTERBOXD_EXCLUDE_KEYWORDS_MAX;
@@ -113,7 +115,7 @@ export function defaultLetterboxdOptions() {
     showLikes: true,
     showReviews: true,
     showTopReview: true,
-    tenPointDisplay: false,
+    ratingScale: LETTERBOXD_RATING_SCALE_DEFAULT,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -175,6 +177,13 @@ function clampInt(value, min, max, fallback) {
   return n;
 }
 
+function clampRatingScale(value, fallback = LETTERBOXD_RATING_SCALE_DEFAULT) {
+  const n = Number(value);
+  if (!Number.isInteger(n)) return fallback;
+  if (!LETTERBOXD_RATING_SCALES.includes(n)) return fallback;
+  return n;
+}
+
 export function normalizeLetterboxdOptions(options) {
   const src = options && typeof options === "object" ? options : {};
   const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(src.dateFrom || "")) ? String(src.dateFrom) : "";
@@ -195,7 +204,7 @@ export function normalizeLetterboxdOptions(options) {
     showLikes: src.showLikes == null ? true : Boolean(src.showLikes),
     showReviews,
     showTopReview,
-    tenPointDisplay: src.tenPointDisplay == null ? false : Boolean(src.tenPointDisplay),
+    ratingScale: clampRatingScale(src.ratingScale, LETTERBOXD_RATING_SCALE_DEFAULT),
     includeUSA: src.includeUSA == null ? true : Boolean(src.includeUSA),
     includeEnglish: src.includeEnglish == null ? true : Boolean(src.includeEnglish),
     includeDrama: src.includeDrama == null ? true : Boolean(src.includeDrama),
@@ -223,7 +232,11 @@ export function encodeAwaitLetterboxd(state = {}) {
   if (state.showLikes != null) out.showLikes = Boolean(state.showLikes);
   if (state.showReviews != null) out.showReviews = Boolean(state.showReviews);
   if (state.showTopReview != null) out.showTopReview = Boolean(state.showTopReview);
-  if (state.tenPointDisplay != null) out.tenPointDisplay = Boolean(state.tenPointDisplay);
+  if (state.ratingScale != null) out.ratingScale = clampRatingScale(state.ratingScale);
+  if (state.promptMessageId != null) {
+    const mid = Number(state.promptMessageId);
+    if (Number.isFinite(mid) && mid > 0) out.promptMessageId = mid;
+  }
   if (state.includeUSA != null) out.includeUSA = Boolean(state.includeUSA);
   if (state.includeEnglish != null) out.includeEnglish = Boolean(state.includeEnglish);
   if (state.includeDrama != null) out.includeDrama = Boolean(state.includeDrama);
@@ -262,7 +275,8 @@ export function decodeAwaitLetterboxd(raw) {
       showLikes: parsed.showLikes == null ? null : Boolean(parsed.showLikes),
       showReviews: parsed.showReviews == null ? null : Boolean(parsed.showReviews),
       showTopReview: parsed.showTopReview == null ? null : Boolean(parsed.showTopReview),
-      tenPointDisplay: parsed.tenPointDisplay == null ? null : Boolean(parsed.tenPointDisplay),
+      ratingScale: parsed.ratingScale == null ? null : clampRatingScale(parsed.ratingScale, null),
+      promptMessageId: parsed.promptMessageId == null ? null : Number(parsed.promptMessageId) || null,
       includeUSA: parsed.includeUSA == null ? null : Boolean(parsed.includeUSA),
       includeEnglish: parsed.includeEnglish == null ? null : Boolean(parsed.includeEnglish),
       includeDrama: parsed.includeDrama == null ? null : Boolean(parsed.includeDrama),
@@ -381,11 +395,10 @@ export function formatLetterboxdSettingsSummary(options) {
     ? "Top review: yes. "
     : `Reviews: ${opts.showReviews ? "yes" : "no"}. `;
   return (
-    `Tops: ${opts.topN}. Threshold: ${opts.minRated}. ` +
+    `Tops: ${opts.topN}. Scale: ${opts.ratingScale}. Threshold: ${opts.minRated}. ` +
     `Rewatches in averages: ${opts.includeRewatchInAverages ? "yes" : "no"}. ` +
     `Likes: ${opts.showLikes ? "yes" : "no"}. ` +
     reviewsOrTop +
-    `10-point ratings: ${opts.tenPointDisplay ? "yes" : "no"}. ` +
     `Exclude: ${formatExcludeSummaryList(opts)}. ` +
     `Search: ${formatKeywordSummaryList(opts.searchKeywords)}. ` +
     `Period: ${period}.` +
@@ -394,25 +407,74 @@ export function formatLetterboxdSettingsSummary(options) {
   );
 }
 
-// Optional field: older summaries omit it (default off).
-const TEN_POINT_SUMMARY_OPT =
-  "(?:10-point ratings:\\s*(yes|no)\\.\\s*)?";
+function ratingScaleFromTenPointField(raw) {
+  // Legacy `10-point ratings: yes/no` — missing → 5 (old default off).
+  if (raw == null) return 5;
+  return String(raw).toLowerCase() === "yes" ? 10 : 5;
+}
 
-// Current when Top review is on: Likes + Top review: yes (Reviews omitted; implies on).
-const SETTINGS_SUMMARY_TOP_REVIEW_ON_RE = new RegExp(
-  String.raw`Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*${TEN_POINT_SUMMARY_OPT}(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\.`,
+/** Prefer explicit Scale: 5|10|100 over legacy 10-point when both appear. */
+function ratingScaleFromSummaryText(src, tenPointRaw) {
+  const scaleMatch = String(src || "").match(/Scale:\s*(5|10|100)\./i);
+  if (scaleMatch) return Number(scaleMatch[1]);
+  return ratingScaleFromTenPointField(tenPointRaw);
+}
+
+/** True when a Scale: field is present but not 5, 10, or 100. */
+export function letterboxdSettingsSummaryHasInvalidScale(text) {
+  const m = String(text || "").match(/Scale:\s*([^\s.]+)\./i);
+  if (!m) return false;
+  const n = Number(m[1]);
+  return !(Number.isInteger(n) && LETTERBOXD_RATING_SCALES.includes(n));
+}
+
+const SCALE_AFTER_TOPS = String.raw`Tops:\s*(\d+)\.\s*Scale:\s*(5|10|100)\.\s*Threshold:\s*(\d+)\.\s*`;
+const TOPS_THRESHOLD = String.raw`Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*`;
+const TEN_POINT_SUMMARY_OPT = String.raw`(?:10-point ratings:\s*(yes|no)\.\s*)?`;
+const EXCLUDE_SEARCH_PERIOD = String.raw`(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\.`;
+
+// Current emit: Tops + Scale + Threshold … Top review on.
+// Optional trailing legacy `10-point ratings:` is ignored (Scale wins).
+const SETTINGS_SUMMARY_SCALE_TOP_REVIEW_ON_RE = new RegExp(
+  SCALE_AFTER_TOPS +
+    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*` +
+    TEN_POINT_SUMMARY_OPT +
+    EXCLUDE_SEARCH_PERIOD,
   "i",
 );
 
-// Current when Top review is off: Likes + Reviews only (no Top review line).
+// Current emit: Tops + Scale + Threshold … Reviews only (Top review off).
+const SETTINGS_SUMMARY_SCALE_RE = new RegExp(
+  SCALE_AFTER_TOPS +
+    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*` +
+    TEN_POINT_SUMMARY_OPT +
+    EXCLUDE_SEARCH_PERIOD,
+  "i",
+);
+
+// Legacy (pre-Scale): Threshold after Tops; optional 10-point ratings after reviews/top.
+const SETTINGS_SUMMARY_TOP_REVIEW_ON_RE = new RegExp(
+  TOPS_THRESHOLD +
+    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Top review:\s*yes\.\s*` +
+    TEN_POINT_SUMMARY_OPT +
+    EXCLUDE_SEARCH_PERIOD,
+  "i",
+);
+
 const SETTINGS_SUMMARY_RE = new RegExp(
-  String.raw`Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*${TEN_POINT_SUMMARY_OPT}(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\.`,
+  TOPS_THRESHOLD +
+    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*` +
+    TEN_POINT_SUMMARY_OPT +
+    EXCLUDE_SEARCH_PERIOD,
   "i",
 );
 
 // Legacy dual lines: Reviews + Top review both present (PR #49 emit shape).
 const SETTINGS_SUMMARY_LEGACY_BOTH_RE = new RegExp(
-  String.raw`Tops:\s*(\d+)\.\s*Threshold:\s*(\d+)\.\s*Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*Top review:\s*(yes|no)\.\s*${TEN_POINT_SUMMARY_OPT}(?:Keyword exclusions|Exclude):\s*(none|(?:(?:"[^"]*"|USA|English|Drama|Comedy)(?:\s*,\s*(?:"[^"]*"|USA|English|Drama|Comedy))*))\.\s*(?:Search keywords|Search):\s*(none|(?:"[^"]*"(?:\s*,\s*"[^"]*")*))\.\s*Period:\s*(full|\d{4}-\d{2}-\d{2}\s*[—–-]\s*\d{4}-\d{2}-\d{2})\.`,
+  TOPS_THRESHOLD +
+    String.raw`Rewatches in averages:\s*(yes|no)\.\s*Likes:\s*(yes|no)\.\s*Reviews:\s*(yes|no)\.\s*Top review:\s*(yes|no)\.\s*` +
+    TEN_POINT_SUMMARY_OPT +
+    EXCLUDE_SEARCH_PERIOD,
   "i",
 );
 
@@ -493,11 +555,76 @@ function parsePeriodAndUndated(src, match, periodGroupIndex, yesNo) {
 /**
  * Locate and parse a settings summary paragraph (from formatLetterboxdSettingsSummary)
  * inside arbitrary surrounding text. Returns normalized options, or null.
- * Accepts the current Exclude shape and legacy USA:/Keyword exclusions: forms.
+ * Accepts current Tops/Scale/… shape, legacy 10-point ratings, and older forms.
  */
 export function parseLetterboxdSettingsSummary(text) {
   const src = String(text || "");
   const yesNo = (value) => String(value).toLowerCase() === "yes";
+
+  // Current: Tops + Scale + Threshold … Top review: yes.
+  // Groups: 1 topN 2 scale 3 minRated 4 rewatch 5 likes 6 tenPoint? 7 exclude 8 search 9 period
+  const scaleTopOn = src.match(SETTINGS_SUMMARY_SCALE_TOP_REVIEW_ON_RE);
+  if (scaleTopOn) {
+    const topN = Number(scaleTopOn[1]);
+    const ratingScale = Number(scaleTopOn[2]);
+    const minRated = Number(scaleTopOn[3]);
+    if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
+    if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
+    if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
+    if (![5, 10, 100].includes(ratingScale)) return null;
+    const period = parsePeriodAndUndated(src, scaleTopOn, 9, yesNo);
+    if (!period) return null;
+    const exclude = parseExcludeSummaryList(scaleTopOn[7]);
+    return normalizeLetterboxdOptions({
+      topN,
+      ratingScale,
+      minRated,
+      includeRewatchInAverages: yesNo(scaleTopOn[4]),
+      showLikes: yesNo(scaleTopOn[5]),
+      showReviews: true,
+      showTopReview: true,
+      includeUSA: exclude.includeUSA,
+      includeEnglish: exclude.includeEnglish,
+      includeDrama: exclude.includeDrama,
+      includeComedy: exclude.includeComedy,
+      excludeKeywords: exclude.excludeKeywords,
+      searchKeywords: parseQuotedKeywordList(scaleTopOn[8]),
+      ...period,
+    });
+  }
+
+  // Current: Tops + Scale + Threshold … Reviews only.
+  // Groups: 1 topN 2 scale 3 minRated 4 rewatch 5 likes 6 reviews 7 tenPoint? 8 exclude 9 search 10 period
+  const scaleCurrent = src.match(SETTINGS_SUMMARY_SCALE_RE);
+  if (scaleCurrent) {
+    const topN = Number(scaleCurrent[1]);
+    const ratingScale = Number(scaleCurrent[2]);
+    const minRated = Number(scaleCurrent[3]);
+    if (!Number.isInteger(topN) || !Number.isInteger(minRated)) return null;
+    if (topN < LETTERBOXD_TOP_N_MIN || topN > LETTERBOXD_TOP_N_MAX) return null;
+    if (minRated < LETTERBOXD_MIN_RATED_MIN || minRated > LETTERBOXD_MIN_RATED_MAX) return null;
+    if (![5, 10, 100].includes(ratingScale)) return null;
+    const period = parsePeriodAndUndated(src, scaleCurrent, 10, yesNo);
+    if (!period) return null;
+    const exclude = parseExcludeSummaryList(scaleCurrent[8]);
+    const reviewsOn = yesNo(scaleCurrent[6]);
+    return normalizeLetterboxdOptions({
+      topN,
+      ratingScale,
+      minRated,
+      includeRewatchInAverages: yesNo(scaleCurrent[4]),
+      showLikes: yesNo(scaleCurrent[5]),
+      showReviews: reviewsOn,
+      showTopReview: false,
+      includeUSA: exclude.includeUSA,
+      includeEnglish: exclude.includeEnglish,
+      includeDrama: exclude.includeDrama,
+      includeComedy: exclude.includeComedy,
+      excludeKeywords: exclude.excludeKeywords,
+      searchKeywords: parseQuotedKeywordList(scaleCurrent[9]),
+      ...period,
+    });
+  }
 
   // Legacy dual lines (Reviews + Top review) before single-field shapes.
   // Groups: 1 topN 2 minRated 3 rewatch 4 likes 5 reviews 6 top 7 tenPoint?
@@ -513,7 +640,6 @@ export function parseLetterboxdSettingsSummary(text) {
     if (!period) return null;
     const exclude = parseExcludeSummaryList(legacyBoth[8]);
     const reviewsOn = yesNo(legacyBoth[5]);
-    // Reviews: no ⇒ both off; Top review: yes ⇒ reviews on + top review on.
     const topOn = reviewsOn && yesNo(legacyBoth[6]);
     return normalizeLetterboxdOptions({
       topN,
@@ -522,7 +648,7 @@ export function parseLetterboxdSettingsSummary(text) {
       showLikes: yesNo(legacyBoth[4]),
       showReviews: reviewsOn || topOn,
       showTopReview: topOn,
-      tenPointDisplay: legacyBoth[7] == null ? false : yesNo(legacyBoth[7]),
+      ratingScale: ratingScaleFromSummaryText(src, legacyBoth[7]),
       includeUSA: exclude.includeUSA,
       includeEnglish: exclude.includeEnglish,
       includeDrama: exclude.includeDrama,
@@ -533,7 +659,7 @@ export function parseLetterboxdSettingsSummary(text) {
     });
   }
 
-  // Top review: yes alone ⇒ show_reviews=true and top_review=true.
+  // Legacy Top review: yes alone (optional 10-point ratings).
   // Groups: 1 topN 2 minRated 3 rewatch 4 likes 5 tenPoint? 6 exclude 7 search 8 period
   const topReviewOn = src.match(SETTINGS_SUMMARY_TOP_REVIEW_ON_RE);
   if (topReviewOn) {
@@ -552,7 +678,7 @@ export function parseLetterboxdSettingsSummary(text) {
       showLikes: yesNo(topReviewOn[4]),
       showReviews: true,
       showTopReview: true,
-      tenPointDisplay: topReviewOn[5] == null ? false : yesNo(topReviewOn[5]),
+      ratingScale: ratingScaleFromSummaryText(src, topReviewOn[5]),
       includeUSA: exclude.includeUSA,
       includeEnglish: exclude.includeEnglish,
       includeDrama: exclude.includeDrama,
@@ -563,7 +689,7 @@ export function parseLetterboxdSettingsSummary(text) {
     });
   }
 
-  // Reviews: yes/no only (Top review off). Reviews: no ⇒ top review stays off.
+  // Legacy Reviews only (optional 10-point ratings).
   // Groups: 1 topN 2 minRated 3 rewatch 4 likes 5 reviews 6 tenPoint? 7 exclude 8 search 9 period
   const current = src.match(SETTINGS_SUMMARY_RE);
   if (current) {
@@ -583,7 +709,7 @@ export function parseLetterboxdSettingsSummary(text) {
       showLikes: yesNo(current[4]),
       showReviews: reviewsOn,
       showTopReview: false,
-      tenPointDisplay: current[6] == null ? false : yesNo(current[6]),
+      ratingScale: ratingScaleFromSummaryText(src, current[6]),
       includeUSA: exclude.includeUSA,
       includeEnglish: exclude.includeEnglish,
       includeDrama: exclude.includeDrama,
@@ -611,7 +737,7 @@ export function parseLetterboxdSettingsSummary(text) {
       showLikes: true,
       showReviews: true,
       showTopReview: true,
-      tenPointDisplay: false,
+      ratingScale: ratingScaleFromSummaryText(src, null),
       includeUSA: exclude.includeUSA,
       includeEnglish: exclude.includeEnglish,
       includeDrama: exclude.includeDrama,
@@ -639,7 +765,7 @@ export function parseLetterboxdSettingsSummary(text) {
     showLikes: true,
     showReviews: true,
     showTopReview: true,
-    tenPointDisplay: false,
+    ratingScale: ratingScaleFromSummaryText(src, null),
     includeUSA: yesNo(legacy[4]),
     includeEnglish: yesNo(legacy[5]),
     includeDrama: yesNo(legacy[6]),
@@ -651,7 +777,10 @@ export function parseLetterboxdSettingsSummary(text) {
 }
 
 export const LETTERBOXD_PASTE_SETTINGS_RETRY =
-  "Could not parse that settings summary. Paste the Tops: … Period: paragraph. Charts have not started.";
+  "Could not parse that settings summary. Paste the Tops: … Period: paragraph (include Scale: 5, 10, or 100). Charts have not started.";
+
+export const LETTERBOXD_PASTE_SCALE_RETRY =
+  "Scale must be 5, 10, or 100. Paste the Tops: … Period: paragraph. Charts have not started.";
 
 export function letterboxdAckText(jobId, options) {
   return (
@@ -960,6 +1089,18 @@ export function letterboxdMinKeyboard() {
   );
 }
 
+export function letterboxdScaleKeyboard() {
+  return withDefaultButton(
+    [[
+      button("5", "lb:scale:5"),
+      button("10", "lb:scale:10"),
+      button("100", "lb:scale:100"),
+    ]],
+    defaultButtonLabel("", "10"),
+    "lb:scale:10",
+  );
+}
+
 export function letterboxdYesNoKeyboard(prefix, fallback = "yes") {
   const no = fallback === "no" || fallback === "нет";
   const data = no ? `${prefix}:0` : `${prefix}:1`;
@@ -1090,6 +1231,17 @@ function promptFor(step, state, now = new Date()) {
       reply_markup: letterboxdTopKeyboard(),
     };
   }
+  if (step === "scale") {
+    return {
+      text: wizardPrompt(
+        "Scale",
+        "Displayed rating and average numbers use this scale (Letterboxd 0.5–5 × scale/5). Colors and ranking stay the same. Tap a button, or type 5, 10, or 100.",
+        "5, 10, 100",
+        "10",
+      ),
+      reply_markup: letterboxdScaleKeyboard(),
+    };
+  }
   if (step === "min_rated") {
     return {
       text: wizardPrompt(
@@ -1135,15 +1287,6 @@ function promptFor(step, state, now = new Date()) {
         "When on, ranking charts show a small review panel: film title (♥ if liked), up to 280 characters, and the date. Picks the highest-ranked film that has a review — highest rating on count/higher charts, lowest on lower charts; if none are rated, prefer liked, then the newest date. Also unlocks lower-rating charts when there aren’t enough films for a full top. Default is on.",
       ),
       reply_markup: letterboxdYesNoKeyboard("lb:toprev", "yes"),
-    };
-  }
-  if (step === "ten_point_display") {
-    return {
-      text: choicePrompt(
-        "Show ratings on a 10-point scale?",
-        "On: tip and axis numbers are doubled (3.5 → 7.0). Colors and ranking stay the same. Default is off.",
-      ),
-      reply_markup: letterboxdYesNoKeyboard("lb:10pt", "no"),
     };
   }
   if (step === "exclusions") {
@@ -1305,7 +1448,8 @@ export function parseLetterboxdCallback(data) {
   if (raw === "lb:likes:1" || raw === "lb:likes:0") return { step: "show_likes", value: raw.endsWith("1") };
   if (raw === "lb:revs:1" || raw === "lb:revs:0") return { step: "show_reviews", value: raw.endsWith("1") };
   if (raw === "lb:toprev:1" || raw === "lb:toprev:0") return { step: "show_top_review", value: raw.endsWith("1") };
-  if (raw === "lb:10pt:1" || raw === "lb:10pt:0") return { step: "ten_point_display", value: raw.endsWith("1") };
+  match = raw.match(/^lb:scale:(5|10|100)$/);
+  if (match) return { step: "scale", value: Number(match[1]) };
   if (raw === "lb:excl:1" || raw === "lb:excl:0") return { step: "exclusions", value: raw.endsWith("1") };
   if (raw === "lb:usa:1" || raw === "lb:usa:0") return { step: "usa", value: raw.endsWith("1") };
   if (raw === "lb:en:1" || raw === "lb:en:0") return { step: "english", value: raw.endsWith("1") };
@@ -1406,6 +1550,9 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
     if (kind === "callback") {
       return retry(state, LETTERBOXD_PASTE_SETTINGS_RETRY, now);
     }
+    if (letterboxdSettingsSummaryHasInvalidScale(input.text)) {
+      return retry(state, LETTERBOXD_PASTE_SCALE_RETRY, now);
+    }
     const parsed = parseLetterboxdSettingsSummary(input.text);
     if (!parsed) return retry(state, LETTERBOXD_PASTE_SETTINGS_RETRY, now);
     return finish(state, parsed);
@@ -1413,7 +1560,17 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
   if (step === "top_n") {
     const value = kind === "callback" ? input.value : parseBounded(input.text, LETTERBOXD_TOP_N_MIN, LETTERBOXD_TOP_N_MAX);
     if (value == null) return retry(state, "Need a number from 1 to 100. Buttons: 10, 20, 30, 50. The report has not started.");
-    return go({ ...state, topN: value }, "min_rated", now);
+    return go({ ...state, topN: value }, "scale", now);
+  }
+  if (step === "scale") {
+    const value = kind === "callback"
+      ? input.value
+      : (() => {
+          const n = parseBounded(input.text, 5, 100);
+          return n != null && LETTERBOXD_RATING_SCALES.includes(n) ? n : null;
+        })();
+    if (value == null) return retry(state, "Need 5, 10, or 100. The report has not started.");
+    return go({ ...state, ratingScale: value }, "min_rated", now);
   }
   if (step === "min_rated") {
     const value = kind === "callback" ? input.value : parseBounded(input.text, LETTERBOXD_MIN_RATED_MIN, LETTERBOXD_MIN_RATED_MAX);
@@ -1435,7 +1592,7 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
     if (value == null) return retry(state, "Need yes or no. The report has not started.");
     // Top review only when Reviews is on; otherwise force off and skip the question.
     if (!value) {
-      return go({ ...state, showReviews: false, showTopReview: false }, "ten_point_display", now);
+      return go({ ...state, showReviews: false, showTopReview: false }, "exclusions", now);
     }
     return go({ ...state, showReviews: true }, "show_top_review", now);
   }
@@ -1444,14 +1601,9 @@ export function advanceLetterboxdWizard(state, input, now = new Date()) {
     if (value == null) return retry(state, "Need yes or no. The report has not started.");
     // Reviews must stay on for Top review; a stray answer with reviews off clears it.
     if (state.showReviews === false) {
-      return go({ ...state, showTopReview: false }, "ten_point_display", now);
+      return go({ ...state, showTopReview: false }, "exclusions", now);
     }
-    return go({ ...state, showTopReview: value }, "ten_point_display", now);
-  }
-  if (step === "ten_point_display") {
-    const value = kind === "callback" ? input.value : parseYesNoText(input.text);
-    if (value == null) return retry(state, "Need yes or no. The report has not started.");
-    return go({ ...state, tenPointDisplay: value }, "exclusions", now);
+    return go({ ...state, showTopReview: value }, "exclusions", now);
   }
   if (step === "exclusions") {
     const value = kind === "callback" ? input.value : parseYesNoText(input.text);
@@ -1649,7 +1801,7 @@ export function buildLetterboxdDispatch({ repo, workflow, ref, jobId, chatId, fi
         show_likes: opts.showLikes ? "true" : "false",
         show_reviews: opts.showReviews ? "true" : "false",
         show_top_review: opts.showTopReview ? "true" : "false",
-        ten_point_display: opts.tenPointDisplay ? "true" : "false",
+        rating_scale: String(opts.ratingScale),
         include_usa: opts.includeUSA ? "true" : "false",
         include_english: opts.includeEnglish ? "true" : "false",
         include_drama: opts.includeDrama ? "true" : "false",

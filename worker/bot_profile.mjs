@@ -10,8 +10,8 @@ export const ABOUT =
 export const DESCRIPTION =
   "Letterboxd Stats (@lebxdbot) builds charts from a Letterboxd export ZIP.\n" +
   "\n" +
-  "/start, then the ZIP. Default, Customize, or paste settings. Customize: tops 1–100, " +
-  "threshold, rewatches in averages, likes (♥), reviews (≡), Top review (on by default), 10-point ratings (off by default), " +
+  "/start, then the ZIP. Default, Customize, or paste settings. Customize edits one message: tops 1–100, " +
+  "scale 5/10/100 (default 10), threshold, rewatches in averages, likes (♥), reviews (≡), Top review (on by default), " +
   "Exclude on count tops, Search keywords, watch period. /stop leaves the questions. " +
   "A started chart run stops too.\n" +
   "\n" +

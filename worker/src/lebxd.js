@@ -82,6 +82,19 @@ async function defaultSend(env, chatId, text, extra) {
   return telegram(env, "sendMessage", payload);
 }
 
+async function defaultEdit(env, chatId, messageId, text, extra) {
+  const body = outgoingText(text);
+  const payload = {
+    chat_id: chatId,
+    message_id: messageId,
+    text: body.text,
+    link_preview_options: { is_disabled: true },
+  };
+  if (body.parse_mode) payload.parse_mode = body.parse_mode;
+  if (extra && extra.reply_markup !== undefined) payload.reply_markup = extra.reply_markup;
+  return telegram(env, "editMessageText", payload);
+}
+
 async function defaultSendDocument(env, chatId, fileId, extra = {}) {
   const payload = {
     chat_id: chatId,
@@ -115,12 +128,12 @@ async function answer(env, update, send, deps = {}) {
   if (update && update.callback_query) {
     await handleLetterboxdCallback(env, update.callback_query, {
       send,
+      edit: deps.editMessage || defaultEdit,
       fetch: deps.fetch,
       now: deps.now,
       waitUntil: deps.waitUntil,
       sleep: deps.sleep,
       answerCallback: deps.answerCallback || ((target, id, text) => defaultAnswerCallback(target, id, text)),
-      clearKeyboard: deps.clearKeyboard || ((target, chatId, messageId) => defaultClearKeyboard(target, chatId, messageId)),
     });
     return;
   }
@@ -173,6 +186,7 @@ async function answer(env, update, send, deps = {}) {
   if (awaiting && awaiting.step !== "zip") {
     await handleLetterboxdText(env, message, {
       send,
+      edit: deps.editMessage || defaultEdit,
       fetch: deps.fetch,
       now: deps.now,
       waitUntil: deps.waitUntil,
@@ -204,10 +218,11 @@ async function handleTelegram(request, env, send, deps) {
 export async function handle(request, env, deps = {}) {
   const send = deps.sendMessage || defaultSend;
   const sendDocument = deps.sendDocument || defaultSendDocument;
+  const editMessage = deps.editMessage || defaultEdit;
   const url = new URL(request.url);
   if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) return json({ ok: true });
   if (request.method === "POST" && url.pathname === "/lebxd") {
-    return handleTelegram(request, env, send, { ...deps, sendDocument });
+    return handleTelegram(request, env, send, { ...deps, sendDocument, editMessage });
   }
   return new Response("not found", { status: 404 });
 }

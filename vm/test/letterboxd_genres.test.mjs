@@ -8,8 +8,11 @@ import {
   isZipDocument,
   letterboxdAckText,
   LETTERBOXD_PASTE_SETTINGS_RETRY,
+  LETTERBOXD_PASTE_SCALE_RETRY,
+  letterboxdSettingsSummaryHasInvalidScale,
   normalizeTelegramFileId,
   letterboxdMinKeyboard,
+  letterboxdScaleKeyboard,
   letterboxdModeKeyboard,
   letterboxdModePrompt,
   letterboxdPasteSettingsPrompt,
@@ -137,7 +140,7 @@ test("one typed period skips the second bound and asks about undated films", () 
 test("top size is any integer from 1 to 100", () => {
   const state = { step: "top_n", fileId: "BQACAgIAAxkBAAI1234567890" };
   const hundred = advanceLetterboxdWizard(state, { kind: "text", text: "100" });
-  assert.equal(hundred.state.step, "min_rated");
+  assert.equal(hundred.state.step, "scale");
   assert.equal(hundred.state.topN, 100);
   const one = advanceLetterboxdWizard(state, { kind: "text", text: "1" });
   assert.equal(one.state.topN, 1);
@@ -200,9 +203,28 @@ test("wizard prompts are html, with a default line and examples", () => {
     now,
   );
   assert.equal(top.state.topN, 20);
-  assert.equal(top.state.step, "min_rated");
-  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default (4)");
-  const minText = top.messages[0].text;
+  assert.equal(top.state.step, "scale");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default (10)");
+  const scaleText = top.messages[0].text;
+  assert.match(scaleText, /<b>Scale<\/b>/);
+  assert.match(scaleText, /scale\/5/);
+  assert.match(scaleText, /For example: 5, 10, 100/);
+  assert.match(scaleText, /Default: 10/);
+  assert.deepEqual(
+    top.messages[0].reply_markup.inline_keyboard[0].map((button) => button.text),
+    ["5", "10", "100"],
+  );
+  assert.equal(top.messages[0].reply_markup.inline_keyboard[0][0].callback_data, "lb:scale:5");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].callback_data, "lb:scale:10");
+  const afterScale = advanceLetterboxdWizard(
+    top.state,
+    { kind: "callback", step: "scale", value: 10 },
+    now,
+  );
+  assert.equal(afterScale.state.ratingScale, 10);
+  assert.equal(afterScale.state.step, "min_rated");
+  assert.equal(afterScale.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default (4)");
+  const minText = afterScale.messages[0].text;
   assert.match(minText, /<b>Threshold<\/b>/);
   assert.match(minText, /Minimum rated films/);
   assert.match(minText, /catalog hits/);
@@ -212,11 +234,11 @@ test("wizard prompts are html, with a default line and examples", () => {
   assert.match(minText, /For example: 1, 3, 5/);
   assert.match(minText, /Default: 4/);
   assert.deepEqual(
-    top.messages[0].reply_markup.inline_keyboard[0].map((button) => button.text),
+    afterScale.messages[0].reply_markup.inline_keyboard[0].map((button) => button.text),
     ["1", "3", "5"],
   );
-  assert.equal(top.messages[0].reply_markup.inline_keyboard[0][0].callback_data, "lb:m:1");
-  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].callback_data, "lb:m:4");
+  assert.equal(afterScale.messages[0].reply_markup.inline_keyboard[0][0].callback_data, "lb:m:1");
+  assert.equal(afterScale.messages[0].reply_markup.inline_keyboard.at(-1)[0].callback_data, "lb:m:4");
   const year = advanceLetterboxdWizard(
     range.state,
     { kind: "callback", step: "range_start", year: 2024 },
@@ -260,13 +282,9 @@ test("binary steps keep the default button and drop the repeated lines", () => {
     showReviews.state,
     { kind: "callback", step: "show_reviews", value: true },
   );
-  const tenPoint = advanceLetterboxdWizard(
+  const exclusions = advanceLetterboxdWizard(
     showTopReview.state,
     { kind: "callback", step: "show_top_review", value: false },
-  );
-  const exclusions = advanceLetterboxdWizard(
-    tenPoint.state,
-    { kind: "callback", step: "ten_point_display", value: false },
   );
   const usa = advanceLetterboxdWizard(
     exclusions.state,
@@ -297,7 +315,6 @@ test("binary steps keep the default button and drop the repeated lines", () => {
     showLikes,
     showReviews,
     showTopReview,
-    tenPoint,
     exclusions,
     usa,
     english,
@@ -327,20 +344,16 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.match(showTopReview.messages[0].text, /small review panel/);
   assert.match(showTopReview.messages[0].text, /Default is on/);
   assert.doesNotMatch(showTopReview.messages[0].text, /Default is yes/);
-  assert.equal(tenPoint.state.showTopReview, false);
-  assert.equal(tenPoint.state.step, "ten_point_display");
-  assert.match(tenPoint.messages[0].text, /<b>Show ratings on a 10-point scale\?<\/b>/);
-  assert.match(tenPoint.messages[0].text, /Default is off/);
-  assert.equal(exclusions.state.tenPointDisplay, false);
-  // Reviews off → skip Top review and force top_review=false; still ask ten-point.
+  assert.equal(exclusions.state.showTopReview, false);
+  assert.equal(exclusions.state.step, "exclusions");
+  // Reviews off → skip Top review and force top_review=false; next is exclusions.
   const skipTopReview = advanceLetterboxdWizard(
     showReviews.state,
     { kind: "callback", step: "show_reviews", value: false },
   );
   assert.equal(skipTopReview.state.showReviews, false);
   assert.equal(skipTopReview.state.showTopReview, false);
-  assert.equal(skipTopReview.state.step, "ten_point_display");
-  assert.match(skipTopReview.messages[0].text, /<b>Show ratings on a 10-point scale\?<\/b>/);
+  assert.equal(skipTopReview.state.step, "exclusions");
   assert.match(exclusions.messages[0].text, /<b>Exclude some rows from watch-count tops\?<\/b>/);
   assert.match(usa.messages[0].text, /<b>Show USA in the country top\?<\/b>/);
   assert.match(english.messages[0].text, /<b>Show English in the language top\?<\/b>/);
@@ -362,7 +375,6 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(showLikes.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
   assert.equal(showReviews.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
   assert.equal(showTopReview.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
-  assert.equal(tenPoint.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
   assert.equal(exclusions.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ❌");
   assert.equal(usa.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
   assert.equal(english.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default ✅");
@@ -382,9 +394,10 @@ test("binary steps keep the default button and drop the repeated lines", () => {
   assert.equal(parseLetterboxdCallback("lb:toprev:0").step, "show_top_review");
   assert.equal(parseLetterboxdCallback("lb:toprev:0").value, false);
   assert.equal(parseLetterboxdCallback("lb:toprev:1").value, true);
-  assert.equal(parseLetterboxdCallback("lb:10pt:0").step, "ten_point_display");
-  assert.equal(parseLetterboxdCallback("lb:10pt:0").value, false);
-  assert.equal(parseLetterboxdCallback("lb:10pt:1").value, true);
+  assert.equal(parseLetterboxdCallback("lb:scale:10").step, "scale");
+  assert.equal(parseLetterboxdCallback("lb:scale:10").value, 10);
+  assert.equal(parseLetterboxdCallback("lb:scale:100").value, 100);
+  assert.equal(parseLetterboxdCallback("lb:scale:5").value, 5);
   assert.equal(parseLetterboxdCallback("lb:excl:0").step, "exclusions");
   assert.equal(parseLetterboxdCallback("lb:excl:0").value, false);
   assert.equal(parseLetterboxdCallback("lb:drama:0").step, "drama");
@@ -450,6 +463,13 @@ test("every wizard keyboard has a one-tap default button alone on the bottom row
   assert.equal(last(letterboxdTopKeyboard()), "Default (20)");
   assert.equal(lastRow(letterboxdTopKeyboard()).length, 1);
   assert.deepEqual(
+    letterboxdScaleKeyboard().inline_keyboard[0].map((button) => button.text),
+    ["5", "10", "100"],
+  );
+  assert.equal(last(letterboxdScaleKeyboard()), "Default (10)");
+  assert.equal(letterboxdScaleKeyboard().inline_keyboard.at(-1)[0].callback_data, "lb:scale:10");
+  assert.equal(lastRow(letterboxdScaleKeyboard()).length, 1);
+  assert.deepEqual(
     letterboxdMinKeyboard().inline_keyboard[0].map((button) => button.text),
     ["1", "3", "5"],
   );
@@ -499,7 +519,7 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
     showLikes: false,
     showReviews: true,
     showTopReview: false,
-    tenPointDisplay: false,
+    ratingScale: 10,
     includeUSA: true,
     includeEnglish: false,
     includeDrama: false,
@@ -511,7 +531,7 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
   assert.match(text, /Likes: no/);
   assert.match(text, /Reviews: yes/);
   assert.doesNotMatch(text, /Top review:/);
-  assert.match(text, /10-point ratings: no/);
+  assert.match(text, /Scale: 10/);
   assert.match(text, /Exclude: English, Drama, "Wood", "2001"/);
   assert.match(text, /Search: "Elijah Wood"/);
   assert.doesNotMatch(text, /USA:\s*(yes|no)/);
@@ -522,7 +542,7 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
   assert.match(defaults, /Likes: yes/);
   assert.match(defaults, /Top review: yes/);
   assert.doesNotMatch(defaults, /Reviews:/);
-  assert.match(defaults, /10-point ratings: no/);
+  assert.match(defaults, /Scale: 10/);
   assert.match(defaults, /Exclude: none/);
   assert.match(defaults, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
   const topOn = letterboxdAckText("lb-3", { showTopReview: true });
@@ -538,7 +558,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     showLikes: false,
     showReviews: true,
     showTopReview: true,
-    tenPointDisplay: false,
+    ratingScale: 10,
     includeUSA: false,
     includeEnglish: true,
     includeDrama: false,
@@ -550,7 +570,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     includeUndated: true,
   };
   const summary = formatLetterboxdSettingsSummary(options);
-  assert.match(summary, /^Tops: 30\. Threshold: 5\./);
+  assert.match(summary, /^Tops: 30\. Scale: 10\. Threshold: 5\./);
   assert.match(summary, /Likes: no/);
   assert.match(summary, /Top review: yes/);
   assert.doesNotMatch(summary, /Reviews:/);
@@ -570,7 +590,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     showLikes: false,
     showReviews: true,
     showTopReview: true,
-    tenPointDisplay: false,
+    ratingScale: 10,
     includeUSA: false,
     includeEnglish: true,
     includeDrama: false,
@@ -583,18 +603,36 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
   });
   assert.equal(formatLetterboxdSettingsSummary(parsed), summary);
 
-  // 10-point ratings on round-trips through summary paste.
-  const tenOptions = { ...options, tenPointDisplay: true };
-  const tenSummary = formatLetterboxdSettingsSummary(tenOptions);
-  assert.match(tenSummary, /10-point ratings: yes/);
-  assert.deepEqual(parseLetterboxdSettingsSummary(tenSummary), {
-    ...normalizeLetterboxdOptions(tenOptions),
-  });
-  // Missing 10-point field in older summaries → off.
+  // Scale round-trips through summary paste (5 / 10 / 100).
+  for (const scale of [5, 10, 100]) {
+    const scaleOptions = { ...options, ratingScale: scale };
+    const scaleSummary = formatLetterboxdSettingsSummary(scaleOptions);
+    assert.match(scaleSummary, new RegExp(`^Tops: 30\\. Scale: ${scale}\\. Threshold: 5\\.`));
+    assert.doesNotMatch(scaleSummary, /10-point ratings:/);
+    assert.deepEqual(parseLetterboxdSettingsSummary(scaleSummary), {
+      ...normalizeLetterboxdOptions(scaleOptions),
+    });
+  }
+  // Legacy 10-point ratings: yes → 10; no → 5; missing → 5.
+  const legacyTenYes =
+    "Tops: 20. Threshold: 3. Rewatches in averages: no. Likes: yes. Top review: yes. " +
+    "10-point ratings: yes. Exclude: none. Search: none. Period: full.";
+  assert.equal(parseLetterboxdSettingsSummary(legacyTenYes).ratingScale, 10);
+  const legacyTenNo =
+    "Tops: 20. Threshold: 3. Rewatches in averages: no. Likes: yes. Top review: yes. " +
+    "10-point ratings: no. Exclude: none. Search: none. Period: full.";
+  assert.equal(parseLetterboxdSettingsSummary(legacyTenNo).ratingScale, 5);
   const legacyNoTen =
     "Tops: 20. Threshold: 3. Rewatches in averages: no. Likes: yes. Top review: yes. " +
     "Exclude: none. Search: none. Period: full.";
-  assert.equal(parseLetterboxdSettingsSummary(legacyNoTen).tenPointDisplay, false);
+  assert.equal(parseLetterboxdSettingsSummary(legacyNoTen).ratingScale, 5);
+  // Prefer Scale when both Scale and legacy 10-point appear.
+  const both =
+    "Tops: 20. Scale: 100. Threshold: 3. Rewatches in averages: no. Likes: yes. Top review: yes. " +
+    "10-point ratings: no. Exclude: none. Search: none. Period: full.";
+  assert.equal(parseLetterboxdSettingsSummary(both).ratingScale, 100);
+  assert.equal(letterboxdSettingsSummaryHasInvalidScale("Tops: 20. Scale: 7. Threshold: 3."), true);
+  assert.equal(letterboxdSettingsSummaryHasInvalidScale(both), false);
 
   // Top review off → Reviews line only (no Top review line).
   const fullLine =
@@ -607,7 +645,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     showLikes: true,
     showReviews: true,
     showTopReview: false,
-    tenPointDisplay: false,
+    ratingScale: 5,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -632,7 +670,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
       showLikes: true,
       showReviews: false,
       showTopReview: false,
-      tenPointDisplay: false,
+      ratingScale: 5,
       includeUSA: true,
       includeEnglish: true,
       includeDrama: true,
@@ -658,7 +696,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
       showLikes: true,
       showReviews: false,
       showTopReview: false,
-      tenPointDisplay: false,
+      ratingScale: 5,
       includeUSA: true,
       includeEnglish: true,
       includeDrama: true,
@@ -684,7 +722,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
       showLikes: true,
       showReviews: true,
       showTopReview: true,
-      tenPointDisplay: false,
+      ratingScale: 5,
       includeUSA: true,
       includeEnglish: true,
       includeDrama: true,
@@ -710,7 +748,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
       showLikes: false,
       showReviews: true,
       showTopReview: true,
-      tenPointDisplay: false,
+      ratingScale: 5,
       includeUSA: false,
       includeEnglish: false,
       includeDrama: false,
@@ -734,7 +772,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     showLikes: true,
     showReviews: true,
     showTopReview: true,
-    tenPointDisplay: false,
+    ratingScale: 5,
     includeUSA: true,
     includeEnglish: true,
     includeDrama: true,
@@ -756,7 +794,7 @@ test("settings summary parser finds paragraph in noisy text and round-trips", ()
     showLikes: true,
     showReviews: true,
     showTopReview: true,
-    tenPointDisplay: false,
+    ratingScale: 5,
     includeUSA: false,
     includeEnglish: false,
     includeDrama: true,
@@ -804,8 +842,22 @@ test("paste settings mode asks for summary then finishes with parsed options", (
   assert.equal(bad.dispatch, undefined);
   assert.equal(bad.messages[0].text, LETTERBOXD_PASTE_SETTINGS_RETRY);
 
+  const badScale = advanceLetterboxdWizard(
+    ask.state,
+    {
+      kind: "text",
+      text:
+        "Tops: 20. Scale: 7. Threshold: 4. Rewatches in averages: no. Likes: yes. Top review: yes. " +
+        "Exclude: none. Search: none. Period: full.",
+    },
+  );
+  assert.equal(badScale.state.step, "paste_settings");
+  assert.equal(badScale.dispatch, undefined);
+  assert.equal(badScale.messages[0].text, LETTERBOXD_PASTE_SCALE_RETRY);
+
   const summary = formatLetterboxdSettingsSummary({
     topN: 10,
+    ratingScale: 100,
     minRated: 10,
     includeRewatchInAverages: false,
     showLikes: false,
@@ -819,6 +871,8 @@ test("paste settings mode asks for summary then finishes with parsed options", (
     dateFrom: "",
     dateTo: "",
   });
+  assert.match(summary, /^Tops: 10\. Scale: 100\. Threshold: 10\./);
+  assert.doesNotMatch(summary, /10-point ratings:/);
   const ok = advanceLetterboxdWizard(
     ask.state,
     { kind: "text", text: `Copied from last run:\n${summary}\nThanks` },
@@ -833,7 +887,7 @@ test("paste settings mode asks for summary then finishes with parsed options", (
       showLikes: false,
       showReviews: false,
       showTopReview: false,
-      tenPointDisplay: false,
+      ratingScale: 100,
       includeUSA: true,
       includeEnglish: false,
       includeDrama: true,
@@ -890,7 +944,7 @@ test("buildLetterboxdDispatch", () => {
       show_likes: "true",
       show_reviews: "true",
       show_top_review: "true",
-      ten_point_display: "false",
+      rating_scale: "10",
       include_usa: "true",
       include_english: "true",
       include_drama: "true",
@@ -1077,7 +1131,7 @@ test("buildCalendarReportHtml keeps blurb, drops charted tops", () => {
     rating_avg: 3.5,
     rating_mode: 4,
     films_per_month: 2.5,
-    ten_point_display: true,
+    rating_scale: "10",
   });
   assert.match(tenHtml, /average <b>7<\/b>/);
   assert.match(tenHtml, /most often <b>8<\/b>/);

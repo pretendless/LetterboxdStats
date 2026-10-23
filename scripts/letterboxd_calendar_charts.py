@@ -50,7 +50,7 @@ from letterboxd_export import (  # noqa: E402
 )
 from letterboxd_options import (  # noqa: E402
     average_rating_axis_label,
-    display_rating_value,
+    format_rating_compact,
     format_rating_number,
     format_single_rating_label,
     label_matches_exclude_keywords,
@@ -158,7 +158,8 @@ def release_year_avg_lookup(rated_rows: pd.DataFrame | None) -> dict[str, tuple]
     out: dict[str, tuple] = {}
     for year, row in grouped.iterrows():
         rated_n = int(row["rated"])
-        avg = round(float(row["avg"]), 2) if rated_n else None
+        # Keep full precision in 0.5–5 space; tips scale then format to 2dp.
+        avg = float(row["avg"]) if rated_n else None
         out[str(int(year))] = (avg, rated_n)
     return out
 
@@ -242,7 +243,8 @@ def build_diary_summary(
     else:
         rated_count = 0
     rated_share = round(rated_count / unique_films, 4) if unique_films else 0.0
-    rating_avg = round(float(rated.mean()), 2) if len(rated) else None
+    # Full precision for HTML/chart display scaling (scale then 2dp, never round-then-scale).
+    rating_avg = float(rated.mean()) if len(rated) else None
     rating_mode = None
     rating_mode_count = 0
     if rated_count:
@@ -314,7 +316,7 @@ def build_diary_summary(
                 top_rated_release_years.append(
                     {
                         "year": int(year),
-                        "avg": round(float(row["avg"]), 2),
+                        "avg": float(row["avg"]),
                         "films": int(film_counts.get(year, 0)),
                         "rated": rated_n,
                         "liked_count": count_liked_among_keys(
@@ -511,7 +513,7 @@ def _place_count_avg_above_totals(
     percent_count=False,
     liked_counts=None,
     reviewed_counts=None,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> None:
     """Count + mean centered above each stacked column total.
 
@@ -597,7 +599,7 @@ def _place_count_avg_above_totals(
             fontweight="normal",
             clip_on=False,
         )
-        style = count_avg_text_style(label, ten_point=ten_point_display)
+        style = count_avg_text_style(label, scale=rating_scale)
         avg = ax.text(
             xi,
             y,
@@ -648,7 +650,7 @@ def chart_weekday_month(
     reviewed_films=None,
     reviewed_keys=None,
     top_n: int = TOP_N_DEFAULT,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> None:
     """Weekday + month watches stacked by watch year.
 
@@ -691,11 +693,11 @@ def chart_weekday_month(
         if not rated.empty:
             for wd, group in rated.groupby("weekday"):
                 week_avgs[int(wd)] = format_rating_number(
-                    float(group["Rating"].mean()), ten_point=ten_point_display
+                    float(group["Rating"].mean()), scale=rating_scale
                 )
             for mo, group in rated.groupby("month"):
                 month_avgs[int(mo) - 1] = format_rating_number(
-                    float(group["Rating"].mean()), ten_point=ten_point_display
+                    float(group["Rating"].mean()), scale=rating_scale
                 )
 
     week_liked = [count_liked_among_keys(week_keys[i], liked) for i in range(7)]
@@ -777,7 +779,7 @@ def chart_weekday_month(
         y_pad=week_max * 0.02,
         liked_counts=week_liked,
         reviewed_counts=week_reviewed,
-        ten_point_display=ten_point_display,
+        rating_scale=rating_scale,
     )
     _place_count_avg_above_totals(
         fig,
@@ -787,7 +789,7 @@ def chart_weekday_month(
         y_pad=month_max * 0.02,
         liked_counts=month_liked,
         reviewed_counts=month_reviewed,
-        ten_point_display=ten_point_display,
+        rating_scale=rating_scale,
     )
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
@@ -886,7 +888,7 @@ def _watch_bucket_key(value, grain: str):
 
 
 def _avg_labels_for_watch_counts(
-    df: pd.DataFrame, index, grain: str, *, ten_point_display: bool = False
+    df: pd.DataFrame, index, grain: str, *, rating_scale: int = 10
 ) -> list[str]:
     """Mean beside each watch-count bar. «—» when the bucket has no rating.
 
@@ -903,7 +905,7 @@ def _avg_labels_for_watch_counts(
         labels.append(
             "—"
             if avg is None
-            else format_rating_number(avg, ten_point=ten_point_display)
+            else format_rating_number(avg, scale=rating_scale)
         )
     return labels
 
@@ -920,7 +922,7 @@ def _place_count_avg_above_bars(
     rotation,
     liked_counts=None,
     reviewed_counts=None,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> None:
     """Count in regular white, mean beside it, pair centered on the bar.
 
@@ -946,7 +948,7 @@ def _place_count_avg_above_bars(
             fontweight="normal",
             clip_on=False,
         )
-        style = count_avg_text_style(label, ten_point=ten_point_display)
+        style = count_avg_text_style(label, scale=rating_scale)
         avg = ax.text(
             x,
             y,
@@ -1036,7 +1038,7 @@ def chart_views_by_year(
     reviewed_films=None,
     reviewed_keys=None,
     top_n: int = TOP_N_DEFAULT,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> None:
     """Film watches by watch year / month / day.
 
@@ -1118,13 +1120,13 @@ def chart_views_by_year(
         ax,
         bars,
         values,
-        _avg_labels_for_watch_counts(df, counts.index, grain, ten_point_display=ten_point_display),
+        _avg_labels_for_watch_counts(df, counts.index, grain, rating_scale=rating_scale),
         y_pad=ymax * 0.015,
         fontsize=fontsize,
         rotation=rotation,
         liked_counts=_liked_counts_by_watch_grain(df, counts.index, grain, liked_keys),
         reviewed_counts=reviewed_counts,
-        ten_point_display=ten_point_display,
+        rating_scale=rating_scale,
     )
     if most_reviewed_years:
         draw_most_reviewed_years_panel(fig, ax, most_reviewed_years)
@@ -1172,7 +1174,7 @@ def chart_decade_rating(
     liked_keys=None,
     reviewed_keys=None,
     top_n: int = TOP_N_DEFAULT,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> None:
     """Extra stats: release-decade catalog counts + rating distribution.
 
@@ -1272,7 +1274,7 @@ def chart_decade_rating(
                 means = rated_work.groupby("decade")["Rating"].mean()
                 for i, label in enumerate(decades):
                     if label in means.index:
-                        decade_avgs[i] = format_rating_number(float(means.loc[label]), ten_point=ten_point_display)
+                        decade_avgs[i] = format_rating_number(float(means.loc[label]), scale=rating_scale)
 
     # --- Bottom: Rating distribution (dated diary + undated rated catalog) ---
     diary = diary.copy()
@@ -1379,13 +1381,9 @@ def chart_decade_rating(
     decade_max = float(decade_totals.max()) if len(decade_totals) else 1.0
     axes[0].set_ylim(0, decade_max * 1.22 if decade_max else 1.0)
 
-    rating_labels = []
-    for r in RATING_BINS:
-        shown = display_rating_value(r, ten_point=ten_point_display)
-        if abs(shown - round(shown)) < 1e-9:
-            rating_labels.append(str(int(round(shown))))
-        else:
-            rating_labels.append(f"{shown:g}")
+    rating_labels = [
+        format_rating_compact(r, scale=rating_scale) for r in RATING_BINS
+    ]
     rating_totals = stacked_counts(
         axes[1],
         rating_labels,
@@ -1396,7 +1394,7 @@ def chart_decade_rating(
     )
     axes[1].set_title("Rating distribution — color is watch year")
     axes[1].set_xlabel(
-        "Letterboxd rating (out of 10)" if ten_point_display else "Letterboxd rating"
+        f"Letterboxd rating (out of {int(rating_scale) if rating_scale in (5, 10, 100) else 5})"
     )
     # Tip = bold NN.NN% share + (count); not the star rating (bin is x-axis).
     rating_max = float(rating_totals.max()) if len(rating_totals) else 1.0
@@ -1422,7 +1420,7 @@ def chart_decade_rating(
         y_pad=decade_max * 0.02,
         liked_counts=decade_liked,
         reviewed_counts=decade_reviewed,
-        ten_point_display=ten_point_display,
+        rating_scale=rating_scale,
     )
     _place_count_avg_above_totals(
         fig,
@@ -1447,7 +1445,7 @@ def _chart_average_rating_line(
     title: str,
     xlabel: str,
     ylabel: str | None = None,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> bool:
     """Line + markers: points colored on the shared rating palette.
 
@@ -1457,7 +1455,7 @@ def _chart_average_rating_line(
     if not labels or not values:
         return False
     if ylabel is None:
-        ylabel = average_rating_axis_label(ten_point=ten_point_display)
+        ylabel = average_rating_axis_label(scale=rating_scale)
     point_colors = color_bars_by_rating(values)
     fig, ax = plt.subplots(figsize=(max(10.0, len(labels) * 0.45), 6.5))
     x = np.arange(len(labels))
@@ -1476,7 +1474,7 @@ def _chart_average_rating_line(
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    apply_rating_axis_formatter(ax, axis="y", ten_point=ten_point_display)
+    apply_rating_axis_formatter(ax, axis="y", scale=rating_scale)
     ax.set_xticks(x)
     ax.set_xticklabels([str(lab) for lab in labels], rotation=45, ha="right")
     ax.yaxis.grid(True, color=GRID, linewidth=0.8)
@@ -1487,8 +1485,8 @@ def _chart_average_rating_line(
         ax.set_ylim(0, 5.6)
     # Bold colored mean above the point; regular ``(n)`` below — not side by side.
     for xi, value, count in zip(x, values, counts):
-        text = format_rating_number(value, ten_point=ten_point_display)
-        style = count_avg_text_style(text, ten_point=ten_point_display)
+        text = format_rating_number(value, scale=rating_scale)
+        style = count_avg_text_style(text, scale=rating_scale)
         ax.text(
             xi,
             float(value) + 0.12,
@@ -1514,7 +1512,7 @@ def _chart_average_rating_line(
             fontweight="normal",
             clip_on=False,
         )
-    add_rating_colorbar(fig, ax, ten_point=ten_point_display)
+    add_rating_colorbar(fig, ax, scale=rating_scale)
     fig.tight_layout()
     save_dark_figure(fig, path, dpi=160)
     plt.close(fig)
@@ -1717,7 +1715,7 @@ def chart_average_rating_by_year(
     film_ratings: pd.DataFrame | None = None,
     *,
     grain: str = "year",
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> bool:
     """Mean diary Rating per watch bucket — each rated diary row in its Watched Date bucket.
 
@@ -1741,7 +1739,7 @@ def chart_average_rating_by_year(
         path,
         title=f"Average rating {phrase}",
         xlabel=GRAIN_XLABEL.get(grain, "Watch year"),
-        ten_point_display=ten_point_display,
+        rating_scale=rating_scale,
     )
 
 
@@ -1752,7 +1750,7 @@ def chart_average_rating_by_release_decade(
     film_ratings: pd.DataFrame | None = None,
     catalog: pd.DataFrame | None = None,
     *,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> bool:
     """Mean Letterboxd Rating per film release decade (ratings.csv ∪ diary).
 
@@ -1794,7 +1792,7 @@ def chart_average_rating_by_release_decade(
         path,
         title="Average rating by release decade",
         xlabel="Release decade",
-        ten_point_display=ten_point_display,
+        rating_scale=rating_scale,
     )
 
 
@@ -1839,7 +1837,7 @@ def chart_top_rewatches(
     reviewed_films: pd.DataFrame | None = None,
     show_top_review: bool = False,
     top_review_films: pd.DataFrame | None = None,
-    ten_point_display: bool = False,
+    rating_scale: int = 10,
 ) -> bool:
     """Horizontal stacked bars of rewatched films, colored by watch year.
 
@@ -1950,7 +1948,7 @@ def chart_top_rewatches(
     for _, row in work[work["_key"].isin(keys)].iterrows():
         matrix[year_index[int(row["watch_year"])], key_index[row["_key"]]] += 1
 
-    avg_labels = [format_single_rating_label(rating_lookup.get(key_id), ten_point=ten_point_display) for key_id in keys]
+    avg_labels = [format_single_rating_label(rating_lookup.get(key_id), scale=rating_scale) for key_id in keys]
 
     # Wider gutter when Most reviewed sits under Watch year; legend alone is tighter.
     has_reviewed_list = bool(most_reviewed)
@@ -2009,7 +2007,7 @@ def chart_top_rewatches(
     for artist, label in zip(count_artists, avg_labels):
         bbox = artist.get_window_extent(renderer=renderer)
         x_data, _y = ax.transData.inverted().transform((bbox.x1 + 10, bbox.y1))
-        style = count_avg_text_style(label, ten_point=ten_point_display)
+        style = count_avg_text_style(label, scale=rating_scale)
         ax.text(
             x_data,
             artist.get_position()[1],
@@ -2083,7 +2081,7 @@ def main(argv: list[str] | None = None) -> int:
             liked_keys=liked_keys,
             reviewed_films=reviewed_films,
             top_n=opts.top_n,
-            ten_point_display=opts.ten_point_display,
+            rating_scale=opts.rating_scale,
         )
         chart_views_by_year(
             diary,
@@ -2094,7 +2092,7 @@ def main(argv: list[str] | None = None) -> int:
             liked_keys=liked_keys,
             reviewed_films=reviewed_films,
             top_n=opts.top_n,
-            ten_point_display=opts.ten_point_display,
+            rating_scale=opts.rating_scale,
         )
         chart_decade_rating(
             diary,
@@ -2104,14 +2102,14 @@ def main(argv: list[str] | None = None) -> int:
             liked_keys=liked_keys,
             reviewed_keys=reviewed_keys,
             top_n=opts.top_n,
-            ten_point_display=opts.ten_point_display,
+            rating_scale=opts.rating_scale,
         )
         made_rating = chart_average_rating_by_year(
             diary,
             Path("average_rating_by_year.png"),
             film_ratings=film_ratings,
             grain=grain,
-            ten_point_display=opts.ten_point_display,
+            rating_scale=opts.rating_scale,
         )
         made_decade_avg = chart_average_rating_by_release_decade(
             diary,
@@ -2119,7 +2117,7 @@ def main(argv: list[str] | None = None) -> int:
             watched_only=watched_only,
             film_ratings=film_ratings,
             catalog=catalog,
-            ten_point_display=opts.ten_point_display,
+            rating_scale=opts.rating_scale,
         )
         # Monthly pace (not a rescaled views_by_year) — dips/gaps between months.
         made_pace = chart_viewing_pace(
@@ -2140,7 +2138,7 @@ def main(argv: list[str] | None = None) -> int:
             reviewed_films=reviewed_films,
             show_top_review=opts.show_top_review,
             top_review_films=top_review_films,
-            ten_point_display=opts.ten_point_display,
+            rating_scale=opts.rating_scale,
         )
         summary = build_diary_summary(
             diary,
@@ -2160,7 +2158,7 @@ def main(argv: list[str] | None = None) -> int:
         summary["show_likes"] = bool(opts.show_likes)
         summary["show_reviews"] = bool(opts.show_reviews)
         summary["show_top_review"] = bool(opts.show_top_review)
-        summary["ten_point_display"] = bool(opts.ten_point_display)
+        summary["rating_scale"] = int(opts.rating_scale)
         summary["watch_time_grain"] = grain
         summary["exclude_keywords"] = list(opts.exclude_keywords or ())
         year_avgs = release_year_avg_lookup(ratings_for_catalog(catalog, film_ratings))
@@ -2176,7 +2174,7 @@ def main(argv: list[str] | None = None) -> int:
             reviewed_keys=reviewed_keys,
             reviewed_films=top_review_films,
             show_top_review=opts.show_top_review,
-            ten_point_display=opts.ten_point_display,
+            rating_scale=opts.rating_scale,
         )
         made_release_rating = chart_release_years_by_rating(
             summary.get("top_rated_release_years") or [],
@@ -2187,7 +2185,7 @@ def main(argv: list[str] | None = None) -> int:
             show_top_review=opts.show_top_review,
             film_ratings=film_ratings,
             liked_keys=liked_keys,
-            ten_point_display=opts.ten_point_display,
+            rating_scale=opts.rating_scale,
         )
         made_release_worst = chart_release_years_by_rating(
             summary.get("worst_rated_release_years") or [],
@@ -2200,7 +2198,7 @@ def main(argv: list[str] | None = None) -> int:
             show_top_review=opts.show_top_review,
             film_ratings=film_ratings,
             liked_keys=liked_keys,
-            ten_point_display=opts.ten_point_display,
+            rating_scale=opts.rating_scale,
         )
         summary["charts"] = {
             "average_rating_by_year": bool(made_rating),
