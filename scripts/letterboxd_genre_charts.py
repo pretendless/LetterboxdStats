@@ -926,7 +926,7 @@ def build_search_keyword_lists(
     ratings_csv=None,
     liked_films=None,
     reviewed_films=None,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> list[dict]:
     """Film lists per search keyword over the same catalog the charts use.
 
@@ -1081,7 +1081,7 @@ def chart_deep_count_tops(
     reviewed_keys=None,
     reviewed_films=None,
     show_top_review: bool = False,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> dict:
     """Watch-year stacked count charts for TMDB deep entities.
 
@@ -1246,7 +1246,7 @@ def chart_deep_rating_tops(
     show_top_review: bool = False,
     film_ratings=None,
     liked_keys=None,
-    rating_scale: int = 10,
+    rating_scale: int = 5,
 ) -> dict:
     """Blue→green→red horizontal avg charts for TMDB «выше» + «ниже оценка» tops."""
     footer = "Source: Letterboxd diary/watched + TMDB metadata"

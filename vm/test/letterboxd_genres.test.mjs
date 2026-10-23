@@ -204,24 +204,24 @@ test("wizard prompts are html, with a default line and examples", () => {
   );
   assert.equal(top.state.topN, 20);
   assert.equal(top.state.step, "scale");
-  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default (10)");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default (5)");
   const scaleText = top.messages[0].text;
   assert.match(scaleText, /<b>Scale<\/b>/);
   assert.match(scaleText, /scale\/5/);
   assert.match(scaleText, /For example: 5, 10, 100/);
-  assert.match(scaleText, /Default: 10/);
+  assert.match(scaleText, /Default: 5/);
   assert.deepEqual(
     top.messages[0].reply_markup.inline_keyboard[0].map((button) => button.text),
     ["5", "10", "100"],
   );
   assert.equal(top.messages[0].reply_markup.inline_keyboard[0][0].callback_data, "lb:scale:5");
-  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].callback_data, "lb:scale:10");
+  assert.equal(top.messages[0].reply_markup.inline_keyboard.at(-1)[0].callback_data, "lb:scale:5");
   const afterScale = advanceLetterboxdWizard(
     top.state,
-    { kind: "callback", step: "scale", value: 10 },
+    { kind: "callback", step: "scale", value: 5 },
     now,
   );
-  assert.equal(afterScale.state.ratingScale, 10);
+  assert.equal(afterScale.state.ratingScale, 5);
   assert.equal(afterScale.state.step, "min_rated");
   assert.equal(afterScale.messages[0].reply_markup.inline_keyboard.at(-1)[0].text, "Default (4)");
   const minText = afterScale.messages[0].text;
@@ -466,8 +466,8 @@ test("every wizard keyboard has a one-tap default button alone on the bottom row
     letterboxdScaleKeyboard().inline_keyboard[0].map((button) => button.text),
     ["5", "10", "100"],
   );
-  assert.equal(last(letterboxdScaleKeyboard()), "Default (10)");
-  assert.equal(letterboxdScaleKeyboard().inline_keyboard.at(-1)[0].callback_data, "lb:scale:10");
+  assert.equal(last(letterboxdScaleKeyboard()), "Default (5)");
+  assert.equal(letterboxdScaleKeyboard().inline_keyboard.at(-1)[0].callback_data, "lb:scale:5");
   assert.equal(lastRow(letterboxdScaleKeyboard()).length, 1);
   assert.deepEqual(
     letterboxdMinKeyboard().inline_keyboard[0].map((button) => button.text),
@@ -542,7 +542,7 @@ test("ack summary folds USA English Drama Comedy into Exclude with keywords", ()
   assert.match(defaults, /Likes: yes/);
   assert.match(defaults, /Top review: yes/);
   assert.doesNotMatch(defaults, /Reviews:/);
-  assert.match(defaults, /Scale: 10/);
+  assert.match(defaults, /Scale: 5/);
   assert.match(defaults, /Exclude: none/);
   assert.match(defaults, new RegExp(LETTERBOXD_SETTINGS_SUMMARY_FOOTNOTE));
   const topOn = letterboxdAckText("lb-3", { showTopReview: true });
@@ -944,7 +944,7 @@ test("buildLetterboxdDispatch", () => {
       show_likes: "true",
       show_reviews: "true",
       show_top_review: "true",
-      rating_scale: "10",
+      rating_scale: "5",
       include_usa: "true",
       include_english: "true",
       include_drama: "true",

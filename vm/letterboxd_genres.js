@@ -100,7 +100,7 @@ export const LETTERBOXD_TOP_N_MAX = 100;
 export const LETTERBOXD_MIN_RATED_DEFAULT = 4;
 export const LETTERBOXD_MIN_RATED_MIN = 1;
 export const LETTERBOXD_MIN_RATED_MAX = 50;
-export const LETTERBOXD_RATING_SCALE_DEFAULT = 10;
+export const LETTERBOXD_RATING_SCALE_DEFAULT = 5;
 export const LETTERBOXD_RATING_SCALES = [5, 10, 100];
 export const LETTERBOXD_EXCLUDE_KEYWORDS_MAX = 20;
 export const LETTERBOXD_EXCLUDE_KEYWORD_MAX_LEN = 40;
@@ -1096,8 +1096,8 @@ export function letterboxdScaleKeyboard() {
       button("10", "lb:scale:10"),
       button("100", "lb:scale:100"),
     ]],
-    defaultButtonLabel("", "10"),
-    "lb:scale:10",
+    defaultButtonLabel("", "5"),
+    "lb:scale:5",
   );
 }
 
@@ -1237,7 +1237,7 @@ function promptFor(step, state, now = new Date()) {
         "Scale",
         "Displayed rating and average numbers use this scale (Letterboxd 0.5–5 × scale/5). Colors and ranking stay the same. Tap a button, or type 5, 10, or 100.",
         "5, 10, 100",
-        "10",
+        "5",
       ),
       reply_markup: letterboxdScaleKeyboard(),
     };

@@ -218,6 +218,7 @@ test("inline default button answers the callback before dispatch", async () => {
     const dispatch = calls.find((call) => call.url.includes("/dispatches"));
     assert.equal(dispatch.body.inputs.top_n, "20");
     assert.equal(dispatch.body.inputs.min_rated, "4");
+    assert.equal(dispatch.body.inputs.rating_scale, "5");
     assert.equal(env.BOT_KV.store.get("lebxd:await:111"), undefined);
   } finally {
     globalThis.fetch = previousFetch;
@@ -238,7 +239,7 @@ test("custom range 2021-06.2022 dispatches 2021-01-01 through 2022-06-30", async
   await handle(documentRequest(5, ZIP), env, { sendMessage, fetch });
   await say("настроить");
   await say("20");
-  await say("10"); // scale (default)
+  await say("10"); // scale
   await say("3");
   await say("нет"); // rewatches in averages (default)
   await say("да"); // show likes (default)
@@ -402,8 +403,11 @@ test("profile card is English, within Telegram limits, and distinct from /start"
   assert.match(DESCRIPTION, /Exclude on count tops/);
   assert.match(DESCRIPTION, /Search keywords/);
   assert.match(DESCRIPTION, /likes \(♥\), reviews \(≡\)/);
-  assert.match(DESCRIPTION, /Top review \(on by default/);
-  assert.match(DESCRIPTION, /scale 5\/10\/100 \(default 10\)/);
+  assert.match(DESCRIPTION, /Top review/);
+  assert.match(DESCRIPTION, /scale 5\/10\/100/);
+  assert.doesNotMatch(DESCRIPTION, /default\s+\d+/i);
+  assert.doesNotMatch(DESCRIPTION, /on by default/i);
+  assert.doesNotMatch(DESCRIPTION, /Default is/i);
   assert.match(DESCRIPTION, /rewatches in averages/);
   assert.doesNotMatch(DESCRIPTION, /^Example:$/m);
   assert.doesNotMatch(DESCRIPTION, /ZIP file/);
