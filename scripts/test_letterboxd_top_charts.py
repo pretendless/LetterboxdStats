@@ -61,7 +61,28 @@ from letterboxd_top_charts import (
 
 def test_display_lang():
     assert display_lang("en") == "English"
+    assert display_lang("fi") == "Finnish"
+    assert display_lang("fa") == "Persian"
+    assert display_lang("ar") == "Arabic"
+    # TMDB `cn` → Chinese (same English label as `zh`; not a dual name).
+    assert display_lang("cn") == "Chinese"
+    assert display_lang("zh") == "Chinese"
+    assert display_lang("yue") == "Cantonese"
+    assert display_lang("fas") == "Persian"
+    assert display_lang("ENG") == "English"
+    assert display_lang("zh-CN") == "Chinese"
+    # Already a full name — keep it (single string, no invented mapping).
+    assert display_lang("English") == "English"
+    assert display_lang("Finnish") == "Finnish"
+    # Unknown short code — keep the code; do not invent a name.
     assert display_lang("XX") == "xx"
+    assert display_lang("") == "?"
+    # Never emit slash/dual forms.
+    for code in ("fa", "cn", "zh", "ar", "fi", "he", "iw"):
+        label = display_lang(code)
+        assert "/" not in label
+        assert label == label.strip()
+        assert label[0].isupper() or label == label.lower()  # name or kept code
 
 
 def test_no_date_legend_swatch_is_logo_gray_gradient():
